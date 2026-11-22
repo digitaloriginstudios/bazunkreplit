@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRawSettings } from "@/context/SiteSettingsContext";
 import { featureForHref, isFeatureEnabled } from "@/components/FeatureGate";
 import { motion } from "framer-motion";
@@ -23,6 +23,7 @@ import {
   Banknote,
   Percent,
   Info,
+  Zap, Percent as PercentIcon, Video, X, Maximize2,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { CompactPageHero } from "@/components/CompactPageHero";
@@ -219,21 +220,35 @@ function FeeCalculator() {
   );
 }
 
+const SELL_HUB_OPTIONS = [
+ {id:"direct",title:"Direct Sale",desc:"Create a detailed listing with pricing, shipping and offers.",href:"/sell/direct",icon:ShoppingCart,colors:"from-orange-400 to-orange-600",border:"border-orange-300",label:"List item"},
+ {id:"quick",title:"Quick Sale",desc:"Get your item listed quickly with the essentials.",href:"/sell/quick",icon:Zap,colors:"from-sky-400 to-blue-600",border:"border-sky-300",label:"List now"},
+ {id:"auction",title:"List an Auction",desc:"Set a starting bid and let buyers compete.",href:"/auctions/create",icon:Gavel,colors:"from-violet-400 to-purple-600",border:"border-violet-300",label:"Create auction"},
+ {id:"flash",title:"Run a Flash Sale",desc:"Create a limited-time offer for your products.",href:"/flash-sales",icon:PercentIcon,colors:"from-pink-400 to-rose-600",border:"border-pink-300",label:"Create deal"},
+ {id:"classified",title:"List a Classified",desc:"Post a local listing, service or wanted ad.",href:"/classifieds/post",icon:Newspaper,colors:"from-emerald-400 to-green-600",border:"border-emerald-300",label:"Post ad"},
+ {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/go-live",icon:Video,colors:"from-indigo-400 to-blue-700",border:"border-indigo-300",label:"Start live"}
+] as const;
+function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number];onClose:()=>void}) {
+ useEffect(()=>{const previous=document.body.style.overflow;document.body.style.overflow="hidden";const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose()};window.addEventListener("keydown",onKey);return ()=>{document.body.style.overflow=previous;window.removeEventListener("keydown",onKey)}},[onClose]);
+ return <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/75 p-0 sm:p-4" role="presentation">
+  <section role="dialog" aria-modal="true" aria-label={option.title} className="flex h-[100dvh] w-full max-w-6xl flex-col overflow-hidden bg-[#eff8ff] shadow-2xl sm:h-[min(94dvh,1000px)] sm:rounded-3xl sm:border-2 sm:border-orange-300">
+   <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 bg-gradient-to-r from-[#0878f0] to-[#f07826] px-4 py-3 text-white sm:px-6">
+    <div className="flex min-w-0 items-center gap-3"><option.icon className="h-7 w-7 shrink-0"/><div className="min-w-0"><h2 className="truncate text-lg font-black sm:text-2xl">{option.title}</h2><p className="hidden text-sm text-white sm:block">Complete your listing using Bazunk Seller Studio</p></div></div>
+    <div className="flex shrink-0 gap-2"><a href={option.href} target="_blank" rel="noopener noreferrer" aria-label="Open editor in a new tab" className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 text-white hover:bg-white/30"><Maximize2 className="h-5 w-5"/></a><button type="button" onClick={onClose} aria-label="Close listing window" className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-[#123c66] hover:bg-orange-50"><X className="h-6 w-6"/></button></div>
+   </header>
+   <iframe title={`${option.title} editor`} src={option.href} className="min-h-0 w-full flex-1 border-0 bg-white" loading="eager"/>
+  </section>
+ </div>
+}
+
 export function SellPage() {
+  const [selectedSellOption,setSelectedSellOption] = useState<(typeof SELL_HUB_OPTIONS)[number] | null>(null);
   const { formatPrice, currency } = useCurrency();
   const rawSettings = useRawSettings();
   const mktRate = useMktRate(rawSettings);
   const mktRatePct = Math.round(mktRate * 100);
   const FEE_ROWS = buildFeeRows(mktRatePct);
 
-  const visibleOptions = SELL_OPTIONS.filter(option => ["direct-sale","auction","create-bundle","classified-ads","open-store"].includes(option.id) && (!featureForHref(option.href) || isFeatureEnabled(rawSettings, featureForHref(option.href)!)));
-  const art: Record<string,{emoji:string;bg:string;caption:string}> = {
-    "direct-sale": {emoji:"👟 📱 ✨",bg:"from-orange-500 via-amber-400 to-pink-500",caption:"Quick & easy · Most popular"},
-    "auction": {emoji:"🔨 ⏱️ 💰",bg:"from-amber-500 via-orange-500 to-rose-500",caption:"Timed bidding · More excitement"},
-    "classified-ads": {emoji:"📣 📰 📍",bg:"from-cyan-500 via-sky-500 to-indigo-600",caption:"Local listings · Services & more"},
-    "create-bundle": {emoji:"📦 🎁 💝",bg:"from-purple-600 via-fuchsia-500 to-indigo-600",caption:"Save time · Bigger sales"},
-    "open-store": {emoji:"🏪 📦 🌟",bg:"from-blue-600 via-cyan-500 to-blue-700",caption:"Build your brand · Grow your business"}
-  };
   return (
     <div className="sell-page min-h-screen bg-[#f2f5fb] text-[#10213e] flex flex-col">
       <Navbar />
@@ -245,25 +260,17 @@ export function SellPage() {
         </CompactPageHero>
 
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-5">
-          <section>
-            <h2 className="text-center text-3xl md:text-4xl font-black text-[#10213e]">Choose <span className="text-orange-600">How You Want to Sell</span></h2>
-            <p className="text-center text-slate-700 mt-1 mb-5">Different ways to sell for every item and every style.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {visibleOptions.map(option => {
-                const artwork=art[option.id];
-                return <Link key={option.id} href={option.href} className="group relative overflow-hidden rounded-2xl border border-slate-200 bg-white hover:border-orange-400 hover:-translate-y-1 transition-all shadow-md" data-testid={`card-sell-option-${option.id}`}>
-                  <div className={`bz-sell-option-art h-40 sm:h-52 flex items-center justify-center bg-gradient-to-br ${artwork.bg} relative`}>
-                    <span className="bz-sell-option-emoji inline-flex items-center justify-center drop-shadow-2xl group-hover:scale-110 transition-transform">{artwork.emoji}</span>
-                    {option.badge && <span className="absolute right-3 top-3 rounded-lg bg-green-400 px-3 py-1 text-[#002e24] font-black rotate-6">{option.badge}</span>}
-                  </div>
-                  <div className="p-5 bg-white text-[#10213e]">
-                    <div className="flex items-center justify-between"><h3 className="text-2xl font-black text-[#10213e]">{option.title}</h3><span className="rounded-full bg-orange-500 p-2 text-white"><ArrowRight className="w-5 h-5"/></span></div>
-                    <p className="text-sm text-slate-700 mt-2 min-h-10">{option.description}</p>
-                    <div className="mt-3 text-xs font-bold text-orange-700">✓ {artwork.caption}</div>
-                  </div>
-                </Link>;
-              })}
+          <section aria-label="Choose how to sell" className="rounded-3xl border border-blue-200 bg-white/85 p-4 shadow-lg sm:p-7">
+            <h2 className="text-center text-3xl font-black text-[#123c66] md:text-4xl">Sell on <span className="text-orange-600">Bazunk</span></h2>
+            <p className="mx-auto mb-7 mt-2 max-w-xl text-center text-slate-700">Choose how you'd like to sell. Simple, fast and flexible.</p>
+            <div className="grid grid-cols-1 gap-4 min-[400px]:grid-cols-2 lg:grid-cols-3">
+              {SELL_HUB_OPTIONS.filter(option => !featureForHref(option.href) || isFeatureEnabled(rawSettings,featureForHref(option.href)!)).map(option => {const Icon=option.icon;return <button type="button" key={option.id} onClick={()=>setSelectedSellOption(option)} data-testid={`sell-hub-${option.id}`} className={`group flex min-w-0 flex-col items-center rounded-2xl border-2 ${option.border} bg-white p-5 text-center shadow-md transition hover:-translate-y-1 hover:shadow-xl focus-visible:outline focus-visible:outline-4 focus-visible:outline-orange-400`}>
+                <span className={`mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br ${option.colors} text-white shadow-lg transition-transform group-hover:scale-105`}><Icon className="h-11 w-11" strokeWidth={2.3}/></span>
+                <h3 className="text-xl font-black text-[#123c66]">{option.title}</h3><p className="mt-2 min-h-14 text-sm text-slate-700">{option.desc}</p>
+                <span className={`mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-gradient-to-r ${option.colors} px-5 py-2 text-sm font-black text-white`}>{option.label}<ArrowRight className="h-4 w-4"/></span>
+              </button>})}
             </div>
+            <div className="mt-6 flex flex-wrap justify-center gap-4 rounded-2xl bg-blue-50 px-4 py-3 text-xs font-bold text-[#123c66] sm:text-sm"><span>✓ Free listing options</span><span>⚡ Flexible selling</span><span>🛡 Secure marketplace</span></div>
           </section>
 
           <section className="grid lg:grid-cols-2 gap-3" aria-label="Seller fees and calculator">
@@ -299,6 +306,7 @@ export function SellPage() {
           </section>
         </div>
       </main>
+      {selectedSellOption && <SellHubModal option={selectedSellOption} onClose={()=>setSelectedSellOption(null)}/>}
       <Footer />
     </div>
   );
