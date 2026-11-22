@@ -1,3 +1,4 @@
+import "./sell-embedded.css";
 import "./seller-credits.css";
 import { SellerStudioSections } from "@/components/SellerStudioSections";
 import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudioGuidance";
@@ -65,6 +66,7 @@ const DURATIONS: { label: string; hours: number }[] = [
 ];
 
 export function CreateAuctionPage() {
+  const sellEmbedded = new URLSearchParams(window.location.search).get("sellEmbed") === "1";
   const [marketRegion] = useMarketplaceRegion();
   const [, setLocation] = useLocation();
   const { getToken } = useClerkAuth();
@@ -221,7 +223,7 @@ export function CreateAuctionPage() {
 
   if (success) return (
     <div className="min-h-screen bg-[#f6f7fc] flex flex-col">
-      <Navbar />
+      {!sellEmbedded && <Navbar />}
       <div className="flex-1 flex flex-col items-center justify-center px-4">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
@@ -249,13 +251,13 @@ export function CreateAuctionPage() {
           </div>
         </motion.div>
       </div>
-      <Footer />
+      {!sellEmbedded && <Footer />}
     </div>
   );
 
   return (
-    <div className="bz-seller-credits min-h-screen bg-[#eff8ff] flex flex-col font-sans">
-      <Navbar />
+    <div className={`bz-seller-credits min-h-screen bg-[#eff8ff] flex flex-col font-sans ${sellEmbedded ? "bz-sell-embedded" : ""}`}>
+      {!sellEmbedded && <Navbar />}
 
       <div className="w-full min-w-0 max-w-[1800px] mx-auto px-3 sm:px-6 py-4">
         <Link
@@ -265,7 +267,7 @@ export function CreateAuctionPage() {
           <ChevronLeft className="w-4 h-4" /> Back to Auctions
         </Link>
 
-        <SellerStudioNav active="auction" />
+        {!sellEmbedded && <SellerStudioNav active="auction" />}
         <div className="mb-4 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><SellerStudioProgress completed={[Boolean(title.trim()),Boolean(description.trim()),photos.length>0].filter(Boolean).length} total={3} label="Auction listing essentials"/><SellerStudioTips items={["Add a descriptive title and clear photos","Explain the item condition","Review starting bid, duration and delivery before publishing"]}/></div>
         <SellerStudioSections sections={[{"id":"auction-item-details","label":"Item details"},{"id":"auction-photos","label":"Photos"},{"id":"auction-settings","label":"Auction settings"},{"id":"auction-delivery","label":"Delivery"},{"id":"auction-publish","label":"Review & publish"}]} />
         <form onSubmit={submit} noValidate className="bz-seller-form auction-create-form auction-create-shell">
@@ -697,7 +699,7 @@ export function CreateAuctionPage() {
         </form>
       </div>
 
-      <Footer />
+      {!sellEmbedded && <Footer />}
     </div>
   );
 }
