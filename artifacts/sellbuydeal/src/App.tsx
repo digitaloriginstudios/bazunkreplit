@@ -106,6 +106,7 @@ const MobileNotificationsPage = React.lazy(() => import("@/pages/MobileNotificat
 import { MobileShopNav } from "@/components/MobileShopNav";
 const BundlePage = React.lazy(() => import("@/pages/BundlePage").then(module => ({ default: module.BundlePage })));
 const ClassifiedsPage = React.lazy(() => import("@/pages/ClassifiedsPage").then(module => ({ default: module.ClassifiedsPage })));
+const CreateClassifiedPage = React.lazy(() => import("@/pages/ClassifiedsPage").then(module => ({ default: module.CreateClassifiedPage })));
 const MessagesPage = React.lazy(() => import("@/pages/MessagesPage").then(module => ({ default: module.MessagesPage })));
 const SellerProfilePage = React.lazy(() => import("@/pages/SellerProfilePage").then(module => ({ default: module.SellerProfilePage })));
 const CreditsPage = React.lazy(() => import("@/pages/CreditsPage").then(module => ({ default: module.CreditsPage })));
@@ -459,6 +460,7 @@ function Router() {
       <Route path="/checkout" component={CheckoutPage} />
       <Route path="/notifications" component={MobileNotificationsPage} />
       <Route path="/bundle">{() => <FeatureGate feature="bundles" name="Bundles"><BundlePage /></FeatureGate>}</Route>
+      <Route path="/classifieds/post">{() => <FeatureGate feature="classifieds" name="Classifieds"><CreateClassifiedPage /></FeatureGate>}</Route>
       <Route path="/classifieds">{() => <FeatureGate feature="classifieds" name="Classifieds"><ClassifiedsPage /></FeatureGate>}</Route>
       <Route path="/messages">{() => <FeatureGate feature="messaging" name="Messaging"><MessagesPage /></FeatureGate>}</Route>
       <Route path="/seller/:id" component={SellerProfilePage} />
