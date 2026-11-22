@@ -1,3 +1,4 @@
+import "./seller-credits.css";
 import { SellerStudioSections } from "@/components/SellerStudioSections";
 import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudioGuidance";
 import { SellerStudioNav } from "@/components/SellerStudioNav";
@@ -547,15 +548,14 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
   }
 
   if (submitted) return (
-    <AnimatePresence>
+    <div className="bz-seller-credits min-h-screen"><Navbar /><main className="mx-auto max-w-3xl px-4 py-12"><AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="w-full"
-        
       >
         <motion.div
           initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }}
-          role="dialog" aria-modal="true" aria-label="Classified ad posted" className="classified-post-dialog bg-white rounded-2xl shadow-2xl w-full max-w-md p-10 text-center text-slate-900"
+          aria-label="Classified ad posted" className="classified-post-dialog bg-white rounded-2xl shadow-2xl w-full max-w-md p-10 text-center text-slate-900"
         >
           <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", damping: 14 }}
             className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-5">
@@ -568,11 +568,11 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
           </button>
         </motion.div>
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence></main><Footer /></div>
   );
 
   return (
-    <div className="min-h-screen bg-[#eff8ff] font-sans text-[#173654]">
+    <div className="bz-seller-credits min-h-screen bg-[#eff8ff] font-sans text-[#173654]">
     <Navbar />
     <main className="bz-seller-credits mx-auto w-full max-w-6xl px-3 py-6 sm:px-6">
     <AnimatePresence>
@@ -587,7 +587,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
           initial={{ scale: 0.95, y: 20 }}
           animate={{ scale: 1, y: 0 }}
           exit={{ scale: 0.95, y: 20 }}
-          role="dialog" aria-modal="true" aria-label="Post a Classified Ad" className="bz-seller-panel min-w-0 bg-white rounded-2xl shadow-sm w-full overflow-visible font-sans text-slate-900"
+          aria-label="Post a Classified Ad" className="bz-seller-panel min-w-0 bg-white rounded-2xl shadow-sm w-full overflow-visible font-sans text-slate-900"
         >
           <div className="px-4 pt-4"><SellerStudioNav active="classifieds" /></div>
           {/* Gradient header */}
