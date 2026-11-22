@@ -639,10 +639,17 @@ export function Navbar() {
             </button>
           </div>
         </div>
-        <form onSubmit={handleSubmit} className="lg:hidden px-4 pb-3 flex gap-2" role="search" aria-label="Search marketplace">
-          <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder={t("search")} aria-label="Search listings" className="min-w-0 flex-1 rounded-xl bg-gray-100 px-3 py-2 text-base text-gray-800" />
-          <button type="submit" aria-label="Search" className="w-11 shrink-0 rounded-xl bg-[#4A5CE8] text-white flex items-center justify-center"><Search className="w-5 h-5" /></button>
-        </form>
+        <div className="relative lg:hidden px-4 pb-3">
+          <form onSubmit={(event) => { setSearchOpen(false); handleSubmit(event); }} className="flex gap-2" role="search" aria-label="Search marketplace">
+            <input type="search" value={query} onChange={e => { setQuery(e.target.value); setSearchOpen(true); }} onFocus={e => { setSearchOpen(true); window.setTimeout(() => e.target.scrollIntoView({block:"nearest",behavior:"smooth"}),150); }} placeholder={t("search")} aria-label="Search listings" aria-expanded={searchOpen && !!query.trim()} aria-controls="mobile-search-suggestions" className="min-w-0 flex-1 rounded-xl bg-gray-100 px-3 py-2 text-base text-gray-800 scroll-mt-4" />
+            <button type="submit" aria-label="Search" className="w-11 shrink-0 rounded-xl bg-[#4A5CE8] text-white flex items-center justify-center"><Search className="w-5 h-5" /></button>
+          </form>
+          {searchOpen && !!query.trim() && searchSuggestions.length > 0 && (
+            <div id="mobile-search-suggestions" role="region" aria-label="Search suggestions" className="absolute inset-x-4 top-[calc(100%-8px)] z-[70] max-h-[min(32dvh,220px)] overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white p-1 shadow-xl" style={{WebkitOverflowScrolling:"touch"}}>
+              {searchSuggestions.slice(0,5).map(suggestion => <button key={suggestion} type="button" onClick={() => {setQuery(suggestion);setSearchOpen(false);setLocation(`/browse?q=${encodeURIComponent(suggestion)}`);}} className="block min-h-11 w-full rounded-lg px-3 py-2 text-left text-sm font-semibold text-slate-900 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-500">{suggestion}</button>)}
+            </div>
+          )}
+        </div>
         <div className="bz-mockup-benefits" role="region" aria-label="Marketplace benefits, swipe horizontally for more" tabIndex={0}>
           <span><Truck className="text-blue-600"/> <strong>Free delivery</strong><small>On selected items</small></span>
           <span><ShieldCheck className="text-cyan-600"/> <strong>Buyer protection</strong><small>Shop with confidence</small></span>
