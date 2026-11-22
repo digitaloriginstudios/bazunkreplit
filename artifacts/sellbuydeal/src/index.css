@@ -4411,3 +4411,14 @@ html,body,#root{font-family:var(--app-font-sans)!important}
     box-shadow: inset 0 -3px 0 #fb923c !important;
   }
 }
+
+/* Reserve scroll clearance for the fixed mobile shopping bar so the final
+   product card's title, price and actions can scroll fully into view. */
+@media (max-width: 767px) {
+  html:has([data-testid="mobile-shop-nav"]) main.flex-1 {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  html:has([data-testid="mobile-shop-nav"]) {
+    scroll-padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+  }
+}
