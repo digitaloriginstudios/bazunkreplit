@@ -216,6 +216,12 @@ importers:
       thread-stream:
         specifier: 3.1.0
         version: 3.1.0
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.23.1
+      pg:
+        specifier: ^8.20.0
+        version: 8.23.1
 
   artifacts/sellbuydeal:
     dependencies:
