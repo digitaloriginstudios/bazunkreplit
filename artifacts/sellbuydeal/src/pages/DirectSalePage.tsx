@@ -133,8 +133,8 @@ function extractCurrencyCode(display: string): string {
   return display.match(/[A-Z]{3}$/)?.[0] ?? "GBP";
 }
 
-export function DirectSalePage() {
-  const sellEmbedded = new URLSearchParams(window.location.search).get("sellEmbed") === "1";
+export function DirectSalePage({ embedded = false }: { embedded?: boolean } = {}) {
+  const sellEmbedded = embedded || new URLSearchParams(window.location.search).get("sellEmbed") === "1";
   const [marketplaceRegion] = useMarketplaceRegion();
   const [, refreshThirdLevels] = useState(0);
   useEffect(() => { let active = true; loadThirdLevelTaxonomy().then(() => { if (active) refreshThirdLevels(n => n + 1); }); return () => { active = false; }; }, []);
