@@ -242,15 +242,16 @@ function SellHubArtwork({kind}:{kind:string}) {
 }
 function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number];onClose:()=>void}) {
  useEffect(()=>{const previous=document.body.style.overflow;document.body.style.overflow="hidden";const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose()};window.addEventListener("keydown",onKey);return ()=>{document.body.style.overflow=previous;window.removeEventListener("keydown",onKey)}},[onClose]);
- return <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/75 p-0 sm:p-4" role="presentation">
-  <section role="dialog" aria-modal="true" aria-label={option.title} className="flex h-[100dvh] w-full max-w-6xl flex-col overflow-hidden bg-white shadow-2xl sm:h-[min(94dvh,1000px)] sm:rounded-[28px] sm:border-2 sm:border-blue-200">
-   <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-blue-100 bg-white px-4 py-3 text-[#082b69] sm:px-6">
-    <div className="flex min-w-0 items-center gap-3"><span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${option.colors} text-white`}><option.icon className="h-6 w-6"/></span><div className="min-w-0"><h2 className="truncate text-lg font-black sm:text-2xl">{option.title}</h2><p className="hidden text-sm text-slate-600 sm:block">Complete your listing using Bazunk Seller Studio</p></div></div>
-    <div className="flex shrink-0 gap-2"><a href={option.href} target="_blank" rel="noopener noreferrer" aria-label="Open editor in a new tab" className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-800 hover:bg-blue-100"><Maximize2 className="h-5 w-5"/></a><button type="button" onClick={onClose} aria-label="Close listing window" className="flex h-11 w-11 items-center justify-center rounded-xl border border-blue-200 bg-white text-[#123c66] hover:bg-orange-50"><X className="h-6 w-6"/></button></div>
+ const embeddedHref=option.href+(option.href.includes("?")?"&":"?")+"sellEmbed=1";
+ return <div className="fixed inset-0 z-[9999] flex items-stretch justify-center bg-[#082653]/45 p-0 backdrop-blur-[2px] lg:items-center lg:justify-end lg:bg-[#082653]/20 lg:p-5" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
+  <section role="dialog" aria-modal="true" aria-label={option.title+" listing wizard"} className="flex h-[100dvh] w-full flex-col overflow-hidden bg-white shadow-[0_18px_65px_rgba(4,36,88,.35)] lg:h-[min(91dvh,900px)] lg:w-[min(47vw,760px)] lg:rounded-[24px] lg:border-2 lg:border-[#9bbff1]">
+   <header className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-b border-[#d6e5f9] bg-white px-3 py-3 text-[#082b69] sm:px-5">
+    <div className="flex min-w-0 items-center gap-3"><span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${option.colors} text-white`}><option.icon className="h-6 w-6"/></span><div className="min-w-0"><h2 className="truncate text-base font-black sm:text-xl">{option.title}</h2><p className="hidden text-xs font-medium text-[#33577c] sm:block">Create your listing with Bazunk Seller Studio</p></div></div>
+    <div className="flex shrink-0 gap-1 sm:gap-2"><a href={option.href} target="_blank" rel="noopener noreferrer" aria-label="Open full editor in new tab" className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-800 hover:bg-blue-100"><Maximize2 className="h-5 w-5"/></a><button type="button" onClick={onClose} aria-label="Close listing window" className="flex h-10 w-10 items-center justify-center rounded-full border border-blue-200 bg-white text-[#123c66] hover:bg-orange-50"><X className="h-5 w-5"/></button></div>
    </header>
-   <iframe title={`${option.title} editor`} src={option.href} className="min-h-0 w-full flex-1 border-0 bg-white" loading="eager"/>
+   <iframe title={`${option.title} listing wizard`} src={embeddedHref} className="min-h-0 w-full flex-1 border-0 bg-white" loading="eager"/>
   </section>
- </div>
+ </div>;
 }
 
 export function SellPage() {
