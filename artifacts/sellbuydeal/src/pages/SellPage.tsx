@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { useRawSettings } from "@/context/SiteSettingsContext";
 import { featureForHref, isFeatureEnabled } from "@/components/FeatureGate";
 import { motion } from "framer-motion";
@@ -240,16 +240,31 @@ function SellHubArtwork({kind}:{kind:string}) {
   {kind==="live"&&<><div className="relative rotate-[-7deg] rounded-[24px] bg-gradient-to-br from-cyan-300 via-sky-500 to-blue-700 p-6 text-white shadow-[0_12px_22px_rgba(6,151,216,.35)] ring-4 ring-white"><Video size={70} strokeWidth={2.5}/></div><span className="absolute bottom-5 right-[17%] rounded-full border-2 border-white bg-red-500 px-2 py-1 text-[10px] font-black text-white shadow-md">LIVE</span><Play className={common+" left-[20%] top-[20%] text-sky-500"} size={25} fill="currentColor"/></>}
  </div>;
 }
+const NativeDirectSeller = lazy(() => import("@/pages/DirectSalePage").then(m => ({default:m.DirectSalePage})));
+const NativeAuctionSeller = lazy(() => import("@/pages/CreateAuctionPage").then(m => ({default:m.CreateAuctionPage})));
+const NativeClassifiedSeller = lazy(() => import("@/pages/ClassifiedsPage").then(m => ({default:m.CreateClassifiedPage})));
 function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number];onClose:()=>void}) {
  useEffect(()=>{const previous=document.body.style.overflow;document.body.style.overflow="hidden";const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose()};window.addEventListener("keydown",onKey);return ()=>{document.body.style.overflow=previous;window.removeEventListener("keydown",onKey)}},[onClose]);
- const embeddedHref=option.href+(option.href.includes("?")?"&":"?")+"sellEmbed=1";
+
  return <div className="fixed inset-0 z-[9999] flex items-stretch justify-center bg-[#082653]/45 p-0 backdrop-blur-[2px] lg:items-center lg:justify-end lg:bg-[#082653]/20 lg:p-5" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
   <section role="dialog" aria-modal="true" aria-label={option.title+" listing wizard"} className="flex h-[100dvh] w-full flex-col overflow-hidden bg-white shadow-[0_18px_65px_rgba(4,36,88,.35)] lg:h-[min(91dvh,900px)] lg:w-[min(47vw,760px)] lg:rounded-[24px] lg:border-2 lg:border-[#9bbff1]">
    <header className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-b border-[#d6e5f9] bg-white px-3 py-3 text-[#082b69] sm:px-5">
     <div className="flex min-w-0 items-center gap-3"><span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${option.colors} text-white`}><option.icon className="h-6 w-6"/></span><div className="min-w-0"><h2 className="truncate text-base font-black sm:text-xl">{option.title}</h2><p className="hidden text-xs font-medium text-[#33577c] sm:block">Create your listing with Bazunk Seller Studio</p></div></div>
     <div className="flex shrink-0 gap-1 sm:gap-2"><a href={option.href} target="_blank" rel="noopener noreferrer" aria-label="Open full editor in new tab" className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-800 hover:bg-blue-100"><Maximize2 className="h-5 w-5"/></a><button type="button" onClick={onClose} aria-label="Close listing window" className="flex h-10 w-10 items-center justify-center rounded-full border border-blue-200 bg-white text-[#123c66] hover:bg-orange-50"><X className="h-5 w-5"/></button></div>
    </header>
-   <iframe title={`${option.title} listing wizard`} src={embeddedHref} className="min-h-0 w-full flex-1 border-0 bg-white" loading="eager"/>
+   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white" data-testid="sell-native-wizard">
+    <Suspense fallback={<div className="p-8 text-center font-bold text-[#123c66]">Loading your listing form…</div>}>
+      {option.id==="direct" || option.id==="quick" ? <NativeDirectSeller embedded sellMode={option.id} key={option.id}/> :
+       option.id==="auction" ? <NativeAuctionSeller embedded/> :
+       option.id==="classified" ? <NativeClassifiedSeller embedded/> :
+       <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
+         <span className={`flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br ${option.colors} text-white`}><option.icon className="h-11 w-11"/></span>
+         <h3 className="text-2xl font-black text-[#082b69]">{option.title}</h3>
+         <p className="max-w-md text-[#33577c]">This selling tool has its own creator workflow. Open it to configure your listing and publish safely.</p>
+         <a href={option.href} className={`inline-flex min-h-12 items-center gap-2 rounded-full bg-gradient-to-r ${option.colors} px-6 py-3 font-bold text-white`}>Open {option.title}<ArrowRight className="h-5 w-5"/></a>
+       </div>}
+    </Suspense>
+   </div>
   </section>
  </div>;
 }

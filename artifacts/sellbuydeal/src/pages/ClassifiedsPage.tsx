@@ -456,8 +456,8 @@ function AdDetailModal({ ad, onClose }: { ad: ClassifiedAd; onClose: () => void 
 }
 
 // ─── Post Ad Modal ─────────────────────────────────────────────────────────────
-function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: ClassifiedAd) => void }) {
- const sellEmbedded = new URLSearchParams(window.location.search).get("sellEmbed") === "1";
+function PostAdModal({ onClose, onPost, embedded = false }: { onClose: () => void; onPost: (ad: ClassifiedAd) => void; embedded?: boolean }) {
+ const sellEmbedded = embedded || new URLSearchParams(window.location.search).get("sellEmbed") === "1";
   const { getToken } = useClerkAuth();
   const [marketRegion] = useMarketplaceRegion();
   const { formatPrice, currency } = useCurrency();
@@ -1313,7 +1313,7 @@ export function ClassifiedsPage() {
   );
 }
 
-export function CreateClassifiedPage() {
+export function CreateClassifiedPage({ embedded = false }: { embedded?: boolean } = {}) {
  const [, navigate] = useLocation();
- return <PostAdModal onClose={() => navigate("/classifieds")} onPost={() => {}} />;
+ return <PostAdModal embedded={embedded} onClose={() => navigate("/classifieds")} onPost={() => {}} />;
 }
