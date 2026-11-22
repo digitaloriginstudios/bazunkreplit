@@ -65,8 +65,8 @@ const DURATIONS: { label: string; hours: number }[] = [
   { label: "14d",   hours: 336 },
 ];
 
-export function CreateAuctionPage() {
-  const sellEmbedded = new URLSearchParams(window.location.search).get("sellEmbed") === "1";
+export function CreateAuctionPage({ embedded = false }: { embedded?: boolean } = {}) {
+  const sellEmbedded = embedded || new URLSearchParams(window.location.search).get("sellEmbed") === "1";
   const [marketRegion] = useMarketplaceRegion();
   const [, setLocation] = useLocation();
   const { getToken } = useClerkAuth();
