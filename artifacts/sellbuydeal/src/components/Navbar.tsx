@@ -695,21 +695,6 @@ export function Navbar() {
                 </button>
               </div>
 
-              {/* Search */}
-              <div className="px-5 py-3 border-b border-gray-100">
-                <form onSubmit={handleSubmit} className="relative">
-                  <SearchHeaderIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 pointer-events-none" />
-                  <input
-                    type="search"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder={featureSettings.header_search_placeholder||"Search listings..."}
-                    className="w-full pl-9 pr-4 py-3 rounded-xl bg-slate-100 border border-slate-300 text-base text-slate-900 placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-[#4A5CE8]/30"
-                    data-testid="input-search-mobile"
-                  />
-                </form>
-              </div>
-
               <button type="button" onClick={()=>{setMobileOpen(false);setCategoryDrawerOpen(true);}} className="mx-5 my-3 flex min-h-12 items-center justify-between rounded-xl bg-orange-50 px-4 font-bold text-slate-900 border border-orange-200" aria-haspopup="dialog"><span className="flex items-center gap-2"><Grid3X3 className="h-5 w-5 text-orange-600"/> Shop by category</span><ChevronRight className="h-5 w-5"/></button>
 
               {/* User info (logged in) */}
