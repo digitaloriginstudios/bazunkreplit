@@ -1,9 +1,10 @@
+import "./seller-credits.css";
 import { SellerStudioSections } from "@/components/SellerStudioSections";
 import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudioGuidance";
 import { SellerStudioNav } from "@/components/SellerStudioNav";
 import { createPortal } from "react-dom";
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useSearch } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useAuth as useClerkAuth } from "@clerk/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -546,16 +547,15 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
     }
   }
 
-  if (submitted) return createPortal(
-    <AnimatePresence>
+  if (submitted) return (
+    <div className="bz-seller-credits min-h-screen"><Navbar /><main className="mx-auto max-w-3xl px-4 py-12"><AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        className="classified-post-overlay fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6"
-        onClick={(e) => e.target === e.currentTarget && onClose()}
+        className="w-full"
       >
         <motion.div
           initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }}
-          role="dialog" aria-modal="true" aria-label="Classified ad posted" className="classified-post-dialog bg-white rounded-2xl shadow-2xl w-full max-w-md p-10 text-center text-slate-900"
+          aria-label="Classified ad posted" className="classified-post-dialog bg-white rounded-2xl shadow-2xl w-full max-w-md p-10 text-center text-slate-900"
         >
           <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", damping: 14 }}
             className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-5">
@@ -568,10 +568,13 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
           </button>
         </motion.div>
       </motion.div>
-    </AnimatePresence>, document.body
+    </AnimatePresence></main><Footer /></div>
   );
 
-  return createPortal(
+  return (
+    <div className="bz-seller-credits min-h-screen bg-[#eff8ff] font-sans text-[#173654]">
+    <Navbar />
+    <main className="bz-seller-credits mx-auto w-full max-w-6xl px-3 py-6 sm:px-6">
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }}
@@ -584,7 +587,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
           initial={{ scale: 0.95, y: 20 }}
           animate={{ scale: 1, y: 0 }}
           exit={{ scale: 0.95, y: 20 }}
-          role="dialog" aria-modal="true" aria-label="Post a Classified Ad" className="classified-post-dialog min-w-0 bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90dvh] overflow-y-auto overscroll-contain font-sans text-slate-900"
+          aria-label="Post a Classified Ad" className="bz-seller-panel min-w-0 bg-white rounded-2xl shadow-sm w-full overflow-visible font-sans text-slate-900"
         >
           <div className="px-4 pt-4"><SellerStudioNav active="classifieds" /></div>
           {/* Gradient header */}
@@ -965,7 +968,10 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
           </div>
         </motion.div>
       </motion.div>
-    </AnimatePresence>, document.body
+    </AnimatePresence>
+    </main>
+    <Footer />
+    </div>
   );
 }
 
@@ -1004,7 +1010,7 @@ export function ClassifiedsPage() {
   const [activeSubcategory, setActiveSubcategory] = useState("");
   const [activeType, setActiveType] = useState<"all" | ClassifiedType>("all");
   const [sortBy, setSortBy] = useState("newest");
-  const [showModal, setShowModal] = useState(() => new URLSearchParams(search).get("post") === "1");
+  const [, navigateTo] = useLocation();
   const [view, setView] = useState<"categories" | "list">("categories");
   const [selectedAd, setSelectedAd] = useState<ClassifiedAd | null>(null);
 
@@ -1077,7 +1083,7 @@ export function ClassifiedsPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center">
               <button
-                onClick={() => setShowModal(true)}
+                onClick={() => navigateTo("/classifieds/post")}
                 className="inline-flex items-center gap-2 px-8 py-4 rounded-2xl bg-gradient-to-r from-[#F26B21] to-[#e05a10] text-white font-bold hover:opacity-90 transition-opacity shadow-lg shadow-orange-200"
               >
                 <Plus className="w-4 h-4" /> Post Your Ad Free
@@ -1267,7 +1273,7 @@ export function ClassifiedsPage() {
                   <p className="font-semibold text-gray-600 mb-1">No ads found</p>
                   <p className="text-sm text-gray-400 mb-4">Try a different search or be the first to post here!</p>
                   <button
-                    onClick={() => setShowModal(true)}
+                    onClick={() => navigateTo("/classifieds/post")}
                     className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#F26B21] to-[#e05a10] text-white font-bold text-sm hover:opacity-90"
                   >
                     <Plus className="w-4 h-4" /> Post the First Ad
@@ -1297,16 +1303,15 @@ export function ClassifiedsPage() {
 
       <Footer />
 
-      {showModal && (
-        <PostAdModal
-          onClose={() => setShowModal(false)}
-          onPost={(ad) => { handlePostAd(ad); }}
-        />
-      )}
 
       {selectedAd && (
         <AdDetailModal ad={selectedAd} onClose={() => setSelectedAd(null)} />
       )}
     </div>
   );
+}
+
+export function CreateClassifiedPage() {
+ const [, navigate] = useLocation();
+ return <PostAdModal onClose={() => navigate("/classifieds")} onPost={() => {}} />;
 }

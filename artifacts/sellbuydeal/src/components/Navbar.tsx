@@ -95,7 +95,7 @@ const SELL_OPTIONS: Array<{
     label: "Classified Ad",
     desc: "Post a local or free ad",
     icon: Newspaper,
-    href: "/classifieds?post=1",
+    href: "/classifieds/post",
     color: "text-purple-600",
     bg: "bg-purple-50",
   },

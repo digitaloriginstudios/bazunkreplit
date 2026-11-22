@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { Zap, Tag, Gavel, FileText } from "lucide-react";
-const modes = [{href:"/sell/quick",label:"Quick Sell",icon:Zap,id:"quick"},{href:"/sell/direct",label:"Direct Sell",icon:Tag,id:"direct"},{href:"/auctions/create",label:"Auction",icon:Gavel,id:"auction"},{href:"/classifieds?post=1",label:"Classifieds",icon:FileText,id:"classifieds"}] as const;
+const modes = [{href:"/sell/quick",label:"Quick Sell",icon:Zap,id:"quick"},{href:"/sell/direct",label:"Direct Sell",icon:Tag,id:"direct"},{href:"/auctions/create",label:"Auction",icon:Gavel,id:"auction"},{href:"/classifieds/post",label:"Classifieds",icon:FileText,id:"classifieds"}] as const;
 export function SellerStudioNav({active}:{active:"quick"|"direct"|"auction"|"classifieds"}) {
  return <nav aria-label="Choose selling method" className="mb-5 min-w-0 rounded-2xl border border-slate-200 bg-white p-2 font-sans text-slate-900 shadow-sm">
  <div className="mb-2 flex items-center gap-2 px-2 pt-1 text-sm font-black text-[#123c66]"><span className="text-lg tracking-tight">Bazunk</span><span className="h-4 w-px bg-slate-300"/>Seller Studio</div>

@@ -1,3 +1,4 @@
+import "./seller-credits.css";
 import { SellerStudioSections } from "@/components/SellerStudioSections";
 import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudioGuidance";
 import { SellerStudioNav } from "@/components/SellerStudioNav";
@@ -253,7 +254,7 @@ export function CreateAuctionPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] flex flex-col font-sans">
+    <div className="bz-seller-credits min-h-screen bg-[#eff8ff] flex flex-col font-sans">
       <Navbar />
 
       <div className="w-full min-w-0 max-w-[1800px] mx-auto px-3 sm:px-6 py-4">
@@ -267,7 +268,7 @@ export function CreateAuctionPage() {
         <SellerStudioNav active="auction" />
         <div className="mb-4 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><SellerStudioProgress completed={[Boolean(title.trim()),Boolean(description.trim()),photos.length>0].filter(Boolean).length} total={3} label="Auction listing essentials"/><SellerStudioTips items={["Add a descriptive title and clear photos","Explain the item condition","Review starting bid, duration and delivery before publishing"]}/></div>
         <SellerStudioSections sections={[{"id":"auction-item-details","label":"Item details"},{"id":"auction-photos","label":"Photos"},{"id":"auction-settings","label":"Auction settings"},{"id":"auction-delivery","label":"Delivery"},{"id":"auction-publish","label":"Review & publish"}]} />
-        <form onSubmit={submit} noValidate className="auction-create-form auction-create-shell">
+        <form onSubmit={submit} noValidate className="bz-seller-form auction-create-form auction-create-shell">
 
           <div className="auction-create-layout min-w-0">
           {/* Colourful, accessible auction hero */}

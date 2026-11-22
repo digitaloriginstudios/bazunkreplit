@@ -1,3 +1,4 @@
+import "./seller-credits.css";
 import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudioGuidance";
 import { SellerStudioNav } from "@/components/SellerStudioNav";
 import { useMarketplaceRegion } from "@/hooks/useMarketplaceRegion";
@@ -436,7 +437,7 @@ export function DirectSalePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#07182f] flex flex-col font-sans">
+    <div className="bz-seller-credits min-h-screen bg-[#eff8ff] flex flex-col font-sans">
       <Navbar />
 
       <div className="container mx-auto px-4 py-7 max-w-7xl">
@@ -459,7 +460,7 @@ export function DirectSalePage() {
           .direct-sale-form > section textarea:focus { border-color: #5aa3ff; outline-color: #5aa3ff; }
           .direct-sale-form > section [class*="text-gray-"] { color: #d5e4f6; }
         `}</style>
-        <form onSubmit={handlePublish} noValidate className={`direct-sale-form ${quickMode?"bazunk-quick-sell":""} grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(300px,1fr)] gap-4 lg:gap-5 items-start min-w-0 pb-32 lg:pb-0`}>
+        <form onSubmit={handlePublish} noValidate className={`bz-seller-form direct-sale-form ${quickMode?"bazunk-quick-sell":""} grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(300px,1fr)] gap-4 lg:gap-5 items-start min-w-0 pb-32 lg:pb-0`}>
 
           {/* Header card */}
           <div className="lg:col-span-2 min-w-0 rounded-2xl bg-gradient-to-r from-[#0c3767] via-[#15588e] to-[#1e6fe8] px-5 py-5 sm:px-7 sm:py-7 mb-0 shadow-lg">

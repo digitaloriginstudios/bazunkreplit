@@ -1,0 +1,21 @@
+/* Seller Studio: mirrors the light, colourful Marketplace Credits visual system. */
+.bz-seller-credits{background:linear-gradient(145deg,#eff8ff 0%,#f7f4ff 48%,#eafbf5 100%)!important;color:#173654!important;color-scheme:light;font-family:var(--app-font-sans);}
+.bz-seller-credits .bz-seller-panel,.bz-seller-credits .bz-seller-form>section{border:2px solid #bddcf4!important;border-radius:18px!important;box-shadow:0 8px 24px #185b9315!important;}
+.bz-seller-credits .bz-seller-form>section{background:#fff!important;color:#173654!important;}
+.bz-seller-credits .bz-seller-form>section :is(h2,h3,label){color:#143a60!important;}
+.bz-seller-credits .bz-seller-form>section :is(p,small){color:#355675!important;}
+.bz-seller-credits .bz-seller-form>section :is(input:not([type=checkbox]):not([type=radio]),textarea,select){background:#fff!important;color:#173654!important;-webkit-text-fill-color:#173654!important;border-color:#a8cbe7!important;}
+.bz-seller-credits .bz-seller-form>section :is(input,textarea)::placeholder{color:#657f98!important;-webkit-text-fill-color:#657f98!important;}
+.bz-seller-credits .bz-seller-form>section select option{background:#fff;color:#173654;}
+.bz-seller-credits .bz-seller-form>section :is(button,a):focus-visible,.bz-seller-credits :is(button,a):focus-visible{outline:3px solid #ff991e;outline-offset:2px;}
+.bz-seller-credits .bz-seller-form>section:nth-of-type(4n+1){border-color:#a4e6c7!important;}
+.bz-seller-credits .bz-seller-form>section:nth-of-type(4n+2){border-color:#b0d9fb!important;}
+.bz-seller-credits .bz-seller-form>section:nth-of-type(4n+3){border-color:#ffc991!important;}
+.bz-seller-credits .bz-seller-form>section:nth-of-type(4n){border-color:#d3c3ff!important;}
+.bz-seller-credits .bz-seller-panel{background:#fff!important;color:#173654!important;}
+.bz-seller-credits .bz-seller-panel :is(input,textarea,select){background:#fff!important;color:#173654!important;border-color:#a8cbe7!important;}
+.bz-seller-credits .bz-seller-panel :is(input,textarea)::placeholder{color:#657f98!important;}
+.bz-seller-credits .bz-seller-panel label,.bz-seller-credits .bz-seller-panel summary{color:#143a60!important;}
+.bz-seller-credits .bz-seller-panel .text-gray-400{color:#536e89!important;}
+.bz-seller-credits .bz-seller-panel>div:nth-child(2){background:linear-gradient(108deg,#04b8e8 0%,#0878f0 65%,#ee75b3 100%)!important;}
+@media(max-width:640px){.bz-seller-credits .bz-seller-panel{border-radius:14px!important;}.bz-seller-credits .bz-seller-form>section{padding:16px!important;}}
