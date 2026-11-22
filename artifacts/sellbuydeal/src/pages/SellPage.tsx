@@ -254,7 +254,7 @@ function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number]
    </header>
    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white" data-testid="sell-native-wizard">
     <Suspense fallback={<div className="p-8 text-center font-bold text-[#123c66]">Loading your listing form…</div>}>
-      {option.id==="direct" || option.id==="quick" ? <NativeDirectSeller embedded key={option.id}/> :
+      {option.id==="direct" || option.id==="quick" ? <NativeDirectSeller embedded sellMode={option.id} key={option.id}/> :
        option.id==="auction" ? <NativeAuctionSeller embedded/> :
        option.id==="classified" ? <NativeClassifiedSeller embedded/> :
        <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
