@@ -436,12 +436,12 @@ export function DirectSalePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#07182f] flex flex-col">
+    <div className="min-h-screen bg-slate-50 dark:bg-[#07182f] flex flex-col font-sans">
       <Navbar />
 
       <div className="container mx-auto px-4 py-7 max-w-7xl">
         <SellerStudioNav active={quickMode ? "quick" : "direct"} />
-        <div className="mb-4 grid gap-3 lg:grid-cols-[2fr_1fr]"><SellerStudioProgress completed={quickMode ? [Boolean(title.trim()),Boolean(category),photos.length>0,Number(price)>0].filter(Boolean).length : step} total={quickMode ? 4 : 6} label={quickMode ? "Listing essentials" : "Direct Sell progress"}/><SellerStudioTips items={["Use a clear title and well-lit photos","Describe the condition accurately","Check your price and delivery details"]}/></div>
+        <div className="mb-4 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><SellerStudioProgress completed={quickMode ? [Boolean(title.trim()),Boolean(category),photos.length>0,Number(price)>0].filter(Boolean).length : step} total={quickMode ? 4 : 6} label={quickMode ? "Listing essentials" : "Direct Sell progress"}/><SellerStudioTips items={["Use a clear title and well-lit photos","Describe the condition accurately","Check your price and delivery details"]}/></div>
         <style>{`
           .direct-sale-form > section h2, .direct-sale-form > aside h2 { color: #fff; }\n          .direct-sale-form > aside > section p, .direct-sale-form > aside > section li { color: #f0f5ff !important; opacity: 1 !important; }\n          .direct-sale-form > aside > section svg { color: #e2d5ff; opacity: 1; }\n          .direct-sale-form > aside > section a { color: #fff; }
           .direct-sale-form > section label { color: #e8f2ff; font-weight: 650; }
@@ -1321,11 +1321,11 @@ export function DirectSalePage() {
             </p>
             <p className="text-xs text-slate-300 mt-1">{productVideoCredits} credits are deducted only when the listing is successfully published.</p>
 
-            <div className="bg-white rounded-xl border border-yellow-100 p-4 mb-4">
+            <div className="bg-white rounded-xl border border-yellow-100 p-4 mb-4 text-slate-900">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="font-semibold text-slate-900 text-sm">Product Video</p>
-                  <p className="text-xs text-slate-400">Videos get 5x more engagement</p>
+                  <p className="text-xs text-slate-600">Videos get 5x more engagement</p>
                 </div>
                 <button
                   type="button"
@@ -1478,9 +1478,9 @@ export function DirectSalePage() {
             </AnimatePresence>
           </section>
           {/* Fixed on phones: never make people scroll through the full editor to find Submit. */}
-          <div data-testid="mobile-direct-sale-actions" className="fixed inset-x-0 bottom-0 z-[70] border-t border-slate-500 bg-[#102541]/95 px-4 pt-3 text-white shadow-[0_-8px_25px_rgba(0,0,0,.4)] backdrop-blur-lg lg:hidden"
+          <div data-testid="mobile-direct-sale-actions" className="fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-[70] border-t border-slate-500 bg-[#102541]/95 px-4 pt-3 text-white shadow-[0_-8px_25px_rgba(0,0,0,.4)] backdrop-blur-lg lg:hidden"
             style={{paddingBottom:"max(12px, env(safe-area-inset-bottom))"}}>
-            <div className="mx-auto flex max-w-lg items-center gap-2">
+            <div className="mx-auto flex max-w-lg min-w-0 flex-wrap items-center gap-2">
               {!quickMode&&mobilePosition>0&&<button type="button" onClick={mobileBack} className="min-h-12 rounded-xl border border-slate-400 px-4 text-sm font-bold text-white">Back</button>}
               <button type="button" onClick={()=>void handleSaveDraft()} disabled={savingDraft||publishing}
                 className="min-h-12 rounded-xl border border-sky-400/50 px-3 text-xs font-bold text-slate-100 disabled:opacity-70"
@@ -1488,7 +1488,7 @@ export function DirectSalePage() {
               {quickMode||mobilePosition===mobileSteps.length-1?
                 <button type="submit" disabled={publishing||published}
                   data-testid="mobile-publish-listing"
-                  className="min-h-12 flex-1 rounded-xl bg-orange-600 px-3 text-base font-black text-white disabled:opacity-60">
+                  className="min-h-12 min-w-[115px] flex-1 rounded-xl bg-orange-600 px-3 text-base font-black text-white disabled:opacity-60">
                   {publishing?"Publishing…":published?"Published ✓":"Publish listing"}
                 </button>:
                 <button type="button" onClick={mobileContinue} data-testid="mobile-next-listing"
