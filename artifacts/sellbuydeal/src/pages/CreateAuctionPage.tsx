@@ -253,10 +253,10 @@ export function CreateAuctionPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#f1f5f9] flex flex-col">
+    <div className="min-h-screen bg-[#f1f5f9] flex flex-col font-sans">
       <Navbar />
 
-      <div className="w-full max-w-[1800px] mx-auto px-4 sm:px-6 py-4">
+      <div className="w-full min-w-0 max-w-[1800px] mx-auto px-3 sm:px-6 py-4">
         <Link
           href="/auctions"
           className="flex items-center gap-1.5 text-sm text-slate-700 hover:text-[#4A5CE8] mb-3 w-fit transition-colors"
@@ -265,7 +265,7 @@ export function CreateAuctionPage() {
         </Link>
 
         <SellerStudioNav active="auction" />
-        <div className="mb-4 grid gap-3 lg:grid-cols-[2fr_1fr]"><SellerStudioProgress completed={[Boolean(title.trim()),Boolean(description.trim()),photos.length>0].filter(Boolean).length} total={3} label="Auction listing essentials"/><SellerStudioTips items={["Add a descriptive title and clear photos","Explain the item condition","Review starting bid, duration and delivery before publishing"]}/></div>
+        <div className="mb-4 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><SellerStudioProgress completed={[Boolean(title.trim()),Boolean(description.trim()),photos.length>0].filter(Boolean).length} total={3} label="Auction listing essentials"/><SellerStudioTips items={["Add a descriptive title and clear photos","Explain the item condition","Review starting bid, duration and delivery before publishing"]}/></div>
         <SellerStudioSections sections={[{"id":"auction-item-details","label":"Item details"},{"id":"auction-photos","label":"Photos"},{"id":"auction-settings","label":"Auction settings"},{"id":"auction-delivery","label":"Delivery"},{"id":"auction-publish","label":"Review & publish"}]} />
         <form onSubmit={submit} noValidate className="auction-create-form auction-create-shell">
 
@@ -273,9 +273,9 @@ export function CreateAuctionPage() {
           {/* Colourful, accessible auction hero */}
           <div className="auction-create-header rounded-2xl overflow-hidden border border-blue-200 bg-gradient-to-r from-[#e8f3ff] via-[#f4f9ff] to-[#fff0df] px-5 sm:px-7 py-5 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-5">
-              <div className="flex items-center gap-4">
-                <div className="auction-hero-gavel w-20 h-20 rounded-2xl bg-gradient-to-br from-[#15588e] to-orange-500 flex items-center justify-center shadow-lg"><Gavel className="w-12 h-12 !text-white" /></div>
-                <div><h1 className="auction-create-header-title text-3xl sm:text-4xl font-black tracking-tight text-[#101c38]">List an Auction</h1><p className="auction-create-header-subtitle text-[#334155] text-sm mt-1">Create your auction in minutes and reach more buyers on Bazunk.</p></div>
+              <div className="flex min-w-0 flex-wrap items-center gap-4">
+                <div className="auction-hero-gavel w-14 h-14 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-[#15588e] to-orange-500 flex items-center justify-center shadow-lg"><Gavel className="w-8 h-8 sm:w-12 sm:h-12 !text-white" /></div>
+                <div><h1 className="auction-create-header-title text-2xl sm:text-4xl font-black tracking-tight text-[#101c38]">List an Auction</h1><p className="auction-create-header-subtitle text-[#334155] text-sm mt-1">Create your auction in minutes and reach more buyers on Bazunk.</p></div>
               </div>
               <div className="flex flex-wrap gap-4 sm:gap-6 text-[#101c38] text-xs font-bold">
                 <span className="flex flex-col items-center gap-1"><Zap className="w-6 h-6 text-orange-600"/>No listing fees</span>
