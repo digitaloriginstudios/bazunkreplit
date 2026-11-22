@@ -1,3 +1,4 @@
+import { SellerStudioSections } from "@/components/SellerStudioSections";
 import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudioGuidance";
 import { SellerStudioNav } from "@/components/SellerStudioNav";
 import { AdSlot } from "@/components/AdSlot";
@@ -265,6 +266,7 @@ export function CreateAuctionPage() {
 
         <SellerStudioNav active="auction" />
         <div className="mb-4 grid gap-3 lg:grid-cols-[2fr_1fr]"><SellerStudioProgress completed={[Boolean(title.trim()),Boolean(description.trim()),photos.length>0].filter(Boolean).length} total={3} label="Auction listing essentials"/><SellerStudioTips items={["Add a descriptive title and clear photos","Explain the item condition","Review starting bid, duration and delivery before publishing"]}/></div>
+        <SellerStudioSections sections={[{"id":"auction-item-details","label":"Item details"},{"id":"auction-photos","label":"Photos"},{"id":"auction-settings","label":"Auction settings"},{"id":"auction-delivery","label":"Delivery"},{"id":"auction-publish","label":"Review & publish"}]} />
         <form onSubmit={submit} noValidate className="auction-create-form auction-create-shell">
 
           <div className="auction-create-layout min-w-0">
@@ -290,6 +292,7 @@ export function CreateAuctionPage() {
             {importOpen && <div className="mt-3"><SellerListingPicker onSelect={handleListingSelect} selectedId={selectedListingId} /></div>}
           </section>
 
+          <span id="auction-item-details" className="block scroll-mt-28" />
           {/* Item Details */}
           <section className="bg-white rounded-xl px-4 sm:px-5 py-3 border border-slate-300 shadow-sm">
             <h2 className="text-base font-black text-slate-950 mb-3 flex items-center gap-2"><Layers3 className="w-5 h-5 text-orange-600" /> Item Details</h2>
@@ -388,6 +391,7 @@ export function CreateAuctionPage() {
             </div>
           </section>
 
+          <span id="auction-photos" className="block scroll-mt-28" />
           {/* Photos */}
           <section className="bg-white rounded-xl px-4 sm:px-5 py-3 border border-slate-300 shadow-sm">
             <h2 className="text-base font-black text-slate-950 mb-1 flex items-center gap-2"><Camera className="w-5 h-5 text-blue-600" /> Add Photos</h2>
@@ -502,6 +506,7 @@ export function CreateAuctionPage() {
             </AnimatePresence>
           </section></details>
 
+          <span id="auction-settings" className="block scroll-mt-28" />
           {/* Auction Settings */}
           <section className="bg-white rounded-xl px-4 sm:px-5 py-3 border border-slate-300 shadow-sm">
             <h2 className="text-base font-black text-slate-950 mb-3 flex items-center gap-2"><Coins className="w-5 h-5 text-orange-600" /> Auction Settings</h2>
@@ -589,13 +594,14 @@ export function CreateAuctionPage() {
 
           {/* Shipping choice: visual preference only; no unimplemented backend promise */}
           <section className="bg-white rounded-xl px-4 sm:px-5 py-4 border border-slate-300 shadow-sm">
-            <h2 className="text-base font-black text-slate-950 mb-3 flex items-center gap-2"><Truck className="w-5 h-5 text-orange-600" /> Delivery preference</h2>
+            <span id="auction-delivery" className="block scroll-mt-28" /><h2 className="text-base font-black text-slate-950 mb-3 flex items-center gap-2"><Truck className="w-5 h-5 text-orange-600" /> Delivery preference</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button type="button" aria-pressed={shippingMode === "ship"} onClick={() => setShippingMode("ship")} className={`flex items-center gap-3 p-3 rounded-xl border-2 font-bold text-sm ${shippingMode === "ship" ? "border-orange-500 bg-orange-50 text-slate-950" : "border-slate-300 bg-white text-slate-800"}`}><Truck className="w-5 h-5 text-orange-600" /> I will ship this item</button>
               <button type="button" aria-pressed={shippingMode === "collection"} onClick={() => setShippingMode("collection")} className={`flex items-center gap-3 p-3 rounded-xl border-2 font-bold text-sm ${shippingMode === "collection" ? "border-orange-500 bg-orange-50 text-slate-950" : "border-slate-300 bg-white text-slate-800"}`}><MapPin className="w-5 h-5 text-violet-600" /> Collection only</button>
             </div>
             <p className="text-xs text-slate-600 mt-2">Arrange delivery or collection with the buyer after the auction.</p>
           </section>
+          <span id="auction-publish" className="block scroll-mt-28" />
           {/* Ready to list */}
           <section className="bg-white rounded-xl px-4 sm:px-5 py-3 border border-slate-300 shadow-sm">
             <h2 className="text-lg font-bold text-slate-950 mb-1">Ready to List?</h2>

@@ -1,3 +1,4 @@
+import { SellerStudioSections } from "@/components/SellerStudioSections";
 import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudioGuidance";
 import { SellerStudioNav } from "@/components/SellerStudioNav";
 import { createPortal } from "react-dom";
@@ -351,6 +352,7 @@ function AdDetailModal({ ad, onClose }: { ad: ClassifiedAd; onClose: () => void 
               </div>
             )}
 
+            <span id="classified-contact" className="block scroll-mt-8" />
             {/* Contact */}
             <div className="bg-gradient-to-br from-[#4A5CE8]/5 to-[#4A5CE8]/10 rounded-2xl px-4 py-4">
               <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-3">Posted by</p>
@@ -621,7 +623,9 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
               )}
             </AnimatePresence>
 
-            {/* Offer / Wanted toggle */}
+            <SellerStudioSections sections={[{"id":"classified-type","label":"Listing type"},{"id":"classified-photos","label":"Photos"},{"id":"classified-details","label":"Details"},{"id":"classified-location","label":"Location"},{"id":"classified-contact","label":"Contact"},{"id":"classified-publish","label":"Publish"}]} />
+          <span id="classified-type" className="block scroll-mt-8" />
+          {/* Offer / Wanted toggle */}
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2.5">I am…</p>
               <div className="grid grid-cols-2 gap-3">
@@ -706,6 +710,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
               )}
             </div>
 
+            <span id="classified-photos" className="block scroll-mt-8" />
             {/* Photos */}
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2.5">Photos <span className="text-gray-400 font-normal">(up to 5)</span></p>
@@ -757,6 +762,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
               )}
             </div>
 
+            <span id="classified-details" className="block scroll-mt-8" />
             {/* Title */}
             <div>
               <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">
@@ -867,6 +873,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
               </div>
             </div>
 
+            <span id="classified-location" className="block scroll-mt-8" />
             {/* Location */}
             <div>
               <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">
@@ -935,6 +942,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
               </div>
             </div>
 
+            <span id="classified-publish" className="block scroll-mt-8" />
             <button
               type="button"
               onClick={handleSubmit}
