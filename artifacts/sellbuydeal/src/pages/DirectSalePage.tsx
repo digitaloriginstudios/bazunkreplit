@@ -1306,7 +1306,7 @@ export function DirectSalePage() {
           </section>
 
           {/* Premium Video */}
-          <section id="product-video" style={{ display: quickMode ? "none" : step === 5 ? "block" : "none" }} className="min-w-0 rounded-2xl bg-[#201b40] px-5 sm:px-7 py-6 border border-purple-400/25">
+          <section id="product-video" style={{ display: quickMode ? "none" : step === 5 ? "block" : "none" }} className="min-w-0 rounded-2xl bg-[#102541] px-5 sm:px-7 py-6 border border-sky-400/25">
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-yellow-400 flex items-center justify-center">
@@ -1324,7 +1324,7 @@ export function DirectSalePage() {
             <div className="bg-white rounded-xl border border-yellow-100 p-4 mb-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-semibold text-white text-sm">Product Video</p>
+                  <p className="font-semibold text-slate-900 text-sm">Product Video</p>
                   <p className="text-xs text-slate-400">Videos get 5x more engagement</p>
                 </div>
                 <button
