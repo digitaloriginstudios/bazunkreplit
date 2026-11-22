@@ -1,3 +1,4 @@
+import "./sell-embedded.css";
 import "./seller-credits.css";
 import { SellerStudioSections } from "@/components/SellerStudioSections";
 import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudioGuidance";
@@ -456,6 +457,7 @@ function AdDetailModal({ ad, onClose }: { ad: ClassifiedAd; onClose: () => void 
 
 // ─── Post Ad Modal ─────────────────────────────────────────────────────────────
 function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: ClassifiedAd) => void }) {
+ const sellEmbedded = new URLSearchParams(window.location.search).get("sellEmbed") === "1";
   const { getToken } = useClerkAuth();
   const [marketRegion] = useMarketplaceRegion();
   const { formatPrice, currency } = useCurrency();
@@ -548,7 +550,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
   }
 
   if (submitted) return (
-    <div className="bz-seller-credits min-h-screen"><Navbar /><main className="mx-auto max-w-3xl px-4 py-12"><AnimatePresence>
+    <div className={`bz-seller-credits min-h-screen ${sellEmbedded ? "bz-sell-embedded" : ""}`}>{!sellEmbedded && <Navbar />}<main className="mx-auto max-w-3xl px-4 py-12"><AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="w-full"
@@ -568,12 +570,12 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
           </button>
         </motion.div>
       </motion.div>
-    </AnimatePresence></main><Footer /></div>
+    </AnimatePresence></main>{!sellEmbedded && <Footer />}</div>
   );
 
   return (
-    <div className="bz-seller-credits min-h-screen bg-[#eff8ff] font-sans text-[#173654]">
-    <Navbar />
+    <div className={`bz-seller-credits min-h-screen bg-[#eff8ff] font-sans text-[#173654] ${sellEmbedded ? "bz-sell-embedded" : ""}`}>
+    {!sellEmbedded && <Navbar />}
     <main className="bz-seller-credits mx-auto w-full max-w-6xl px-3 py-6 sm:px-6">
     <AnimatePresence>
       <motion.div
@@ -589,7 +591,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
           exit={{ scale: 0.95, y: 20 }}
           aria-label="Post a Classified Ad" className="bz-seller-panel min-w-0 bg-white rounded-2xl shadow-sm w-full overflow-visible font-sans text-slate-900"
         >
-          <div className="px-4 pt-4"><SellerStudioNav active="classifieds" /></div>
+          <div className="px-4 pt-4">{!sellEmbedded && <SellerStudioNav active="classifieds" />}</div>
           {/* Gradient header */}
           <div className={`rounded-t-3xl px-6 pt-6 pb-5 flex items-start justify-between ${
             type === "offer"
@@ -970,7 +972,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
       </motion.div>
     </AnimatePresence>
     </main>
-    <Footer />
+    {!sellEmbedded && <Footer />}
     </div>
   );
 }
@@ -1065,7 +1067,7 @@ export function ClassifiedsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <Navbar />
+      {!sellEmbedded && <Navbar />}
       <div className="border-b border-orange-300 bg-orange-50 px-4 py-3 text-center text-sm font-bold text-slate-900"><a href="/find-it" className="font-black text-orange-800 underline">Try Bazunk Find It →</a> Describe an item, set your budget and let sellers compete with offers.</div>
 
       {/* Hero */}
@@ -1301,7 +1303,7 @@ export function ClassifiedsPage() {
         )}
       </div>
 
-      <Footer />
+      {!sellEmbedded && <Footer />}
 
 
       {selectedAd && (
