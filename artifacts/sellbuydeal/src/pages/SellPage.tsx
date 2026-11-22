@@ -23,7 +23,7 @@ import {
   Banknote,
   Percent,
   Info,
-  Zap, Video, X, Maximize2,
+  Zap, Video, X, Maximize2, Package, Users, Truck, Star,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { CompactPageHero } from "@/components/CompactPageHero";
@@ -223,18 +223,18 @@ function FeeCalculator() {
 const SELL_HUB_OPTIONS = [
  {id:"direct",title:"Direct Sale",desc:"Create a detailed listing with pricing, shipping and offers.",href:"/sell/direct",icon:ShoppingCart,colors:"from-orange-400 to-orange-600",border:"border-orange-300",label:"List item"},
  {id:"quick",title:"Quick Sale",desc:"Get your item listed quickly with the essentials.",href:"/sell/quick",icon:Zap,colors:"from-sky-400 to-blue-600",border:"border-sky-300",label:"List now"},
- {id:"auction",title:"List an Auction",desc:"Set a starting bid and let buyers compete.",href:"/auctions/create",icon:Gavel,colors:"from-violet-400 to-purple-600",border:"border-violet-300",label:"Create auction"},
+ {id:"auction",title:"List an Auction",desc:"Set a starting bid and let buyers compete.",href:"/auctions/create",icon:Gavel,colors:"from-violet-500 to-purple-600",border:"border-violet-300",label:"Create auction"},
  {id:"flash",title:"Run a Flash Sale",desc:"Create a limited-time offer for your products.",href:"/flash-sales",icon:Percent,colors:"from-pink-400 to-rose-600",border:"border-pink-300",label:"Create deal"},
  {id:"classified",title:"List a Classified",desc:"Post a local listing, service or wanted ad.",href:"/classifieds/post",icon:Newspaper,colors:"from-emerald-400 to-green-600",border:"border-emerald-300",label:"Post ad"},
- {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/live",icon:Video,colors:"from-indigo-400 to-blue-700",border:"border-indigo-300",label:"Start live"}
+ {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/live",icon:Video,colors:"from-cyan-400 to-blue-600",border:"border-cyan-300",label:"Start live"}
 ] as const;
 function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number];onClose:()=>void}) {
  useEffect(()=>{const previous=document.body.style.overflow;document.body.style.overflow="hidden";const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose()};window.addEventListener("keydown",onKey);return ()=>{document.body.style.overflow=previous;window.removeEventListener("keydown",onKey)}},[onClose]);
  return <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/75 p-0 sm:p-4" role="presentation">
-  <section role="dialog" aria-modal="true" aria-label={option.title} className="flex h-[100dvh] w-full max-w-6xl flex-col overflow-hidden bg-[#eff8ff] shadow-2xl sm:h-[min(94dvh,1000px)] sm:rounded-3xl sm:border-2 sm:border-orange-300">
-   <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 bg-gradient-to-r from-[#0878f0] to-[#f07826] px-4 py-3 text-white sm:px-6">
-    <div className="flex min-w-0 items-center gap-3"><option.icon className="h-7 w-7 shrink-0"/><div className="min-w-0"><h2 className="truncate text-lg font-black sm:text-2xl">{option.title}</h2><p className="hidden text-sm text-white sm:block">Complete your listing using Bazunk Seller Studio</p></div></div>
-    <div className="flex shrink-0 gap-2"><a href={option.href} target="_blank" rel="noopener noreferrer" aria-label="Open editor in a new tab" className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 text-white hover:bg-white/30"><Maximize2 className="h-5 w-5"/></a><button type="button" onClick={onClose} aria-label="Close listing window" className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-[#123c66] hover:bg-orange-50"><X className="h-6 w-6"/></button></div>
+  <section role="dialog" aria-modal="true" aria-label={option.title} className="flex h-[100dvh] w-full max-w-6xl flex-col overflow-hidden bg-white shadow-2xl sm:h-[min(94dvh,1000px)] sm:rounded-[28px] sm:border-2 sm:border-blue-200">
+   <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-blue-100 bg-white px-4 py-3 text-[#082b69] sm:px-6">
+    <div className="flex min-w-0 items-center gap-3"><span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${option.colors} text-white`}><option.icon className="h-6 w-6"/></span><div className="min-w-0"><h2 className="truncate text-lg font-black sm:text-2xl">{option.title}</h2><p className="hidden text-sm text-slate-600 sm:block">Complete your listing using Bazunk Seller Studio</p></div></div>
+    <div className="flex shrink-0 gap-2"><a href={option.href} target="_blank" rel="noopener noreferrer" aria-label="Open editor in a new tab" className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-800 hover:bg-blue-100"><Maximize2 className="h-5 w-5"/></a><button type="button" onClick={onClose} aria-label="Close listing window" className="flex h-11 w-11 items-center justify-center rounded-xl border border-blue-200 bg-white text-[#123c66] hover:bg-orange-50"><X className="h-6 w-6"/></button></div>
    </header>
    <iframe title={`${option.title} editor`} src={option.href} className="min-h-0 w-full flex-1 border-0 bg-white" loading="eager"/>
   </section>
@@ -250,7 +250,7 @@ export function SellPage() {
   const FEE_ROWS = buildFeeRows(mktRatePct);
 
   return (
-    <div className="sell-page min-h-screen bg-[#f2f5fb] text-[#10213e] flex flex-col">
+    <div className="sell-page min-h-screen bg-[linear-gradient(135deg,#e5f4ff_0%,#fff6ed_45%,#e8f5ff_100%)] font-sans text-[#10213e] flex flex-col">
       <Navbar />
       <main className="flex-1">
         <CompactPageHero kind="sell" eyebrow="Selling" title="Start Selling Today!" description="Turn your items into cash. It's free, simple and takes just minutes." art="📦">
@@ -260,17 +260,35 @@ export function SellPage() {
         </CompactPageHero>
 
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-5">
-          <section aria-label="Choose how to sell" className="rounded-3xl border border-blue-200 bg-white/85 p-4 shadow-lg sm:p-7">
-            <h2 className="text-center text-3xl font-black text-[#123c66] md:text-4xl">Sell on <span className="text-orange-600">Bazunk</span></h2>
-            <p className="mx-auto mb-7 mt-2 max-w-xl text-center text-slate-700">Choose how you'd like to sell. Simple, fast and flexible.</p>
-            <div className="grid grid-cols-1 gap-4 min-[400px]:grid-cols-2 lg:grid-cols-3">
-              {SELL_HUB_OPTIONS.filter(option => !featureForHref(option.href) || isFeatureEnabled(rawSettings,featureForHref(option.href)!)).map(option => {const Icon=option.icon;return <button type="button" key={option.id} onClick={()=>setSelectedSellOption(option)} data-testid={`sell-hub-${option.id}`} className={`group flex min-w-0 flex-col items-center rounded-2xl border-2 ${option.border} bg-white p-5 text-center shadow-md transition hover:-translate-y-1 hover:shadow-xl focus-visible:outline focus-visible:outline-4 focus-visible:outline-orange-400`}>
-                <span className={`mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br ${option.colors} text-white shadow-lg transition-transform group-hover:scale-105`}><Icon className="h-11 w-11" strokeWidth={2.3}/></span>
-                <h3 className="text-xl font-black text-[#123c66]">{option.title}</h3><p className="mt-2 min-h-14 text-sm text-slate-700">{option.desc}</p>
-                <span className={`mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-gradient-to-r ${option.colors} px-5 py-2 text-sm font-black text-white`}>{option.label}<ArrowRight className="h-4 w-4"/></span>
+          <section aria-label="Choose how to sell" className="relative isolate overflow-hidden rounded-[28px] border border-sky-200 bg-[radial-gradient(circle_at_2%_5%,#c8eaff_0%,transparent_30%),radial-gradient(circle_at_96%_10%,#ffe2bd_0%,transparent_33%),linear-gradient(145deg,#fff_0%,#f1f8ff_100%)] p-4 shadow-[0_18px_55px_rgba(24,78,142,.12)] sm:p-8">
+            <div aria-hidden="true" className="pointer-events-none absolute -left-14 top-24 h-52 w-52 rounded-full border-[24px] border-sky-100/70"/>
+            <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full border-[32px] border-orange-100/70"/>
+            <div className="relative mb-7 flex flex-col items-center gap-5 text-center lg:flex-row lg:justify-between lg:text-left">
+              <div className="max-w-2xl">
+                <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-extrabold uppercase tracking-wide text-orange-700"><Package className="h-4 w-4"/> Your selling starts here</span>
+                <h2 className="text-4xl font-black tracking-tight text-[#082b69] sm:text-5xl lg:text-6xl">Sell on <span className="text-[#f97316]">Bazunk</span></h2>
+                <p className="mt-3 text-base font-medium text-[#28496d] sm:text-lg">Choose how you'd like to sell. Simple, fast and secure.</p>
+              </div>
+              <div className="hidden shrink-0 items-center gap-3 rounded-3xl border border-white/90 bg-white/75 px-5 py-4 shadow-lg md:flex">
+                <span className="text-5xl" aria-hidden="true">🛒</span><span className="text-4xl" aria-hidden="true">📦</span><span className="text-4xl" aria-hidden="true">✨</span>
+              </div>
+            </div>
+            <div className="relative grid grid-cols-1 gap-4 min-[400px]:grid-cols-2 lg:grid-cols-3 lg:gap-5">
+              {SELL_HUB_OPTIONS.filter(option => !featureForHref(option.href) || isFeatureEnabled(rawSettings,featureForHref(option.href)!)).map(option => {const Icon=option.icon;return <button type="button" key={option.id} onClick={()=>setSelectedSellOption(option)} data-testid={`sell-hub-${option.id}`} className={`group relative flex min-w-0 flex-col items-center overflow-hidden rounded-[22px] border-2 ${option.border} bg-white/95 p-5 text-center shadow-[0_7px_18px_rgba(12,58,116,.12)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_14px_26px_rgba(12,58,116,.2)] focus-visible:outline focus-visible:outline-4 focus-visible:outline-orange-500 sm:p-6`}>
+                <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-32 bg-gradient-to-b ${option.colors} opacity-[.10]`}/>
+                <span aria-hidden="true" className="pointer-events-none absolute left-5 top-6 h-2 w-2 rounded-full bg-orange-300 opacity-80"/><span aria-hidden="true" className="pointer-events-none absolute right-7 top-12 h-2 w-2 rounded-full bg-sky-300 opacity-80"/>
+                <span className={`relative mb-5 flex h-24 w-24 items-center justify-center rounded-[28px] bg-gradient-to-br ${option.colors} text-white shadow-[0_9px_18px_rgba(12,58,116,.2)] ring-4 ring-white transition-transform group-hover:rotate-[-5deg] group-hover:scale-105`}><Icon className="h-14 w-14 drop-shadow-md" strokeWidth={2.1}/></span>
+                <h3 className="relative text-xl font-black tracking-tight text-[#092b68] sm:text-2xl">{option.title}</h3>
+                <p className="relative mt-2 min-h-14 max-w-[240px] text-sm leading-relaxed text-[#28496d]">{option.desc}</p>
+                <span className={`relative mt-auto inline-flex min-h-11 w-full max-w-[240px] items-center justify-center gap-2 rounded-full bg-gradient-to-r ${option.colors} px-4 py-2 text-sm font-black text-white shadow-sm`}>{option.label}<ArrowRight className="h-4 w-4"/></span>
               </button>})}
             </div>
-            <div className="mt-6 flex flex-wrap justify-center gap-4 rounded-2xl bg-blue-50 px-4 py-3 text-xs font-bold text-[#123c66] sm:text-sm"><span>✓ Free listing options</span><span>⚡ Flexible selling</span><span>🛡 Secure marketplace</span></div>
+            <div className="relative mt-7 grid grid-cols-2 gap-3 rounded-2xl border border-blue-100 bg-white/90 p-4 shadow-sm md:grid-cols-4">
+              <div className="flex items-center gap-2 text-xs font-bold text-[#123c66] sm:text-sm"><ShieldCheck className="h-6 w-6 shrink-0 text-blue-600"/> Secure payments</div>
+              <div className="flex items-center gap-2 text-xs font-bold text-[#123c66] sm:text-sm"><Truck className="h-6 w-6 shrink-0 text-blue-600"/> Flexible selling</div>
+              <div className="flex items-center gap-2 text-xs font-bold text-[#123c66] sm:text-sm"><Users className="h-6 w-6 shrink-0 text-blue-600"/> Reach more buyers</div>
+              <div className="flex items-center gap-2 text-xs font-bold text-[#123c66] sm:text-sm"><Star className="h-6 w-6 shrink-0 text-orange-500"/> Free listing options</div>
+            </div>
           </section>
 
           <section className="grid lg:grid-cols-2 gap-3" aria-label="Seller fees and calculator">
