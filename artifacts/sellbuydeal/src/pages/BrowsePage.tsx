@@ -127,7 +127,7 @@ function PromoBadge({ promotions }: { promotions: string[] }) {
   const key = ["spotlight", "featured", "flash"].find((k) => promotions.includes(k));
   if (!key) return null;
   const { label, cls } = PROMO_BADGE[key];
-  return <span className={`text-xs font-black px-2 py-0.5 rounded-full ${cls}`}>{label}</span>;
+  return <span className={`max-w-full truncate text-[10px] leading-4 sm:text-xs font-extrabold px-1.5 sm:px-2 py-0.5 rounded-md sm:rounded-full ${cls}`}>{label}</span>;
 }
 
 function ProductCard({ product, view, promotions = [] }: { product: typeof ALL_PRODUCTS[0] & { seller?: { name?: string } }; view: "grid" | "list"; promotions?: string[] }) {
@@ -165,12 +165,12 @@ function ProductCard({ product, view, promotions = [] }: { product: typeof ALL_P
             <h3 className="font-semibold text-slate-900 dark:text-white line-clamp-2 text-base transition-colors">{product.title}</h3>
             <p className="mt-1 truncate text-xs font-semibold text-slate-700 dark:text-slate-200">Sold by {product.seller?.name || "Marketplace seller"}</p>
             <div className="flex items-center gap-2 mt-1.5">
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full capitalize ${CONDITION_COLORS[product.condition]}`}>{product.condition}</span>
+              <span className={`inline-block max-w-full truncate align-middle text-[10px] leading-4 sm:text-xs font-bold px-1.5 sm:px-2 py-0.5 rounded-md sm:rounded-full capitalize ${CONDITION_COLORS[product.condition]}`}>{product.condition}</span>
               <span className="flex items-center gap-0.5 text-sm text-slate-700 dark:text-slate-200"><MapPin className="w-3.5 h-3.5" />{product.location}</span>
             </div>
           </div>
           <div className="flex items-center justify-between mt-2">
-            <span className="bz-browse-price text-xl font-extrabold tracking-tight text-orange-600">{formatPrice(product.price)}</span>
+            <span className="bz-browse-price min-w-0 text-base sm:text-xl font-extrabold tracking-tight text-orange-600 break-words">{formatPrice(product.price)}</span>
             <div className="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-200">
               <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" />{product.views}</span>
               <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{product.watchers}</span>
@@ -193,32 +193,32 @@ function ProductCard({ product, view, promotions = [] }: { product: typeof ALL_P
           : <div className="w-full h-full flex items-center justify-center"><ImageOff className="w-12 h-12 text-gray-300" /></div>
         }
         {hasPromo && (
-          <div className="absolute top-2.5 left-2.5">
+          <div className="absolute top-1.5 left-1.5 right-11 sm:top-2.5 sm:left-2.5 sm:right-14">
             <PromoBadge promotions={promotions} />
           </div>
         )}
         <button
           onClick={(event) => { event.preventDefault(); event.stopPropagation(); setWishlisted(!wishlisted); }}
-          aria-label={wishlisted ? "Remove from favourites" : "Add to favourites"} title={wishlisted ? "Remove from favourites" : "Add to favourites"} aria-pressed={wishlisted} className="absolute z-20 top-2.5 right-2.5 w-10 h-10 rounded-full border-2 border-white bg-orange-600 text-white flex items-center justify-center shadow-lg hover:bg-orange-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 transition-colors"
+          aria-label={wishlisted ? "Remove from favourites" : "Add to favourites"} title={wishlisted ? "Remove from favourites" : "Add to favourites"} aria-pressed={wishlisted} className="absolute z-20 top-1.5 right-1.5 w-8 h-8 sm:top-2.5 sm:right-2.5 sm:w-10 sm:h-10 rounded-full border-2 border-white bg-orange-600 text-white flex items-center justify-center shadow-lg hover:bg-orange-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 transition-colors"
           data-testid={`button-wishlist-${product.id}`}
         >
           <Heart className={`w-4 h-4 ${wishlisted ? "fill-white text-white" : "fill-none text-white"}`} />
         </button>
-        <div className="absolute bottom-2.5 left-2.5">
+        <div className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] sm:bottom-2.5 sm:left-2.5">
           <span className={`text-xs font-bold px-2 py-0.5 rounded-full capitalize ${CONDITION_COLORS[product.condition]}`}>{product.condition}</span>
         </div>
       </div>
       <div className="bz-browse-product-details p-2.5 sm:p-3 flex flex-col flex-1">
-        <h3 className="bz-browse-product-title text-sm font-bold text-slate-900 line-clamp-2 min-h-[2.5rem] transition-colors mb-auto">{product.title}</h3>
+        <h3 className="bz-browse-product-title text-[13px] leading-[1.35rem] sm:text-sm font-bold text-slate-900 dark:text-white line-clamp-2 min-h-[2.7rem] transition-colors mb-auto break-words">{product.title}</h3>
         <div className="mt-3">
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="flex min-w-0 items-center justify-between gap-1 mb-1.5">
             <span className="bz-browse-price text-xl font-extrabold tracking-tight text-orange-600">{formatPrice(product.price)}</span>
             <span className="flex items-center gap-1 text-sm text-slate-700 dark:text-slate-200"><Eye className="w-3.5 h-3.5" />{product.views}</span>
           </div>
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1 text-sm text-slate-700 dark:text-slate-200"><MapPin className="w-3.5 h-3.5" />{product.location}</span>
+          <div className="flex min-w-0 items-center justify-between gap-1">
+            <span className="flex min-w-0 items-center gap-1 truncate text-xs sm:text-sm text-slate-700 dark:text-slate-200"><MapPin className="w-3.5 h-3.5" />{product.location}</span>
             {product.verified && (
-              <span className="flex items-center gap-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="w-3.5 h-3.5" />Verified</span>
+              <span className="hidden sm:flex items-center gap-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300"><CheckCircle2 className="w-3.5 h-3.5" />Verified</span>
             )}
           </div>
         </div>
