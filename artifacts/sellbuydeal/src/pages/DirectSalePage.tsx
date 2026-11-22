@@ -1,3 +1,4 @@
+import "./sell-embedded.css";
 import "./seller-credits.css";
 import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudioGuidance";
 import { SellerStudioNav } from "@/components/SellerStudioNav";
@@ -133,6 +134,7 @@ function extractCurrencyCode(display: string): string {
 }
 
 export function DirectSalePage() {
+  const sellEmbedded = new URLSearchParams(window.location.search).get("sellEmbed") === "1";
   const [marketplaceRegion] = useMarketplaceRegion();
   const [, refreshThirdLevels] = useState(0);
   useEffect(() => { let active = true; loadThirdLevelTaxonomy().then(() => { if (active) refreshThirdLevels(n => n + 1); }); return () => { active = false; }; }, []);
@@ -437,11 +439,11 @@ export function DirectSalePage() {
   }
 
   return (
-    <div className="bz-seller-credits min-h-screen bg-[#eff8ff] flex flex-col font-sans">
-      <Navbar />
+    <div className={`bz-seller-credits min-h-screen bg-[#eff8ff] flex flex-col font-sans ${sellEmbedded ? "bz-sell-embedded" : ""}`}>
+      {!sellEmbedded && <Navbar />}
 
       <div className="container mx-auto px-4 py-7 max-w-7xl">
-        <SellerStudioNav active={quickMode ? "quick" : "direct"} />
+        {!sellEmbedded && <SellerStudioNav active={quickMode ? "quick" : "direct"} />}
         <div className="mb-4 grid min-w-0 gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"><SellerStudioProgress completed={quickMode ? [Boolean(title.trim()),Boolean(category),photos.length>0,Number(price)>0].filter(Boolean).length : step} total={quickMode ? 4 : 6} label={quickMode ? "Listing essentials" : "Direct Sell progress"}/><SellerStudioTips items={["Use a clear title and well-lit photos","Describe the condition accurately","Check your price and delivery details"]}/></div>
         <style>{`
           .direct-sale-form > section h2, .direct-sale-form > aside h2 { color: #fff; }\n          .direct-sale-form > aside > section p, .direct-sale-form > aside > section li { color: #f0f5ff !important; opacity: 1 !important; }\n          .direct-sale-form > aside > section svg { color: #e2d5ff; opacity: 1; }\n          .direct-sale-form > aside > section a { color: #fff; }
@@ -1502,7 +1504,7 @@ export function DirectSalePage() {
         </form>
       </div>
 
-      <Footer />
+      {!sellEmbedded && <Footer />}
     </div>
   );
 }
