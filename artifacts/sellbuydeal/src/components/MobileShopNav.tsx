@@ -8,7 +8,7 @@ import { useCart } from "@/context/CartContext";
 export function MobileShopNav() {
  const [location] = useLocation();
  const { isSignedIn, getToken } = useClerkAuth();
- const { itemCount, openCart } = useCart();
+ const { itemCount, openCart, isOpen: cartOpen } = useCart();
  const [unread,setUnread]=useState(0);
  const visible=location==="/" || location.startsWith("/browse") ||
   location.startsWith("/search") || location.startsWith("/categories") ||
@@ -35,7 +35,7 @@ export function MobileShopNav() {
   window.addEventListener("focus",onFocus);
   return()=>{active=false;controller.abort();window.clearInterval(timer);window.removeEventListener("focus",onFocus);};
  },[visible,isSignedIn,getToken]);
- if(!visible)return null;
+ if(!visible || cartOpen)return null;
  const links=[
   {href:"/",label:"Home",icon:Home},
   {href:"/browse",label:"Browse",icon:Search},
