@@ -643,7 +643,7 @@ export function Navbar() {
           <input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder={t("search")} aria-label="Search listings" className="min-w-0 flex-1 rounded-xl bg-gray-100 px-3 py-2 text-base text-gray-800" />
           <button type="submit" aria-label="Search" className="w-11 shrink-0 rounded-xl bg-[#4A5CE8] text-white flex items-center justify-center"><Search className="w-5 h-5" /></button>
         </form>
-        <div className="bz-mockup-benefits" aria-label="Marketplace benefits">
+        <div className="bz-mockup-benefits" role="region" aria-label="Marketplace benefits, swipe horizontally for more" tabIndex={0}>
           <span><Truck className="text-blue-600"/> <strong>Free delivery</strong><small>On selected items</small></span>
           <span><ShieldCheck className="text-cyan-600"/> <strong>Buyer protection</strong><small>Shop with confidence</small></span>
           <span><CheckCircle2 className="text-orange-500"/> <strong>Verified sellers</strong><small>Look for verification</small></span>
