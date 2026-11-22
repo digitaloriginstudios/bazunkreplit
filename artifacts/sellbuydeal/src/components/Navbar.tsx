@@ -682,19 +682,21 @@ export function Navbar() {
               className="fixed top-0 right-0 bottom-0 w-[min(22rem,100vw)] bg-white flex flex-col xl:hidden shadow-2xl text-slate-900" style={{ zIndex: 2147483001, position: "fixed", top: 0, right: 0, bottom: 0, width: "min(22rem, 100vw)", height: "100dvh", backgroundColor: "#ffffff", color: "#0f172a", overflow: "hidden" }}
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex shrink-0 items-center justify-between px-5 py-3 border-b border-gray-100">
                 <Link href="/" onClick={() => setMobileOpen(false)} className="flex items-center">
                    {useDefaultDarkLogo ? <span className="relative block h-7 aspect-[1142/289] max-w-[200px] shrink-0 overflow-hidden"><img src={defaultLogo} alt={featureSettings.site_name||"Bazunk"} className="absolute left-0 top-0 h-[230%] w-[113%] max-w-none" /></span> : <img src={featureSettings.site_logo_url?.startsWith("/api/site-media/") ? API_BASE + featureSettings.site_logo_url : defaultLogo} alt={featureSettings.site_name||"Bazunk"} className="h-7 w-auto max-w-[200px] object-contain" />}
                 </Link>
                 <button
                   onClick={() => setMobileOpen(false)}
-                  className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors"
+                  className="w-11 h-11 shrink-0 rounded-full bg-gray-100 flex items-center justify-center text-slate-700 hover:bg-gray-200 transition-colors"
                   aria-label="Close menu"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
+              {/* Only the brand header and account actions stay fixed; all discovery controls scroll together. */}
+              <nav aria-label="Mobile marketplace links" className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-2" style={{WebkitOverflowScrolling:"touch"}}>
               <button type="button" onClick={()=>{setMobileOpen(false);setCategoryDrawerOpen(true);}} className="mx-5 my-3 flex min-h-12 items-center justify-between rounded-xl bg-orange-50 px-4 font-bold text-slate-900 border border-orange-200" aria-haspopup="dialog"><span className="flex items-center gap-2"><Grid3X3 className="h-5 w-5 text-orange-600"/> Shop by category</span><ChevronRight className="h-5 w-5"/></button>
 
               {/* User info (logged in) */}
@@ -728,8 +730,6 @@ export function Navbar() {
                 </div>
               )}
 
-              {/* Nav links */}
-              <nav className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-2">
                 {/* Rewards link (logged in) */}
                 {user && (
                   <button
@@ -760,14 +760,14 @@ export function Navbar() {
                     <ChevronRight className="w-4 h-4 text-slate-500 ml-auto" />
                   </button>
                 ))}
-              </nav>
-
               <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between gap-3 shrink-0">
                 <div className="flex flex-col gap-1 text-xs text-gray-600"><label>{t("country")}<select value={country.code} onChange={e => changeCountry(e.target.value)} className="ml-2 bg-gray-100 rounded-lg p-2 text-base">{MARKET_COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.flag} {c.name}</option>)}</select></label><label>{t("currency")}<select value={currency.code} onChange={e => setCurrency(e.target.value as CurrencyCode)} className="ml-2 bg-gray-100 rounded-lg p-2 text-base">{Object.values(CURRENCIES).map(c => <option key={c.code} value={c.code}>{c.code} {c.symbol}</option>)}</select></label></div>
               </div>
+              </nav>
+
               {/* Bottom auth actions */}
               {!user && (
-                <div className="px-5 py-4 border-t border-gray-100 flex flex-col gap-2">
+                <div className="shrink-0 bg-white px-5 py-3 border-t border-gray-200 flex flex-col gap-2">
                   <Link
                     href="/sign-up"
                     onClick={() => setMobileOpen(false)}
@@ -787,7 +787,7 @@ export function Navbar() {
                 </div>
               )}
               {user && (
-                <div className="px-5 py-4 border-t border-gray-100">
+                <div className="shrink-0 bg-white px-5 py-3 border-t border-gray-200">
                   <button
                     onClick={handleLogout}
                     className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-red-100 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors"
