@@ -23,7 +23,7 @@ import {
   Banknote,
   Percent,
   Info,
-  Zap, Percent as PercentIcon, Video, X, Maximize2,
+  Zap, Video, X, Maximize2,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { CompactPageHero } from "@/components/CompactPageHero";
@@ -224,9 +224,9 @@ const SELL_HUB_OPTIONS = [
  {id:"direct",title:"Direct Sale",desc:"Create a detailed listing with pricing, shipping and offers.",href:"/sell/direct",icon:ShoppingCart,colors:"from-orange-400 to-orange-600",border:"border-orange-300",label:"List item"},
  {id:"quick",title:"Quick Sale",desc:"Get your item listed quickly with the essentials.",href:"/sell/quick",icon:Zap,colors:"from-sky-400 to-blue-600",border:"border-sky-300",label:"List now"},
  {id:"auction",title:"List an Auction",desc:"Set a starting bid and let buyers compete.",href:"/auctions/create",icon:Gavel,colors:"from-violet-400 to-purple-600",border:"border-violet-300",label:"Create auction"},
- {id:"flash",title:"Run a Flash Sale",desc:"Create a limited-time offer for your products.",href:"/flash-sales",icon:PercentIcon,colors:"from-pink-400 to-rose-600",border:"border-pink-300",label:"Create deal"},
+ {id:"flash",title:"Run a Flash Sale",desc:"Create a limited-time offer for your products.",href:"/flash-sales",icon:Percent,colors:"from-pink-400 to-rose-600",border:"border-pink-300",label:"Create deal"},
  {id:"classified",title:"List a Classified",desc:"Post a local listing, service or wanted ad.",href:"/classifieds/post",icon:Newspaper,colors:"from-emerald-400 to-green-600",border:"border-emerald-300",label:"Post ad"},
- {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/go-live",icon:Video,colors:"from-indigo-400 to-blue-700",border:"border-indigo-300",label:"Start live"}
+ {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/live",icon:Video,colors:"from-indigo-400 to-blue-700",border:"border-indigo-300",label:"Start live"}
 ] as const;
 function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number];onClose:()=>void}) {
  useEffect(()=>{const previous=document.body.style.overflow;document.body.style.overflow="hidden";const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose()};window.addEventListener("keydown",onKey);return ()=>{document.body.style.overflow=previous;window.removeEventListener("keydown",onKey)}},[onClose]);
