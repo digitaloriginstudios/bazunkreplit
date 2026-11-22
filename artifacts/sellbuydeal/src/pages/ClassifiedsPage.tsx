@@ -1,3 +1,4 @@
+import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudioGuidance";
 import { SellerStudioNav } from "@/components/SellerStudioNav";
 import { createPortal } from "react-dom";
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -600,6 +601,8 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
           </div>
 
           <div className="px-6 py-5 space-y-5">
+            <SellerStudioProgress completed={[Boolean(title.trim()),Boolean(description.trim())].filter(Boolean).length} total={2} label="Classified listing essentials"/>
+            <SellerStudioTips items={["Describe what you are offering or looking for","Include useful photos and a clear location","Review your contact preferences before posting"]}/>
 
             {/* Validation errors */}
             <AnimatePresence>
