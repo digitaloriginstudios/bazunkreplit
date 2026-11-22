@@ -1,3 +1,4 @@
+import "./seller-credits.css";
 import { SellerStudioSections } from "@/components/SellerStudioSections";
 import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudioGuidance";
 import { SellerStudioNav } from "@/components/SellerStudioNav";
