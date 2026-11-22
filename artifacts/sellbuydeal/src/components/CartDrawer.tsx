@@ -146,8 +146,10 @@ export function CartDrawer() {
               </div>
             )}
 
+            {/* Cart contents and order summary share one scroll area on short mobile screens. */}
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain" style={{WebkitOverflowScrolling:"touch"}}>
             {/* Items */}
-            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain py-3 px-4 space-y-3">
+            <div className="shrink-0 py-3 px-4 space-y-3">
               {items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center py-16">
                   <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mb-4">
@@ -302,6 +304,7 @@ export function CartDrawer() {
                 </button>
               </div>
             )}
+            </div>
           </motion.div>
         </>
       )}
