@@ -1,3 +1,4 @@
+import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudioGuidance";
 import { SellerStudioNav } from "@/components/SellerStudioNav";
 import { AdSlot } from "@/components/AdSlot";
 import { useAuth as useClerkAuth } from "@clerk/react";
@@ -263,6 +264,7 @@ export function CreateAuctionPage() {
         </Link>
 
         <SellerStudioNav active="auction" />
+        <div className="mb-4 grid gap-3 lg:grid-cols-[2fr_1fr]"><SellerStudioProgress completed={[Boolean(title.trim()),Boolean(description.trim()),photos.length>0].filter(Boolean).length} total={3} label="Auction listing essentials"/><SellerStudioTips items={["Add a descriptive title and clear photos","Explain the item condition","Review starting bid, duration and delivery before publishing"]}/></div>
         <form onSubmit={submit} noValidate className="auction-create-form auction-create-shell">
 
           <div className="auction-create-layout min-w-0">
