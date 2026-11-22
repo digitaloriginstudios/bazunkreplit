@@ -26,7 +26,6 @@ import {
   Zap, Video, X, Maximize2, Package, Users, Truck, Star, Sparkles, Timer, BadgePercent, ClipboardList, Play, Gift, ShoppingBag,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
-import { CompactPageHero } from "@/components/CompactPageHero";
 import { Footer } from "@/components/Footer";
 import { useCurrency } from "@/context/CurrencyContext";
 
@@ -221,16 +220,16 @@ function FeeCalculator() {
 }
 
 const SELL_HUB_OPTIONS = [
- {id:"direct",title:"Direct Sale",desc:"Create a detailed listing with pricing, shipping and offers.",href:"/sell/direct",icon:ShoppingCart,colors:"from-orange-400 to-orange-600",border:"border-orange-300",label:"List item"},
- {id:"quick",title:"Quick Sale",desc:"Get your item listed quickly with the essentials.",href:"/sell/quick",icon:Zap,colors:"from-sky-400 to-blue-600",border:"border-sky-300",label:"List now"},
- {id:"auction",title:"List an Auction",desc:"Set a starting bid and let buyers compete.",href:"/auctions/create",icon:Gavel,colors:"from-violet-500 to-purple-600",border:"border-violet-300",label:"Create auction"},
- {id:"flash",title:"Run a Flash Sale",desc:"Create a limited-time offer for your products.",href:"/flash-sales",icon:Percent,colors:"from-pink-400 to-rose-600",border:"border-pink-300",label:"Create deal"},
- {id:"classified",title:"List a Classified",desc:"Post a local listing, service or wanted ad.",href:"/classifieds/post",icon:Newspaper,colors:"from-emerald-400 to-green-600",border:"border-emerald-300",label:"Post ad"},
- {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/live",icon:Video,colors:"from-cyan-400 to-blue-600",border:"border-cyan-300",label:"Start live"}
+ {id:"direct",title:"Direct Sale",desc:"Create a detailed listing with pricing, shipping and offers.",href:"/sell/direct",icon:ShoppingCart,colors:"from-[#ffad12] to-[#ff7900]",border:"border-[#ff9500]",label:"List item"},
+ {id:"quick",title:"Quick Sale",desc:"Get your item listed quickly with the essentials.",href:"/sell/quick",icon:Zap,colors:"from-[#20b4ff] to-[#0067ff]",border:"border-[#087cff]",label:"List now"},
+ {id:"auction",title:"List an Auction",desc:"Set a starting bid and let buyers compete.",href:"/auctions/create",icon:Gavel,colors:"from-[#b54bff] to-[#7921f1]",border:"border-[#9235ff]",label:"Create auction"},
+ {id:"flash",title:"Run a Flash Sale",desc:"Create a limited-time offer for your products.",href:"/flash-sales",icon:Percent,colors:"from-[#ff3da1] to-[#ee0066]",border:"border-[#ff238c]",label:"Create deal"},
+ {id:"classified",title:"List a Classified",desc:"Post a local listing, service or wanted ad.",href:"/classifieds/post",icon:Newspaper,colors:"from-[#19d978] to-[#00a957]",border:"border-[#00bf69]",label:"Post ad"},
+ {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/live",icon:Video,colors:"from-[#14c7f4] to-[#006dce]",border:"border-[#04aeed]",label:"Start live"}
 ] as const;
 function SellHubArtwork({kind}:{kind:string}) {
  const common="absolute drop-shadow-[0_12px_10px_rgba(15,46,96,.18)]";
- return <div aria-hidden="true" className="relative mb-3 flex h-36 w-full items-center justify-center overflow-hidden rounded-2xl">
+ return <div aria-hidden="true" className="relative mb-3 flex h-40 w-full items-center justify-center overflow-hidden rounded-2xl">
   <div className="absolute inset-0 bg-[repeating-conic-gradient(from_0deg_at_50%_78%,rgba(255,255,255,.8)_0deg,rgba(255,255,255,0)_13deg,rgba(255,255,255,0)_26deg)] opacity-65"/>
   <span className="absolute left-[18%] top-[26%] h-2 w-5 -rotate-12 rounded-full bg-current opacity-30"/><span className="absolute right-[17%] top-[37%] h-2 w-4 rotate-12 rounded-full bg-current opacity-30"/>
   {kind==="direct"&&<><div className="relative rotate-[-10deg] rounded-[24px] bg-gradient-to-br from-amber-300 to-orange-600 p-6 text-white shadow-[0_12px_22px_rgba(238,120,15,.35)] ring-4 ring-white"><ShoppingBag size={64} strokeWidth={2.5}/></div><Zap className={common+" right-[22%] top-[14%] rotate-12 text-amber-500"} size={43} fill="#fbbf24"/></>}
@@ -263,39 +262,35 @@ export function SellPage() {
   const FEE_ROWS = buildFeeRows(mktRatePct);
 
   return (
-    <div className="sell-page min-h-screen bg-[linear-gradient(135deg,#e5f4ff_0%,#fff6ed_45%,#e8f5ff_100%)] font-sans text-[#10213e] flex flex-col">
+    <div className="sell-page min-h-screen bg-[linear-gradient(130deg,#dceeff_0%,#fff5ed_45%,#e3f3ff_100%)] font-sans text-[#10213e] flex flex-col">
       <Navbar />
       <main className="flex-1">
-        <CompactPageHero kind="sell" eyebrow="Selling" title="Start Selling Today!" description="Turn your items into cash. It's free, simple and takes just minutes." art="📦">
-          <span className="bz-hero-chip">✓ No seller fees for private sellers</span>
-          <span className="bz-hero-chip">✓ Reach buyers worldwide</span>
-          <span className="bz-hero-chip">✓ Safe & secure marketplace</span>
-        </CompactPageHero>
 
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6 space-y-5">
-          <section aria-label="Choose how to sell" className="relative isolate overflow-hidden rounded-[28px] border border-sky-200 bg-[radial-gradient(circle_at_2%_5%,#c8eaff_0%,transparent_30%),radial-gradient(circle_at_96%_10%,#ffe2bd_0%,transparent_33%),linear-gradient(145deg,#fff_0%,#f1f8ff_100%)] p-4 shadow-[0_18px_55px_rgba(24,78,142,.12)] sm:p-8">
+
+        <div className="mx-auto max-w-[1440px] px-3 sm:px-6 py-6 space-y-5">
+          <section aria-label="Choose how to sell" className="relative isolate overflow-hidden rounded-[26px] border border-[#bddbff] bg-[radial-gradient(circle_at_0%_25%,#bde5ff_0%,transparent_32%),radial-gradient(circle_at_95%_0%,#ffdfbc_0%,transparent_32%),linear-gradient(145deg,#f3f9ff_0%,#fff7f3_55%,#e7f3ff_100%)] p-4 shadow-[0_18px_55px_rgba(24,78,142,.12)] sm:p-8">
             <div aria-hidden="true" className="pointer-events-none absolute -left-14 top-24 h-52 w-52 rounded-full border-[24px] border-sky-100/70"/>
             <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full border-[32px] border-orange-100/70"/>
             <div className="relative mb-7 flex flex-col items-center gap-5 text-center lg:flex-row lg:justify-between lg:text-left">
               <div className="max-w-2xl">
-                <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-orange-200 bg-orange-50 px-4 py-2 text-xs font-extrabold uppercase tracking-wide text-orange-700"><Package className="h-4 w-4"/> Your selling starts here</span>
-                <h2 className="text-4xl font-black tracking-tight text-[#082b69] sm:text-5xl lg:text-6xl">Sell on <span className="text-[#f97316]">Bazunk</span></h2>
+                <span className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#ffb65d] bg-[#fff0dc] px-4 py-2 text-xs font-extrabold uppercase tracking-wide text-[#a74300]"><Sparkles className="h-4 w-4"/> List it. Sell it. Get paid!</span>
+                <h1 className="text-4xl font-black tracking-tight text-[#082b69] sm:text-5xl lg:text-6xl">Sell on Bazunk</h1>
                 <p className="mt-3 text-base font-medium text-[#28496d] sm:text-lg">Choose how you'd like to sell. Simple, fast and secure.</p>
               </div>
-              <div className="hidden shrink-0 items-center gap-3 rounded-3xl border border-white/90 bg-white/75 px-5 py-4 shadow-lg md:flex">
+              <div className="hidden shrink-0 items-center gap-3 rounded-3xl border border-white/90 bg-white/75 px-5 py-4 shadow-lg lg:flex">
                 <ShoppingBag className="h-16 w-16 rotate-[-12deg] rounded-2xl bg-orange-500 p-3 text-white shadow-lg"/><Gift className="h-14 w-14 rotate-12 rounded-2xl bg-blue-500 p-3 text-white shadow-lg"/><Sparkles className="h-10 w-10 text-amber-500"/>
               </div>
             </div>
-            <div className="relative grid grid-cols-1 gap-4 min-[400px]:grid-cols-2 lg:grid-cols-3 lg:gap-5">
-              {SELL_HUB_OPTIONS.filter(option => !featureForHref(option.href) || isFeatureEnabled(rawSettings,featureForHref(option.href)!)).map(option => {const Icon=option.icon;return <button type="button" key={option.id} onClick={()=>setSelectedSellOption(option)} data-testid={`sell-hub-${option.id}`} className={`group relative flex min-w-0 flex-col items-center overflow-hidden rounded-[22px] border-2 ${option.border} bg-white/95 p-5 text-center shadow-[0_7px_18px_rgba(12,58,116,.12)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_14px_26px_rgba(12,58,116,.2)] focus-visible:outline focus-visible:outline-4 focus-visible:outline-orange-500 sm:p-6`}>
-                <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-44 bg-gradient-to-b ${option.colors} opacity-[.13]`}/>
+            <div className="relative grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-3 lg:gap-5">
+              {SELL_HUB_OPTIONS.filter(option => !featureForHref(option.href) || isFeatureEnabled(rawSettings,featureForHref(option.href)!)).map(option => {const Icon=option.icon;return <button type="button" key={option.id} onClick={()=>setSelectedSellOption(option)} data-testid={`sell-hub-${option.id}`} className={`group relative flex min-w-0 flex-col items-center overflow-hidden rounded-[22px] border-2 ${option.border} bg-white p-5 text-center shadow-[0_7px_18px_rgba(12,58,116,.14)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_14px_26px_rgba(12,58,116,.2)] focus-visible:outline focus-visible:outline-4 focus-visible:outline-orange-500 sm:p-6`}>
+                <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-48 bg-gradient-to-b ${option.colors} opacity-[.22]`}/>
                 <SellHubArtwork kind={option.id}/>
-                <h3 className="relative text-xl font-black tracking-tight text-[#092b68] sm:text-2xl">{option.title}</h3>
-                <p className="relative mt-2 min-h-14 max-w-[240px] text-sm leading-relaxed text-[#28496d]">{option.desc}</p>
+                <h3 className="relative text-xl font-black tracking-tight text-[#092b68] sm:text-[25px]">{option.title}</h3>
+                <p className="relative mt-2 min-h-14 max-w-[240px] text-sm font-medium leading-relaxed text-[#173c71]">{option.desc}</p>
                 <span className={`relative mt-auto inline-flex min-h-11 w-full max-w-[240px] items-center justify-center gap-2 rounded-full bg-gradient-to-r ${option.colors} px-4 py-2 text-sm font-black text-white shadow-sm`}>{option.label}<ArrowRight className="h-4 w-4"/></span>
               </button>})}
             </div>
-            <div className="relative mt-7 grid grid-cols-2 gap-3 rounded-2xl border border-blue-100 bg-white/90 p-4 shadow-sm md:grid-cols-4">
+            <div className="relative mt-7 grid grid-cols-2 gap-3 rounded-2xl border border-[#c3d8ff] bg-white p-4 shadow-[0_6px_18px_rgba(10,61,133,.12)] md:grid-cols-4">
               <div className="flex items-center gap-2 text-xs font-bold text-[#123c66] sm:text-sm"><ShieldCheck className="h-6 w-6 shrink-0 text-blue-600"/> Secure payments</div>
               <div className="flex items-center gap-2 text-xs font-bold text-[#123c66] sm:text-sm"><Truck className="h-6 w-6 shrink-0 text-blue-600"/> Flexible selling</div>
               <div className="flex items-center gap-2 text-xs font-bold text-[#123c66] sm:text-sm"><Users className="h-6 w-6 shrink-0 text-blue-600"/> Reach more buyers</div>
