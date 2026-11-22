@@ -327,7 +327,7 @@ function AdDetailModal({ ad, onClose }: { ad: ClassifiedAd; onClose: () => void 
             </div>
 
             {/* Meta */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid min-w-0 grid-cols-1 min-[390px]:grid-cols-2 gap-3">
               <div className="bg-gray-50 rounded-xl px-4 py-3">
                 <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1">Location</p>
                 <div className="flex items-center gap-1.5 text-sm text-gray-700 font-semibold">
@@ -584,7 +584,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
           initial={{ scale: 0.95, y: 20 }}
           animate={{ scale: 1, y: 0 }}
           exit={{ scale: 0.95, y: 20 }}
-          role="dialog" aria-modal="true" aria-label="Post a Classified Ad" className="classified-post-dialog bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90dvh] overflow-y-auto overscroll-contain text-slate-900"
+          role="dialog" aria-modal="true" aria-label="Post a Classified Ad" className="classified-post-dialog min-w-0 bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90dvh] overflow-y-auto overscroll-contain font-sans text-slate-900"
         >
           <div className="px-4 pt-4"><SellerStudioNav active="classifieds" /></div>
           {/* Gradient header */}
@@ -602,7 +602,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
             </button>
           </div>
 
-          <div className="px-6 py-5 space-y-5">
+          <div className="min-w-0 px-4 sm:px-6 py-5 space-y-5">
             <SellerStudioProgress completed={[Boolean(title.trim()),Boolean(description.trim())].filter(Boolean).length} total={2} label="Classified listing essentials"/>
             <SellerStudioTips items={["Describe what you are offering or looking for","Include useful photos and a clear location","Review your contact preferences before posting"]}/>
 
@@ -824,7 +824,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
             {/* Price + negotiable */}
             <div>
               <label className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1.5 block">Price</label>
-              <div className="flex gap-3 items-center">
+              <div className="flex min-w-0 flex-wrap gap-3 items-center">
                 <div className="relative flex-1">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-semibold">{currency.symbol}</span>
                   <input
