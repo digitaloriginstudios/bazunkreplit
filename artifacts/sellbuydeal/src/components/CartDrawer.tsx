@@ -247,45 +247,22 @@ export function CartDrawer() {
               )}
             </div>
 
-            {/* Footer: order summary + checkout */}
+            </div>
+            {/* Compact fixed footer beneath the independently scrolling product list. */}
             {items.length > 0 && (
-              <div className="border-t border-gray-100 px-5 pt-4 pb-6 space-y-3 bg-white">
-                {/* Trust row */}
-                <div className="flex items-center justify-center gap-4 text-[10px] text-gray-400 pb-1">
-                  <span className="flex items-center gap-1"><Shield className="w-3 h-3" /> Secure Checkout</span>
-                  <span className="flex items-center gap-1"><Truck className="w-3 h-3" /> Seller ships</span>
-                  <span className="flex items-center gap-1"><Tag className="w-3 h-3" /> Make an offer</span>
-                </div>
-
-                {/* Totals */}
-                <div className="space-y-1.5 text-sm">
-                  <div className="flex justify-between text-gray-600">
-                    <span>Subtotal ({itemCount} {itemCount === 1 ? "item" : "items"})</span>
-                    <span className="font-semibold text-gray-900">{formatPrice(subtotal)}</span>
+              <div className="shrink-0 border-t border-gray-200 px-4 py-3 space-y-2 bg-white shadow-[0_-6px_18px_rgba(15,23,42,.08)]">
+                <div className="flex items-center justify-between gap-3 text-sm font-bold text-gray-900"><span>Subtotal (${itemCount} ${itemCount === 1 ? "item" : "items"})</span><span>{formatPrice(subtotal)}</span></div>
+                <details className="group rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2 font-semibold text-[#123c66] [&::-webkit-details-marker]:hidden"><span>Delivery, protection & total</span><span className="text-xs text-blue-700 group-open:hidden">Show details ▾</span><span className="hidden text-xs text-blue-700 group-open:inline">Hide details ▴</span></summary>
+                  <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 text-slate-700">
+                    <div className="flex justify-between gap-2"><span>Delivery</span><span>{quoteLoading ? "Calculating…" : delivery == null ? "At checkout" : delivery === 0 ? "FREE" : formatPrice(delivery)}</span></div>
+                    <div className="flex justify-between gap-2"><span>Buyer Protection</span><span>{quoteLoading ? "Calculating…" : quote ? formatPrice(quote.buyerProtectionFee) : "At checkout"}</span></div>
+                    <div className="flex justify-between gap-2 border-t border-slate-200 pt-2 font-bold"><span>Estimated total</span><span>{quoteLoading ? "Calculating…" : total == null ? "At checkout" : formatPrice(total)}</span></div>
+                    {quoteError && <p role="status" className="text-xs text-amber-800">Live fees are temporarily unavailable. Final charges are calculated at checkout.</p>}
+                    <p className="text-xs">Buyer Protection applies to eligible purchases. Final charges are confirmed at checkout.</p>
+                    <button type="button" onClick={() => setProtectionOpen(true)} className="flex items-center gap-2 text-sm font-bold text-blue-800 underline" data-testid="button-cart-buyer-protection"><Shield className="h-4 w-4"/> Buyer Protection details <ArrowRight className="h-4 w-4"/></button>
                   </div>
-                  <div className="flex justify-between text-gray-600">
-                    <span>Delivery</span>
-                    <span className={`font-semibold ${delivery === 0 ? "text-emerald-600" : "text-gray-900"}`}>
-                      {quoteLoading ? "Calculating…" : delivery == null ? "At checkout" : delivery === 0 ? "FREE" : formatPrice(delivery)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between gap-3 text-gray-600">
-                    <span>Buyer Protection</span>
-                    <span className="text-right font-semibold text-gray-900">{quoteLoading ? "Calculating…" : quote ? formatPrice(quote.buyerProtectionFee) : "At checkout"}</span>
-                  </div>
-                  <div className="flex justify-between text-base font-bold text-gray-900 pt-2 border-t border-gray-100">
-                    <span>Estimated total</span>
-                    <span>{quoteLoading ? "Calculating…" : total == null ? "At checkout" : formatPrice(total)}</span>
-                  </div>
-                  {quoteError && <p role="status" className="text-xs text-amber-800">Live fees are temporarily unavailable. Your final charges will be calculated at checkout.</p>}
-                  <p className="rounded-xl bg-blue-50 p-3 text-xs leading-relaxed text-blue-900">
-                    Buyer Protection applies to eligible purchases from both personal and business sellers. The fee is shown above when available. The final amount is confirmed at checkout.
-                  </p>
-                  <button type="button" onClick={() => setProtectionOpen(true)} className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-bold text-blue-800 hover:bg-blue-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700" data-testid="button-cart-buyer-protection">
-                    <Shield className="h-4 w-4" /> Buyer Protection <ArrowRight className="h-4 w-4" />
-                  </button>
-                </div>
-
+                </details>
                 {/* Checkout button */}
                 <button
                   onClick={goToCheckout}
@@ -297,14 +274,13 @@ export function CartDrawer() {
 
                 <button
                   onClick={closeCart}
-                  className="w-full py-2.5 rounded-xl border border-gray-200 text-gray-600 font-semibold text-sm hover:border-[#4A5CE8] hover:text-[#4A5CE8] transition-colors"
+                  className="w-full py-1.5 text-sm font-semibold text-[#15588e] hover:underline"
                   data-testid="button-continue-shopping"
                 >
                   Continue Shopping
                 </button>
               </div>
             )}
-            </div>
           </motion.div>
         </>
       )}
