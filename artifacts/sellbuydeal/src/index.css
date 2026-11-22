@@ -783,7 +783,7 @@ img, video, canvas, svg { max-width: 100%; }
     -webkit-overflow-scrolling: touch;
   }
   /* Dialogs stay within the usable screen on small devices. */
-  [role="dialog"], dialog {
+  [role="dialog"]:not(#bazunk-mobile-menu), dialog {
     max-width: calc(100vw - 24px);
     max-height: calc(100dvh - 24px);
     overflow-y: auto;
@@ -4362,4 +4362,31 @@ html,body,#root{font-family:var(--app-font-sans)!important}
     white-space: nowrap !important;
   }
   .bz-mockup-header .bz-mockup-benefits small { display: none !important; }
+}
+
+/* The portaled mobile navigation drawer is a full-height panel, not a modal card. */
+@media (max-width: 1199px) {
+  #bazunk-mobile-menu[role="dialog"] {
+    position: fixed !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: auto !important;
+    width: min(22rem, 100vw) !important;
+    max-width: 100vw !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  #bazunk-mobile-menu > nav {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
 }
