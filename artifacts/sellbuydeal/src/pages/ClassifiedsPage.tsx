@@ -942,6 +942,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
               </div>
             </div>
 
+            <span id="classified-publish" className="block scroll-mt-8" />
             <button
               type="button"
               onClick={handleSubmit}
