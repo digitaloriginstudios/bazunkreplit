@@ -1,0 +1,16 @@
+/* Embedded seller forms: only used inside /sell modal iframe, not standalone selling pages. */
+html:has(body .bz-sell-embedded),body:has(.bz-sell-embedded){background:#fff!important;color-scheme:light!important;}
+.bz-sell-embedded{min-height:100%!important;background:#fff!important;color:#092b63!important;font-family:var(--app-font-sans),sans-serif!important;}
+.bz-sell-embedded .bz-sell-embedded-hide{display:none!important;}
+.bz-sell-embedded .bz-seller-credits{background:#fff!important;}
+.bz-sell-embedded :is(.auction-create-header,.direct-sale-header){display:none!important;}
+.bz-sell-embedded .bz-seller-form{padding-bottom:24px!important;min-width:0!important;}
+.bz-sell-embedded .bz-seller-form>section{border-radius:14px!important;box-shadow:none!important;}
+.bz-sell-embedded :is(.auction-create-layout,.auction-create-fields){min-width:0!important;max-width:100%!important;}
+.bz-sell-embedded .auction-create-layout{display:block!important;}
+.bz-sell-embedded .auction-create-fields{display:flex!important;flex-direction:column!important;gap:14px!important;}
+.bz-sell-embedded .direct-sale-form{display:block!important;}
+.bz-sell-embedded .direct-sale-form>aside{display:none!important;}
+.bz-sell-embedded .direct-sale-form>section{margin-bottom:14px!important;}
+.bz-sell-embedded :is(input,select,textarea){max-width:100%!important;}
+@media(max-width:720px){.bz-sell-embedded .bz-seller-form{padding:0 2px 24px!important;}.bz-sell-embedded .auction-create-header{display:none!important;}}
