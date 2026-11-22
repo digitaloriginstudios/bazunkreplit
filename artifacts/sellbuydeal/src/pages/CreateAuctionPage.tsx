@@ -1,3 +1,4 @@
+import { SellerStudioNav } from "@/components/SellerStudioNav";
 import { AdSlot } from "@/components/AdSlot";
 import { useAuth as useClerkAuth } from "@clerk/react";
 import { useState, useRef, useEffect } from "react";
@@ -261,14 +262,15 @@ export function CreateAuctionPage() {
           <ChevronLeft className="w-4 h-4" /> Back to Auctions
         </Link>
 
+        <SellerStudioNav active="auction" />
         <form onSubmit={submit} noValidate className="auction-create-form auction-create-shell">
 
           <div className="auction-create-layout min-w-0">
           {/* Colourful, accessible auction hero */}
-          <div className="auction-create-header rounded-2xl overflow-hidden border border-violet-200 bg-gradient-to-r from-[#eee9ff] via-[#f7f5ff] to-[#fff0df] px-5 sm:px-7 py-5 shadow-sm">
+          <div className="auction-create-header rounded-2xl overflow-hidden border border-blue-200 bg-gradient-to-r from-[#e8f3ff] via-[#f4f9ff] to-[#fff0df] px-5 sm:px-7 py-5 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-5">
               <div className="flex items-center gap-4">
-                <div className="auction-hero-gavel w-20 h-20 rounded-2xl bg-gradient-to-br from-violet-600 to-orange-500 flex items-center justify-center shadow-lg"><Gavel className="w-12 h-12 !text-white" /></div>
+                <div className="auction-hero-gavel w-20 h-20 rounded-2xl bg-gradient-to-br from-[#15588e] to-orange-500 flex items-center justify-center shadow-lg"><Gavel className="w-12 h-12 !text-white" /></div>
                 <div><h1 className="auction-create-header-title text-3xl sm:text-4xl font-black tracking-tight text-[#101c38]">List an Auction</h1><p className="auction-create-header-subtitle text-[#334155] text-sm mt-1">Create your auction in minutes and reach more buyers on Bazunk.</p></div>
               </div>
               <div className="flex flex-wrap gap-4 sm:gap-6 text-[#101c38] text-xs font-bold">
@@ -386,7 +388,7 @@ export function CreateAuctionPage() {
 
           {/* Photos */}
           <section className="bg-white rounded-xl px-4 sm:px-5 py-3 border border-slate-300 shadow-sm">
-            <h2 className="text-base font-black text-slate-950 mb-1 flex items-center gap-2"><Camera className="w-5 h-5 text-violet-600" /> Add Photos</h2>
+            <h2 className="text-base font-black text-slate-950 mb-1 flex items-center gap-2"><Camera className="w-5 h-5 text-blue-600" /> Add Photos</h2>
             <p className="text-xs text-slate-600 mb-4">Upload up to 10 photos. First photo is the cover.</p>
 
             <input
