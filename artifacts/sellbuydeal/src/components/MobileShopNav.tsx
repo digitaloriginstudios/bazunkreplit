@@ -47,16 +47,16 @@ export function MobileShopNav() {
    style={{paddingBottom:"max(8px,env(safe-area-inset-bottom))"}}>
    <div className="grid grid-cols-5 gap-1">
     {links.map(({href,label,icon:Icon})=>{
-     const selected=location===href||(href==="/browse"&&(location.startsWith("/browse")||location.startsWith("/search")))||
+     const selected=location===href||(href==="/browse"&&(location.startsWith("/browse")||location.startsWith("/search")||location.startsWith("/categories")||location.startsWith("/listing/")))||
       (href==="/notifications"&&location.startsWith("/notifications"));
      return <Link key={href} href={href} aria-current={selected?"page":undefined}
-      className={`relative flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1 text-[11px] font-bold ${selected?"bg-[#25456f] text-white":"text-slate-200 hover:bg-[#243957] hover:text-white"}`}>
+      className={`relative flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl border px-0.5 py-1.5 text-[12px] leading-tight font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400 ${selected?"border-orange-400 bg-[#25456f] text-white shadow-[inset_0_-3px_0_#fb923c]":"border-transparent text-slate-100 hover:bg-[#243957] hover:text-white"}`}>
       <Icon className="h-5 w-5" aria-hidden="true"/>{label}
       {label==="Alerts"&&unread>0&&<span aria-label={`${unread} unread notifications`} className="absolute right-1 top-0 rounded-full bg-orange-500 px-1.5 py-0.5 text-[9px] font-black text-white">{unread>99?"99+":unread}</span>}
      </Link>;
     })}
     <button type="button" onClick={openCart} aria-label={`Open shopping cart with ${itemCount} items`}
-     className="relative flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-1 text-[11px] font-bold text-slate-200 hover:bg-[#243957] hover:text-white">
+     className="relative flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl border border-transparent px-0.5 py-1.5 text-[12px] leading-tight font-semibold text-slate-100 transition-colors hover:bg-[#243957] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400">
      <ShoppingCart className="h-5 w-5" aria-hidden="true"/>Cart
      {itemCount>0&&<span className="absolute right-1 top-0 rounded-full bg-orange-500 px-1.5 py-0.5 text-[9px] font-black text-white">{itemCount>99?"99+":itemCount}</span>}
     </button>
