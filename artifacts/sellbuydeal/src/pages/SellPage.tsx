@@ -23,7 +23,7 @@ import {
   Banknote,
   Percent,
   Info,
-  Zap, Video, X, Maximize2, Package, Users, Truck, Star,
+  Zap, Video, X, Maximize2, Package, Users, Truck, Star, Sparkles, Timer, BadgePercent, ClipboardList, Play, Gift, ShoppingBag,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { CompactPageHero } from "@/components/CompactPageHero";
@@ -228,6 +228,19 @@ const SELL_HUB_OPTIONS = [
  {id:"classified",title:"List a Classified",desc:"Post a local listing, service or wanted ad.",href:"/classifieds/post",icon:Newspaper,colors:"from-emerald-400 to-green-600",border:"border-emerald-300",label:"Post ad"},
  {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/live",icon:Video,colors:"from-cyan-400 to-blue-600",border:"border-cyan-300",label:"Start live"}
 ] as const;
+function SellHubArtwork({kind}:{kind:string}) {
+ const common="absolute drop-shadow-[0_12px_10px_rgba(15,46,96,.18)]";
+ return <div aria-hidden="true" className="relative mb-3 flex h-36 w-full items-center justify-center overflow-hidden rounded-2xl">
+  <div className="absolute inset-0 bg-[repeating-conic-gradient(from_0deg_at_50%_78%,rgba(255,255,255,.8)_0deg,rgba(255,255,255,0)_13deg,rgba(255,255,255,0)_26deg)] opacity-65"/>
+  <span className="absolute left-[18%] top-[26%] h-2 w-5 -rotate-12 rounded-full bg-current opacity-30"/><span className="absolute right-[17%] top-[37%] h-2 w-4 rotate-12 rounded-full bg-current opacity-30"/>
+  {kind==="direct"&&<><div className="relative rotate-[-10deg] rounded-[24px] bg-gradient-to-br from-amber-300 to-orange-600 p-6 text-white shadow-[0_12px_22px_rgba(238,120,15,.35)] ring-4 ring-white"><ShoppingBag size={64} strokeWidth={2.5}/></div><Zap className={common+" right-[22%] top-[14%] rotate-12 text-amber-500"} size={43} fill="#fbbf24"/></>}
+  {kind==="quick"&&<><div className="relative rounded-full bg-gradient-to-br from-sky-300 via-blue-500 to-blue-700 p-7 text-white shadow-[0_12px_22px_rgba(23,108,233,.35)] ring-[7px] ring-sky-100"><Zap size={67} strokeWidth={2.8} fill="#ffdd51" className="text-yellow-300"/></div><Sparkles className={common+" right-[20%] top-[12%] text-blue-500"} size={25}/></>}
+  {kind==="auction"&&<><div className="relative rotate-[-16deg] rounded-3xl bg-gradient-to-br from-purple-300 to-violet-700 p-5 text-white shadow-[0_12px_22px_rgba(127,51,222,.35)] ring-4 ring-white"><Gavel size={76} strokeWidth={2.6}/></div><Sparkles className={common+" right-[17%] top-[16%] text-violet-500"} size={30}/></>}
+  {kind==="flash"&&<><div className="relative rotate-[-12deg] rounded-[24px] bg-gradient-to-br from-pink-300 via-pink-500 to-rose-700 p-6 text-white shadow-[0_12px_22px_rgba(227,36,116,.35)] ring-4 ring-white"><BadgePercent size={70} strokeWidth={2.5}/></div><Timer className={common+" right-[18%] top-[16%] text-pink-500"} size={30}/></>}
+  {kind==="classified"&&<><div className="relative rotate-[-8deg] rounded-[24px] bg-gradient-to-br from-emerald-300 to-green-700 p-6 text-white shadow-[0_12px_22px_rgba(19,161,102,.35)] ring-4 ring-white"><ClipboardList size={70} strokeWidth={2.5}/></div><Sparkles className={common+" right-[18%] top-[15%] text-green-500"} size={25}/></>}
+  {kind==="live"&&<><div className="relative rotate-[-7deg] rounded-[24px] bg-gradient-to-br from-cyan-300 via-sky-500 to-blue-700 p-6 text-white shadow-[0_12px_22px_rgba(6,151,216,.35)] ring-4 ring-white"><Video size={70} strokeWidth={2.5}/></div><span className="absolute bottom-5 right-[17%] rounded-full border-2 border-white bg-red-500 px-2 py-1 text-[10px] font-black text-white shadow-md">LIVE</span><Play className={common+" left-[20%] top-[20%] text-sky-500"} size={25} fill="currentColor"/></>}
+ </div>;
+}
 function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number];onClose:()=>void}) {
  useEffect(()=>{const previous=document.body.style.overflow;document.body.style.overflow="hidden";const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose()};window.addEventListener("keydown",onKey);return ()=>{document.body.style.overflow=previous;window.removeEventListener("keydown",onKey)}},[onClose]);
  return <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/75 p-0 sm:p-4" role="presentation">
@@ -270,14 +283,13 @@ export function SellPage() {
                 <p className="mt-3 text-base font-medium text-[#28496d] sm:text-lg">Choose how you'd like to sell. Simple, fast and secure.</p>
               </div>
               <div className="hidden shrink-0 items-center gap-3 rounded-3xl border border-white/90 bg-white/75 px-5 py-4 shadow-lg md:flex">
-                <span className="text-5xl" aria-hidden="true">🛒</span><span className="text-4xl" aria-hidden="true">📦</span><span className="text-4xl" aria-hidden="true">✨</span>
+                <ShoppingBag className="h-16 w-16 rotate-[-12deg] rounded-2xl bg-orange-500 p-3 text-white shadow-lg"/><Gift className="h-14 w-14 rotate-12 rounded-2xl bg-blue-500 p-3 text-white shadow-lg"/><Sparkles className="h-10 w-10 text-amber-500"/>
               </div>
             </div>
             <div className="relative grid grid-cols-1 gap-4 min-[400px]:grid-cols-2 lg:grid-cols-3 lg:gap-5">
               {SELL_HUB_OPTIONS.filter(option => !featureForHref(option.href) || isFeatureEnabled(rawSettings,featureForHref(option.href)!)).map(option => {const Icon=option.icon;return <button type="button" key={option.id} onClick={()=>setSelectedSellOption(option)} data-testid={`sell-hub-${option.id}`} className={`group relative flex min-w-0 flex-col items-center overflow-hidden rounded-[22px] border-2 ${option.border} bg-white/95 p-5 text-center shadow-[0_7px_18px_rgba(12,58,116,.12)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_14px_26px_rgba(12,58,116,.2)] focus-visible:outline focus-visible:outline-4 focus-visible:outline-orange-500 sm:p-6`}>
-                <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-32 bg-gradient-to-b ${option.colors} opacity-[.10]`}/>
-                <span aria-hidden="true" className="pointer-events-none absolute left-5 top-6 h-2 w-2 rounded-full bg-orange-300 opacity-80"/><span aria-hidden="true" className="pointer-events-none absolute right-7 top-12 h-2 w-2 rounded-full bg-sky-300 opacity-80"/>
-                <span className={`relative mb-5 flex h-24 w-24 items-center justify-center rounded-[28px] bg-gradient-to-br ${option.colors} text-white shadow-[0_9px_18px_rgba(12,58,116,.2)] ring-4 ring-white transition-transform group-hover:rotate-[-5deg] group-hover:scale-105`}><Icon className="h-14 w-14 drop-shadow-md" strokeWidth={2.1}/></span>
+                <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-44 bg-gradient-to-b ${option.colors} opacity-[.13]`}/>
+                <SellHubArtwork kind={option.id}/>
                 <h3 className="relative text-xl font-black tracking-tight text-[#092b68] sm:text-2xl">{option.title}</h3>
                 <p className="relative mt-2 min-h-14 max-w-[240px] text-sm leading-relaxed text-[#28496d]">{option.desc}</p>
                 <span className={`relative mt-auto inline-flex min-h-11 w-full max-w-[240px] items-center justify-center gap-2 rounded-full bg-gradient-to-r ${option.colors} px-4 py-2 text-sm font-black text-white shadow-sm`}>{option.label}<ArrowRight className="h-4 w-4"/></span>
