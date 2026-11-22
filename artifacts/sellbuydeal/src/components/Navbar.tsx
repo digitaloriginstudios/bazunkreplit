@@ -385,7 +385,7 @@ export function Navbar() {
           {/* Theme + Logo */}
           <div className="bz-header-brand flex items-center gap-2 flex-shrink-0">
             <Link href="/" className="flex items-center flex-shrink-0" data-testid="link-logo">
-              {useDefaultDarkLogo ? <span data-theme-edit="site_logo_url" className="relative block h-9 w-[160px] max-w-[42vw] shrink-0 overflow-hidden sm:h-9 md:h-12 xl:h-14"><img src={defaultLogo} alt={featureSettings.site_name||"Bazunk"} decoding="async" className="absolute left-0 top-1/2 h-auto w-full max-w-none -translate-y-1/2 object-contain" /></span> : <img src={featureSettings.site_logo_url?.startsWith("/api/site-media/") ? API_BASE + featureSettings.site_logo_url : defaultLogo} alt={featureSettings.site_name||"Bazunk"} data-theme-edit="site_logo_url" decoding="async" className="h-7 sm:h-9 md:h-12 xl:h-14 w-auto object-contain" />}
+              {useDefaultDarkLogo ? <span data-theme-edit="site_logo_url" className="flex h-9 w-[min(150px,40vw)] min-w-0 shrink items-center sm:h-9 md:h-12 xl:h-14 xl:w-[190px]"><img src={defaultLogo} alt={featureSettings.site_name||"Bazunk"} decoding="async" className="block h-full w-full object-contain object-left" /></span> : <img src={featureSettings.site_logo_url?.startsWith("/api/site-media/") ? API_BASE + featureSettings.site_logo_url : defaultLogo} alt={featureSettings.site_name||"Bazunk"} data-theme-edit="site_logo_url" decoding="async" className="h-7 sm:h-9 md:h-12 xl:h-14 w-auto object-contain" />}
             </Link>
             <Link
               href="/"
@@ -684,7 +684,7 @@ export function Navbar() {
               {/* Header */}
               <div className="flex shrink-0 items-center justify-between px-5 py-3 border-b border-gray-100">
                 <Link href="/" onClick={() => setMobileOpen(false)} className="flex items-center">
-                   {useDefaultDarkLogo ? <span className="relative block h-7 aspect-[1142/289] max-w-[200px] shrink-0 overflow-hidden"><img src={defaultLogo} alt={featureSettings.site_name||"Bazunk"} className="absolute left-0 top-0 h-[230%] w-[113%] max-w-none" /></span> : <img src={featureSettings.site_logo_url?.startsWith("/api/site-media/") ? API_BASE + featureSettings.site_logo_url : defaultLogo} alt={featureSettings.site_name||"Bazunk"} className="h-7 w-auto max-w-[200px] object-contain" />}
+                   {useDefaultDarkLogo ? <span className="flex h-9 w-[min(150px,40vw)] min-w-0 items-center"><img src={defaultLogo} alt={featureSettings.site_name||"Bazunk"} className="block h-full w-full object-contain object-left" /></span> : <img src={featureSettings.site_logo_url?.startsWith("/api/site-media/") ? API_BASE + featureSettings.site_logo_url : defaultLogo} alt={featureSettings.site_name||"Bazunk"} className="h-7 w-auto max-w-[200px] object-contain" />}
                 </Link>
                 <button
                   onClick={() => setMobileOpen(false)}
