@@ -258,9 +258,20 @@ export function Navbar() {
   }, [query, marketRegion]);
 
   useEffect(() => {
-    document.body.style.overflow = mobileOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
+    if (!mobileOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onEscape);
+    };
   }, [mobileOpen]);
+
+  useEffect(() => { setMobileOpen(false); }, [location]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -657,7 +668,7 @@ export function Navbar() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 z-50 xl:hidden"
+              className="fixed inset-0 bg-black/60 z-[120] xl:hidden"
               onClick={() => setMobileOpen(false)}
             />
             <motion.div
@@ -667,7 +678,7 @@ export function Navbar() {
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 220 }}
-              className="fixed top-0 right-0 bottom-0 w-80 max-w-[100vw] bg-white z-50 flex flex-col xl:hidden shadow-2xl text-slate-900"
+              className="fixed top-0 right-0 bottom-0 w-[min(22rem,100vw)] bg-white z-[121] flex flex-col xl:hidden shadow-2xl text-slate-900"
             >
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
