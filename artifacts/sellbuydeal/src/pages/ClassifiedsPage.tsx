@@ -657,7 +657,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
             {/* Category grid */}
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2.5">Category <span className="text-red-400">*</span></p>
-              <div className="grid grid-cols-5 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                 {CLASSIFIED_CATEGORIES.map((c) => {
                   const Icon = CATEGORY_ICONS[c.icon] ?? MoreHorizontal;
                   const active = category === c.slug;
@@ -728,9 +728,9 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
                     <button
                       type="button"
                       onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
-                      className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-gray-900/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      aria-label={`Remove photo ${i + 1}`} className="absolute top-1 right-1 w-8 h-8 rounded-full bg-slate-900/85 text-white flex items-center justify-center opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-500"
                     >
-                      <X className="w-2.5 h-2.5" />
+                      <X className="w-4 h-4" />
                     </button>
                   </motion.div>
                 ))}
@@ -749,10 +749,10 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
                 <button
                   type="button"
                   onClick={() => photoInputRef.current?.click()}
-                  className="mt-2 w-full border-2 border-dashed border-gray-200 rounded-xl py-5 flex flex-col items-center gap-1.5 text-gray-400 hover:border-[#F26B21] hover:text-[#F26B21] transition-colors"
+                  className="mt-2 w-full border-2 border-dashed border-blue-300 bg-blue-50 rounded-xl py-6 flex flex-col items-center gap-1.5 text-[#123c66] hover:border-[#F26B21] transition-colors"
                 >
                   <Upload className="w-5 h-5" />
-                  <span className="text-xs font-medium">Upload photos</span>
+                  <span className="text-sm font-bold">Choose photos for your classified</span><span className="text-xs">Up to 5 images · first image is the cover</span>
                 </button>
               )}
             </div>
