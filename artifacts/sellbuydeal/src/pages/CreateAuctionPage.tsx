@@ -391,7 +391,7 @@ export function CreateAuctionPage() {
           {/* Photos */}
           <section className="bg-white rounded-xl px-4 sm:px-5 py-3 border border-slate-300 shadow-sm">
             <h2 className="text-base font-black text-slate-950 mb-1 flex items-center gap-2"><Camera className="w-5 h-5 text-blue-600" /> Add Photos</h2>
-            <p className="text-xs text-slate-600 mb-4">Upload up to 10 photos. First photo is the cover.</p>
+            <p className="text-xs text-slate-600 mb-4">Upload up to 10 photos. The first photo becomes your cover image.</p>
 
             <input
               ref={photoInputRef}
@@ -419,9 +419,9 @@ export function CreateAuctionPage() {
                   <button
                     type="button"
                     onClick={() => removePhoto(i)}
-                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-gray-900/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label={`Remove photo ${i + 1}`} className="absolute top-1 right-1 w-8 h-8 rounded-full bg-slate-900/85 text-white flex items-center justify-center opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-500"
                   >
-                    <X className="w-3 h-3" />
+                    <X className="w-4 h-4" />
                   </button>
                 </motion.div>
               ))}
@@ -442,10 +442,10 @@ export function CreateAuctionPage() {
               <button
                 type="button"
                 onClick={() => photoInputRef.current?.click()}
-                className="auction-photo-drop w-full border-2 border-dashed border-orange-300 bg-gradient-to-r from-orange-50 via-white to-violet-50 rounded-xl py-8 flex flex-col items-center gap-2 text-slate-800 hover:border-[#F26B21] transition-colors"
+                className="auction-photo-drop w-full border-2 border-dashed border-orange-300 bg-gradient-to-r from-orange-50 via-white to-blue-50 rounded-xl py-8 flex flex-col items-center gap-2 text-slate-800 hover:border-[#F26B21] transition-colors"
               >
                 <Upload className="w-11 h-11 text-orange-600" />
-                <span className="text-sm font-medium">Drag photos here or click to browse</span>
+                <span className="text-sm font-medium">Choose photos for your auction</span>
                 <span className="text-xs">JPG, PNG, WEBP — max 10 photos</span>
               </button>
             )}
@@ -453,7 +453,7 @@ export function CreateAuctionPage() {
 
           {/* Video */}
           <details className="bg-white rounded-xl px-4 sm:px-5 py-3 border border-slate-300 shadow-sm">
-            <summary className="cursor-pointer text-sm font-bold text-slate-900 flex items-center gap-2"><PlayCircle className="w-5 h-5 text-violet-600" /> Add a Video (optional)</summary>
+            <summary className="cursor-pointer text-sm font-bold text-slate-900 flex items-center gap-2"><PlayCircle className="w-5 h-5 text-blue-600" /> Add a Video (optional)</summary>
           <section className="pt-3">
             <h2 className="text-base font-bold text-slate-950 mb-1">Video <span className="text-slate-600 font-normal text-sm">(optional)</span></h2>
             <p className="text-xs text-slate-600 mb-4">A short clip helps bidders trust the item is as described.</p>
