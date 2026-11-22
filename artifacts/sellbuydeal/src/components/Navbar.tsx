@@ -650,13 +650,19 @@ export function Navbar() {
             </div>
           )}
         </div>
-        <div className="bz-mockup-benefits" role="region" aria-label="Marketplace benefits, swipe horizontally for more" tabIndex={0}>
+        <div className="relative">
+          <div className="bz-mockup-benefits" role="region" aria-label="Marketplace benefits, swipe horizontally for more" tabIndex={0}>
           <span><Truck className="text-blue-600"/> <strong>Free delivery</strong><small>On selected items</small></span>
           <span><ShieldCheck className="text-cyan-600"/> <strong>Buyer protection</strong><small>Shop with confidence</small></span>
           <span><CheckCircle2 className="text-orange-500"/> <strong>Verified sellers</strong><small>Look for verification</small></span>
           <span><Leaf className="text-green-600"/> <strong>Eco marketplace</strong><small>Reuse and resell</small></span>
           <span><Gift className="text-amber-500"/> <strong>Earn credits</strong><small>List, boost &amp; save</small></span>
           <span><Gift className="text-pink-500"/> <strong>Daily deals</strong><small>New offers every day</small></span>
+          </div>
+          <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-end bg-gradient-to-r from-transparent to-white/90 pr-2 sm:hidden">
+            <ChevronRight className="h-4 w-4 text-[#15588e]"/>
+          </div>
+          <span className="pointer-events-none absolute bottom-0 right-11 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-semibold text-[#15588e] shadow-sm sm:hidden" aria-hidden="true">Swipe →</span>
         </div>
         {/* Brand colour accent */}
         <div className="h-[3px] w-full bg-gradient-to-r from-[#1E6FE8] via-[#4A5CE8] to-[#F5B301]" />
