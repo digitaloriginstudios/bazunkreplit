@@ -1,3 +1,4 @@
+import { SellerStudioNav } from "@/components/SellerStudioNav";
 import { createPortal } from "react-dom";
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useSearch } from "wouter";
@@ -582,6 +583,7 @@ function PostAdModal({ onClose, onPost }: { onClose: () => void; onPost: (ad: Cl
           exit={{ scale: 0.95, y: 20 }}
           role="dialog" aria-modal="true" aria-label="Post a Classified Ad" className="classified-post-dialog bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90dvh] overflow-y-auto overscroll-contain text-slate-900"
         >
+          <div className="px-4 pt-4"><SellerStudioNav active="classifieds" /></div>
           {/* Gradient header */}
           <div className={`rounded-t-3xl px-6 pt-6 pb-5 flex items-start justify-between ${
             type === "offer"

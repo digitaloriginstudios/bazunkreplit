@@ -1,3 +1,4 @@
+import { SellerStudioNav } from "@/components/SellerStudioNav";
 import { useMarketplaceRegion } from "@/hooks/useMarketplaceRegion";
 import { useAuth as useClerkAuth } from "@clerk/react";
 import { useState, useRef, useEffect } from "react";
@@ -438,6 +439,7 @@ export function DirectSalePage() {
       <Navbar />
 
       <div className="container mx-auto px-4 py-7 max-w-7xl">
+        <SellerStudioNav active={quickMode ? "quick" : "direct"} />
         <style>{`
           .direct-sale-form > section h2, .direct-sale-form > aside h2 { color: #fff; }\n          .direct-sale-form > aside > section p, .direct-sale-form > aside > section li { color: #f0f5ff !important; opacity: 1 !important; }\n          .direct-sale-form > aside > section svg { color: #e2d5ff; opacity: 1; }\n          .direct-sale-form > aside > section a { color: #fff; }
           .direct-sale-form > section label { color: #e8f2ff; font-weight: 650; }
@@ -458,7 +460,7 @@ export function DirectSalePage() {
         <form onSubmit={handlePublish} noValidate className={`direct-sale-form ${quickMode?"bazunk-quick-sell":""} grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(300px,1fr)] gap-4 lg:gap-5 items-start min-w-0 pb-32 lg:pb-0`}>
 
           {/* Header card */}
-          <div className="lg:col-span-2 min-w-0 rounded-2xl bg-gradient-to-r from-[#0755e8] via-[#4939dd] to-[#d634a6] px-5 py-5 sm:px-7 sm:py-7 mb-0 shadow-lg">
+          <div className="lg:col-span-2 min-w-0 rounded-2xl bg-gradient-to-r from-[#0c3767] via-[#15588e] to-[#1e6fe8] px-5 py-5 sm:px-7 sm:py-7 mb-0 shadow-lg">
             <h1 className="text-3xl font-black text-white">{quickMode ? "⚡ Quick Sell — Create Listing" : "Direct Sale"}</h1>
             <a href="/sell/snap" className="mt-3 inline-flex items-center rounded-xl border border-white/50 bg-white/20 px-4 py-2 text-sm font-bold text-white hover:bg-white/30">📸 Snap & Sell — photo & barcode assistant</a>
             <p className="text-white text-sm mt-1">{quickMode ? "List your item in minutes. Fast, simple and free." : "Create a detailed listing in six easy steps. No listing fees for private sellers."}</p><div className="mt-4 flex flex-wrap gap-2 text-xs font-bold text-white"><span className="rounded-lg bg-black/25 px-3 py-2">✓ Free to list</span><span className="rounded-lg bg-black/25 px-3 py-2">⚡ Fast & simple</span><span className="rounded-lg bg-black/25 px-3 py-2">🛡 Buyer Protection</span></div>
@@ -467,7 +469,7 @@ export function DirectSalePage() {
 
 
           <aside className="hidden lg:block min-w-0 lg:col-start-2 lg:row-start-2 lg:row-span-7 space-y-3">
-            {quickMode&&<section className="bz-quick-ai rounded-2xl border border-purple-300/60 p-4 text-white shadow-xl">
+            {quickMode&&<section className="bz-quick-ai rounded-2xl border border-sky-300/60 p-4 text-white shadow-xl">
               <h2 className="flex items-center gap-2 text-lg font-black"><Zap size={25}/> Listing Assistant ✨</h2>
               <p className="mt-1 text-sm text-white">Create a stronger listing with a clear title, photos and useful details.</p>
               <a href="/sell/snap" className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-black text-[#36258c]"><Camera size={17}/> Open Snap & Sell assistant</a>
@@ -487,7 +489,7 @@ export function DirectSalePage() {
                 <div className="p-4"><p className="font-bold text-base break-words">{title.trim()||"Your listing title will appear here"}</p><p className="font-black text-xl mt-2">{currency.split(" ")[0]}{Number(price||0).toFixed(2)}</p><div className="flex flex-wrap gap-2 mt-3 text-xs text-slate-600"><span className="bg-slate-100 rounded-lg px-2 py-1">{CONDITIONS.find(c=>c.id===condition)?.label||"Condition not set"}</span><span className="bg-slate-100 rounded-lg px-2 py-1">{category||"Category not set"}</span><span className="bg-slate-100 rounded-lg px-2 py-1">{shipOrigin||"Location not set"}</span></div></div>
               </div>
             </section>
-            <section className={`${quickMode?"hidden ":""}rounded-2xl border border-purple-400/60 bg-gradient-to-br from-[#35205d] to-[#44227d] p-5 text-white shadow-lg`}><h2 className="font-black text-lg flex items-center gap-2"><Video className="w-5 h-5 text-purple-200"/> Boost Your Listing</h2><p className="text-sm font-medium leading-relaxed text-white mt-2">Add a product video to help buyers see your item in action. Optional — you can add it below.</p><a href="#product-video" className="inline-flex mt-3 rounded-lg bg-purple-500 px-4 py-2 text-sm font-bold text-white hover:bg-purple-400">Go to video options ↓</a></section>
+            <section className={`${quickMode?"hidden ":""}rounded-2xl border border-sky-400/60 bg-gradient-to-br from-[#102541] to-[#15588e] p-5 text-white shadow-lg`}><h2 className="font-black text-lg flex items-center gap-2"><Video className="w-5 h-5 text-sky-200"/> Boost Your Listing</h2><p className="text-sm font-medium leading-relaxed text-white mt-2">Add a product video to help buyers see your item in action. Optional — you can add it below.</p><a href="#product-video" className="inline-flex mt-3 rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-500">Go to video options ↓</a></section>
             <section className="rounded-2xl border border-sky-400/20 bg-[#102541] p-5 text-white"><h2 className="font-black text-lg mb-3">💡 Tips for a Great Listing</h2><ul className="space-y-2 text-sm text-slate-100"><li>✓ Use clear, well-lit photos</li><li>✓ Describe any wear or defects</li><li>✓ Choose the most specific category</li><li>✓ Set an accurate shipping price</li><li>✓ Respond to buyers quickly</li></ul></section>
           </aside>
           {!quickMode && <nav id="direct-sale-step-nav" aria-label="Direct Sale steps" className="hidden lg:grid lg:col-span-2 lg:row-start-2 scroll-mt-24 grid-cols-6 gap-2 rounded-2xl bg-white dark:bg-[#102541] p-3 shadow-sm border border-slate-200 dark:border-blue-700/40">{steps.map((name,i)=><button type="button" key={name} onClick={()=>goStep(i+1)} aria-current={step===i+1?"step":undefined} className={`flex items-center justify-center gap-2 rounded-xl px-2 py-3 text-xs sm:text-sm font-bold transition-colors ${step===i+1?"bg-blue-600 text-white shadow-md":"bg-slate-100 text-slate-900 hover:bg-blue-100 dark:bg-[#243b61] dark:!text-white dark:hover:bg-[#34558a]"}`}><span className="rounded-full bg-white/20 px-2 py-1 text-current">{i+1}</span>{name}</button>)}</nav>}
