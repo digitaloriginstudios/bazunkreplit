@@ -1,3 +1,4 @@
+import "./seller-credits.css";
 import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudioGuidance";
 import { SellerStudioNav } from "@/components/SellerStudioNav";
 import { useMarketplaceRegion } from "@/hooks/useMarketplaceRegion";
