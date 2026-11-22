@@ -658,7 +658,8 @@ export function Navbar() {
       <BuyerProtectionModal open={protectionOpen} onClose={() => setProtectionOpen(false)} />
       <HeaderMegaModals kind={sellOpen ? "sell" : moreOpen ? "more" : null} onClose={() => {setSellOpen(false);setMoreOpen(false)}} />
 
-      {/* Mobile menu drawer */}
+      {/* Render the mobile drawer at document root so page stacking contexts cannot cover it. */}
+      {typeof document !== "undefined" && createPortal(
       <AnimatePresence>
         {mobileOpen && (
           <>
@@ -668,7 +669,7 @@ export function Navbar() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/60 z-[120] xl:hidden"
+              className="fixed inset-0 bg-black/70 xl:hidden" style={{ zIndex: 2147483000, position: "fixed", inset: 0, backgroundColor: "rgba(2, 8, 23, 0.72)" }}
               onClick={() => setMobileOpen(false)}
             />
             <motion.div
@@ -678,7 +679,7 @@ export function Navbar() {
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 28, stiffness: 220 }}
-              className="fixed top-0 right-0 bottom-0 w-[min(22rem,100vw)] bg-white z-[121] flex flex-col xl:hidden shadow-2xl text-slate-900"
+              className="fixed top-0 right-0 bottom-0 w-[min(22rem,100vw)] bg-white flex flex-col xl:hidden shadow-2xl text-slate-900" style={{ zIndex: 2147483001, position: "fixed", top: 0, right: 0, bottom: 0, width: "min(22rem, 100vw)", height: "100dvh", backgroundColor: "#ffffff", color: "#0f172a", overflow: "hidden" }}
             >
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
@@ -814,7 +815,7 @@ export function Navbar() {
             </motion.div>
           </>
         )}
-      </AnimatePresence>
+      </AnimatePresence>, document.body)}
 
       <MessageCenterOverlay open={messageCenterOpen} onClose={() => setMessageCenterOpen(false)} />
           <CategoryDrawer open={categoryDrawerOpen} onClose={()=>setCategoryDrawerOpen(false)} />
