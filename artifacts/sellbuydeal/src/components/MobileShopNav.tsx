@@ -43,7 +43,7 @@ export function MobileShopNav() {
   {href:"/notifications",label:"Alerts",icon:Bell},
  ];
  return <nav aria-label="Mobile quick navigation" data-testid="mobile-shop-nav"
-   className="fixed inset-x-0 bottom-0 z-[55] border-t border-slate-600 bg-[#101d35]/95 px-2 pt-2 shadow-[0_-8px_30px_rgba(0,0,0,.28)] backdrop-blur-xl md:hidden"
+   className="bz-mobile-bottom-nav fixed inset-x-0 bottom-0 z-[55] border-t border-slate-600 bg-[#101d35] px-2 pt-2 shadow-[0_-8px_30px_rgba(0,0,0,.28)] md:hidden"
    style={{paddingBottom:"max(8px,env(safe-area-inset-bottom))"}}>
    <div className="grid grid-cols-5 gap-1">
     {links.map(({href,label,icon:Icon})=>{
@@ -51,7 +51,7 @@ export function MobileShopNav() {
       (href==="/notifications"&&location.startsWith("/notifications"));
      return <Link key={href} href={href} aria-current={selected?"page":undefined}
       className={`relative flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-xl border px-0.5 py-1.5 text-[12px] leading-tight font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-400 ${selected?"border-orange-400 bg-[#25456f] text-white shadow-[inset_0_-3px_0_#fb923c]":"border-transparent text-slate-100 hover:bg-[#243957] hover:text-white"}`}>
-      <Icon className="h-5 w-5" aria-hidden="true"/>{label}
+      <Icon className="h-5 w-5 shrink-0" aria-hidden="true"/>{label}
       {label==="Alerts"&&unread>0&&<span aria-label={`${unread} unread notifications`} className="absolute right-1 top-0 rounded-full bg-orange-500 px-1.5 py-0.5 text-[9px] font-black text-white">{unread>99?"99+":unread}</span>}
      </Link>;
     })}
