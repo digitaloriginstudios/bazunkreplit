@@ -985,14 +985,25 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
         {/* Main content */}
         <main className="bz-browse-results flex-1 min-w-0">
           {/* Thumb-friendly sorting without an extra modal. Desktop keeps the detailed selector. */}
-          <div className="mb-3 flex gap-2 overflow-x-auto pb-2 sm:hidden" aria-label="Quick sorting" data-testid="mobile-browse-sort">
+          <div className="mb-3 sm:hidden">
+            <div className="mb-1 flex items-center justify-between gap-2 px-1">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Sort listings</span>
+              <span className="flex items-center gap-1 text-xs font-semibold text-[#15588e] dark:text-sky-300" aria-hidden="true">Swipe for more <ArrowRight className="h-3.5 w-3.5"/></span>
+            </div>
+            <div className="relative">
+              <div className="flex gap-2 overflow-x-auto pb-2 pr-10 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style={{scrollSnapType:"x proximity",WebkitOverflowScrolling:"touch"}} role="group" aria-label="Quick sorting, swipe horizontally for more options" data-testid="mobile-browse-sort">
             {([
               ["newest","Newest"],["price-asc","Lowest £"],["price-desc","Highest £"],["views","Popular"]
             ] as const).map(([value,label])=><button key={value} type="button"
               onClick={()=>setSort(value)} aria-pressed={sort===value}
-              className={`min-h-11 shrink-0 rounded-full border px-4 text-sm font-bold ${sort===value?"border-indigo-600 bg-indigo-600 text-white":"border-slate-300 bg-white text-slate-900 dark:border-slate-500 dark:bg-[#1b3151] dark:text-white"}`}>
+              className={`min-h-11 shrink-0 snap-start rounded-full border px-4 text-sm font-bold ${sort===value?"border-indigo-600 bg-indigo-600 text-white":"border-slate-300 bg-white text-slate-900 dark:border-slate-500 dark:bg-[#1b3151] dark:text-white"}`}>
               {label}
             </button>)}
+              </div>
+              <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 flex w-9 items-center justify-end bg-gradient-to-r from-transparent to-white dark:to-[#101d35]">
+                <ArrowRight className="h-5 w-5 text-[#15588e] dark:text-sky-300"/>
+              </div>
+            </div>
           </div>
           {/* Top bar */}
           <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
