@@ -133,7 +133,7 @@ function extractCurrencyCode(display: string): string {
   return display.match(/[A-Z]{3}$/)?.[0] ?? "GBP";
 }
 
-export function DirectSalePage({ embedded = false }: { embedded?: boolean } = {}) {
+export function DirectSalePage({ embedded = false, sellMode }: { embedded?: boolean; sellMode?: "quick" | "direct" } = {}) {
   const sellEmbedded = embedded || new URLSearchParams(window.location.search).get("sellEmbed") === "1";
   const [marketplaceRegion] = useMarketplaceRegion();
   const [, refreshThirdLevels] = useState(0);
@@ -182,7 +182,7 @@ export function DirectSalePage({ embedded = false }: { embedded?: boolean } = {}
   const [publishError, setPublishError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [location, setLocation] = useLocation();
-  const quickMode = location === "/sell/quick";
+  const quickMode = sellMode ? sellMode === "quick" : location === "/sell/quick";
   const [step, setStep] = useState(1);
   const steps = ["Basics", "Photos", "Details", "Shipping", "Video", "Review"];
   // The phone flow deliberately skips desktop's optional video upsell.
