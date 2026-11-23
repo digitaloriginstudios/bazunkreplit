@@ -12,10 +12,10 @@ export function CategoriesPage() {
     (category.name.toLowerCase().includes(query.toLowerCase()) ||
       category.subcategories.some(sub => isActive(category.slug, sub.slug) && sub.name.toLowerCase().includes(query.toLowerCase()))));
   return <main className="mx-auto w-full max-w-6xl px-4 pb-28 pt-6 sm:px-6">
-    <section className="rounded-3xl bg-gradient-to-br from-[#071e38] to-[#12558b] px-5 py-7 text-white sm:px-8">
-      <div className="flex items-center gap-3"><Grid3X3 className="h-8 w-8 text-orange-400"/><h1 className="text-3xl font-black">Shop by Category</h1></div>
-      <p className="mt-2 text-sm text-slate-100 sm:text-base">Explore departments and subcategories to find exactly what you need.</p>
-      <Link href="/browse" className="mt-4 inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-bold text-white">Browse all listings <ChevronRight className="h-4 w-4"/></Link>
+    <section className="relative isolate overflow-hidden rounded-2xl bg-gradient-to-br from-[#071e38] to-[#12558b] px-5 py-7 !text-white sm:rounded-3xl sm:px-8">
+      <div className="relative z-10 flex items-center gap-3"><Grid3X3 className="h-8 w-8 shrink-0 !text-orange-300"/><h1 className="text-2xl font-black leading-tight !text-white sm:text-3xl">Shop by Category</h1></div>
+      <p className="relative z-10 mt-3 text-sm leading-relaxed !text-white sm:text-base">Explore departments and subcategories to find exactly what you need.</p>
+      <Link href="/browse" className="relative z-10 mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-bold !text-white shadow-md transition-colors hover:bg-orange-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">Browse all listings <ChevronRight className="h-4 w-4"/></Link>
     </section>
     <label className="mt-5 flex min-h-12 items-center gap-3 rounded-xl border border-slate-300 bg-white px-4 text-slate-800">
       <Search className="h-5 w-5 text-slate-600"/>
