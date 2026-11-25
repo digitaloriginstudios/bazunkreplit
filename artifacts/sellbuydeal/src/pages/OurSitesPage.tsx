@@ -8,6 +8,8 @@ const sites = [
   { name:"MarketNexa", eyebrow:"COMMERCE. TECHNOLOGY. GROWTH.", description:"Digital commerce tools and marketplace technology.", url:"https://marketnexa.bazunk.com", Icon:Store, accent:"cyan", mark:"M" },
   { name:"Nexvenue", eyebrow:"EVENTS. TICKETS. EXPERIENCES.", description:"Connecting event organisers, venues and audiences through modern technology.", url:"https://nexvenue.bazunk.com", Icon:Ticket, accent:"cyan", mark:"N" },
   { name:"Bazunk Data", eyebrow:"DATA. INSIGHTS. GROWTH.", description:"Product data and integration tools for a smarter e-commerce ecosystem.", url:"https://data.bazunk.com", Icon:Database, accent:"orange", mark:"D" },
+  { name:"Licensify", eyebrow:"LICENSE. ACTIVATE. PROTECT.", description:"Software licensing, activation and digital product management by Digital Origin Studios. In development.", url:"https://digitaloriginstudios.bazunk.com/#work", Icon:ShieldCheck, accent:"orange", mark:"L" },
+  { name:"OriginDesk", eyebrow:"SUPPORT. CONNECT. RESOLVE.", description:"Customer support, ticketing and live chat by Digital Origin Studios. In development.", url:"https://digitaloriginstudios.bazunk.com/#work", Icon:Headphones, accent:"cyan", mark:"O" },
 ];
 
 export function OurSitesPage(){
