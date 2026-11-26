@@ -12,6 +12,8 @@ async function withOrder<T>(id:string, fn:(tx:any,order:any,stripe:any,session:a
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${String(order.stripe_session_id)}))`);
     const session:any=await stripe.checkout.sessions.retrieve(order.stripe_session_id,{expand:["payment_intent.latest_charge"]});
     if(session.payment_status!=="paid" || session.currency!=="gbp" || !session.payment_intent?.id)throw new Error("Settlement requires a paid GBP checkout. Legacy foreign-currency orders require manual reconciliation.");
+    if(order.transaction_currency && String(order.transaction_currency).toUpperCase()!=="GBP")throw new Error("Order currency conflicts with verified Stripe payment; reconcile before settlement.");
+    if(!order.transaction_currency)await tx.execute(sql`UPDATE orders SET transaction_currency='GBP' WHERE id=${id} AND transaction_currency IS NULL`);
     let refundedMinor=0,hasPendingRefund=false;
     for await (const refund of stripe.refunds.list({payment_intent:session.payment_intent.id,limit:100})) {
       if(["failed","canceled"].includes(refund.status ?? ""))continue;
