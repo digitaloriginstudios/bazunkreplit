@@ -187,8 +187,8 @@ router.get("/listings", async (req, res) => {
     const deliveryMode=String(req.query.deliveryMode??"");
     if (deliveryMode) {
       const destination=String(req.query.destination??"").toUpperCase();
-      if (!/^[A-Z]{2}$/.test(destination)||!["domestic","international","ships-to-me"].includes(deliveryMode)) {res.status(400).json({error:"Invalid delivery filter"});return;}
-      const candidates=(await db.execute(sql`SELECT id,ship_origin,ship_zone,specifications FROM listings WHERE status='active'`)).rows;
+      if (!globalShippingCountry(destination)||!["domestic","international","ships-to-me"].includes(deliveryMode)) {res.status(400).json({error:"Invalid delivery filter"});return;}
+      const candidates=(await db.execute(sql`SELECT id,ship_origin,ship_zone,CASE WHEN NULLIF(ship_origin,'') IS NULL OR NULLIF(ship_zone,'') IS NULL THEN specifications ELSE NULL END AS specifications FROM listings WHERE status='active' AND (NULLIF(ship_zone,'') IS NOT NULL OR specifications ILIKE '%ships_to%')`)).rows;
       const eligible=candidates.filter(row=>{
         const shipping=globalListingShipping(row.ship_origin,row.ship_zone,null,row.specifications);
         const origin=globalShippingCountry(shipping.shipOrigin);
