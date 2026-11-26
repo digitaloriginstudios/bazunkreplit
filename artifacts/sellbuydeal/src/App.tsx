@@ -1,3 +1,4 @@
+import {RegionalPromotions} from "@/components/RegionalGrowth";
 import {AdminInternationalPage} from "@/pages/admin/AdminInternationalPage";
 import {RegionalMarketplacePage,regionalMarkets} from "@/pages/RegionalMarketplacePage";
 import SwapPage from "@/pages/SwapPage";
@@ -369,6 +370,7 @@ function Home() {
   return (
     <div className="bz-mockup-home bz-home-refined min-h-screen bg-background flex flex-col">
       <Navbar />
+      <RegionalPromotions/>
       <main className="flex-1">
         {/* Preserve the essential shopping journey above optional marketing blocks. */}
         <HomeSectionBoundary><Hero /></HomeSectionBoundary>
