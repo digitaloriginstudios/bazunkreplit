@@ -99,11 +99,11 @@ router.post("/flash-sales", async (req, res) => {
   await db.execute(sql`
     INSERT INTO flash_sales
       (id, seller_email, seller_name, title, description, image, category,
-       original_price, sale_price, discount_percent, starts_at, ends_at, status, sale_type, marketplace_region, created_at, updated_at)
+       original_price, sale_price, discount_percent, starts_at, ends_at, status, sale_type, marketplace_region, currency, created_at, updated_at)
     VALUES (
       ${id}, ${sellerEmail}, ${sellerName}, ${title}, ${description ?? null},
       ${image ?? null}, ${category ?? null},
-      ${op}, ${sp}, ${discountPercent}, ${startsAt}, ${endsAt}, ${status}, ${resolvedType}, ${marketplaceRegion}, NOW(), NOW()
+      ${op}, ${sp}, ${discountPercent}, ${startsAt}, ${endsAt}, ${status}, ${resolvedType}, ${marketplaceRegion}, ${"GBP"}, NOW(), NOW()
     )
   `);
   storage.completeMilestone(sellerEmail, "first-flash-sale").catch((err) => {
