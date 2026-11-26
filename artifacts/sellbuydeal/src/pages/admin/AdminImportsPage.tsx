@@ -7,6 +7,7 @@ import {
   CheckSquare, Square, ArrowDownToLine, User, Globe, Plus, FileText,
 } from "lucide-react";
 import { AdminLayout } from "./AdminLayout";
+import { AliExpressConnectionPanel } from "./AliExpressConnectionPanel";
 import { RapidApiPanel } from "./RapidApiPanel";
 import { ImportModal } from "@/components/ImporterSection";
 import { useAdmin } from "@/context/AdminContext";
@@ -621,6 +622,7 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
 
 
 
+      {tab === "aliexpress" && <AliExpressConnectionPanel />}
       {tab === "amazon" && <div className="flex gap-2 mb-4"><button className={amazonSite==="uk"?"font-bold underline":"opacity-70"} onClick={()=>{amazonSearchRequest.current++;setAmazonSite("uk");setPage(0);setSearchPage(1);setSearchResults([]);setHasSearched(false);setSelected(new Set());setAmazonSelectionCache({});}}>🇬🇧 Amazon UK imports</button><button className={amazonSite==="us"?"font-bold underline":"opacity-70"} onClick={()=>{amazonSearchRequest.current++;setAmazonSite("us");setPage(0);setSearchPage(1);setSearchResults([]);setHasSearched(false);setSelected(new Set());setAmazonSelectionCache({});}}>🇺🇸 Amazon USA imports</button></div>}
       <AnimatePresence mode="wait">
         {tab === "amazon" && (

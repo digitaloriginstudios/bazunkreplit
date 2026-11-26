@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
+import { adminApiUrl } from "./context/AdminContext";
 import { loadCategoryPresentation } from "./data/categories";
 import "./index.css";
 import "./design-system/brand-tokens.css";
@@ -28,7 +29,33 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
 // Clerk production keys are restricted to bazunk.com. Render's default
 // hostname is not an authorized authentication origin; preserve the path,
 // query and hash while directing visitors to the canonical site.
-if (window.location.hostname === "bazunk-web.onrender.com") {
+const aliExpressCallback = "/api/integrations/aliexpress/callback";
+if (window.location.pathname === aliExpressCallback) {
+  const query = new URLSearchParams(window.location.search);
+  const code = query.get("code");
+  const state = query.get("state");
+  window.history.replaceState(null, "", aliExpressCallback);
+  const root = document.getElementById("root")!;
+  root.className = "mx-auto max-w-xl p-8";
+  if (!code || !state) {
+    root.textContent = "AliExpress authorisation was cancelled or is missing a code. Start again from the Bazunk admin.";
+  } else {
+    root.textContent = "Completing AliExpress authorisation…";
+    void nativeFetch(adminApiUrl(aliExpressCallback), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, state }),
+      referrerPolicy: "no-referrer",
+      signal: AbortSignal.timeout(30_000),
+    }).then(async response => {
+      root.textContent = response.ok
+        ? "AliExpress connected successfully. Return to the Bazunk admin and refresh the connection status."
+        : "AliExpress authorisation failed or expired. Start again from the Bazunk admin.";
+    }).catch(() => {
+      root.textContent = "AliExpress connection unavailable. Please retry from the Bazunk admin.";
+    });
+  }
+} else if (window.location.hostname === "bazunk-web.onrender.com") {
   window.location.replace(`https://bazunk.com${window.location.pathname}${window.location.search}${window.location.hash}`);
 } else {
   // Do not hold the entire storefront behind a potentially sleeping free-tier API.

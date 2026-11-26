@@ -7,6 +7,8 @@ import { logger } from "./lib/logger.js";
 import { WebhookHandlers } from "./webhookHandlers.js";
 import { handleDiditWebhook } from "./routes/verification.js";
 
+import { completeAliExpressAuthorization } from "./lib/aliexpressOAuth.js";
+
 const app: Express = express();
 
 // Render terminates TLS in front of us — trust it so req.protocol / IPs are right
@@ -80,10 +82,24 @@ if (process.env.CLERK_SECRET_KEY) {
   logger.warn("CLERK_SECRET_KEY is missing; authenticated marketplace API routes will return 401/500 until configured");
 }
 
-// AliExpress redirects to the marketplace domain; forward the one-time code server-to-server.
-app.get("/api/integrations/aliexpress/callback", async (req: Request, res: Response): Promise<void> => {
-  const code=typeof req.query.code==="string"?req.query.code:"";
-  const state=typeof req.query.state==="string"?req.query.state:"";
+// The static storefront relays the callback via POST. Direct API callbacks use GET.
+async function handleAliExpressCallback(req: Request, res: Response): Promise<void> {
+  const input = req.method === "POST" ? req.body : req.query;
+  const code = typeof input?.code === "string" ? input.code : "";
+  const state = typeof input?.state === "string" ? input.state : "";
+  res.set({ "Cache-Control": "no-store", "Referrer-Policy": "no-referrer" });
+  if (state.startsWith("bazunk.")) {
+    try {
+      const connected = await completeAliExpressAuthorization(state, code);
+      res.status(connected ? 200 : 400).send(connected
+        ? "AliExpress connected successfully. Return to the Bazunk admin and refresh the connection status."
+        : "AliExpress authorisation failed or expired. Start again from the Bazunk admin.");
+    } catch {
+      logger.warn("AliExpress callback could not be completed");
+      res.status(502).send("AliExpress connection unavailable. Please retry from the Bazunk admin.");
+    }
+    return;
+  }
   const token=process.env.ALIEXPRESS_INTERNAL_TOKEN;
   if(!code||!state){res.status(400).send("AliExpress authorization missing code or state. Start from Bazunk admin.");return;}
   if(!token){res.status(503).send("AliExpress internal connection is not configured.");return;}
@@ -94,7 +110,11 @@ app.get("/api/integrations/aliexpress/callback", async (req: Request, res: Respo
     if(!response.ok){logger.error({status:response.status},"AliExpress OAuth callback failed");res.status(502).send("AliExpress connection failed. Please retry authorization from Bazunk admin.");return;}
     res.status(200).send("AliExpress connected successfully. You can close this window.");
   }catch(err){logger.error({err},"AliExpress OAuth forwarding failed");res.status(502).send("AliExpress connection unavailable. Please retry.");}
-});
+}
+
+app.route("/api/integrations/aliexpress/callback")
+  .get(handleAliExpressCallback)
+  .post(handleAliExpressCallback);
 
 app.use("/api", router);
 
