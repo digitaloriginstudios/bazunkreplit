@@ -1,5 +1,5 @@
 import { requireAdmin } from "../middlewares/adminAuth.js";
-import { randomBytes,createHash } from "node:crypto";
+import { randomBytes,createHash,createCipheriv,createDecipheriv } from "node:crypto";
 import { getUncachableStripeClient } from "../stripeClient.js";
 import { Router } from "express";
 import { db } from "@workspace/db";
@@ -45,6 +45,8 @@ function ensureTables(){
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_admin_audit(id BIGSERIAL PRIMARY KEY,subject_id UUID NOT NULL,action TEXT NOT NULL,reason TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_saved(owner_email TEXT NOT NULL,listing_id UUID NOT NULL REFERENCES swap_listings(id),created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(owner_email,listing_id))`);
  await db.execute(sql`CREATE INDEX IF NOT EXISTS swap_search_idx ON swap_listings USING GIN(to_tsvector('simple',title||' '||description||' '||category||' '||wanted)) WHERE status='active'`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_photos(listing_id UUID NOT NULL REFERENCES swap_listings(id),position INTEGER NOT NULL CHECK(position BETWEEN 0 AND 3),mime TEXT NOT NULL CHECK(mime='image/jpeg'),data BYTEA NOT NULL CHECK(octet_length(data)<=524288),PRIMARY KEY(listing_id,position))`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_addresses(offer_id UUID NOT NULL REFERENCES swap_offers(id),owner_email TEXT NOT NULL,ciphertext TEXT NOT NULL,PRIMARY KEY(offer_id,owner_email))`);
  })().catch(e=>{setup=undefined;throw e;});
 }
 router.use("/swaps",async(_req,res,next)=>{
@@ -432,6 +434,40 @@ router.get("/seo/swap-sitemap.xml",async(_req,res)=>{
  res.type("application/xml").setHeader("Cache-Control","public, max-age=60");
  res.send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://www.bazunk.com/swap</loc></url>'+rows.filter(r=>uuid(r.id)).map(r=>'<url><loc>https://www.bazunk.com/swap/'+r.id+'</loc></url>').join("")+'</urlset>');
  }catch{res.status(503).end();}
+});
+
+
+router.get("/swaps/:id/photos/:position",async(req,res)=>{
+ try{const id=req.params.id,position=Number(req.params.position);if(!uuid(id)||!Number.isInteger(position)||position<0||position>3){res.status(404).end();return;}
+ const row=(await db.execute(sql`SELECT encode(p.data,'base64') AS data FROM swap_photos p JOIN swap_listings l ON l.id=p.listing_id WHERE p.listing_id=${id} AND p.position=${position} AND l.status='active'`)).rows[0];
+ if(!row){res.status(404).end();return;}res.set({"Content-Type":"image/jpeg","X-Content-Type-Options":"nosniff","Cache-Control":"public, max-age=60"}).send(Buffer.from(String(row.data),"base64"));
+ }catch{res.status(503).end();}
+});
+router.post("/swaps/:id/photos",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id,photos=req.body?.photos;
+ if(!uuid(id)||!Array.isArray(photos)||photos.length>4||photos.some(p=>typeof p!=="string"||p.length>699052||!/^[A-Za-z0-9+/]+={0,2}$/.test(p))){res.status(400).json({error:"Upload up to four JPEG photos, maximum 512 KiB each"});return;}
+ const buffers=photos.map(p=>Buffer.from(p,"base64"));if(buffers.some(b=>b.length<4||b.length>524288||b[0]!==255||b[1]!==216||b[2]!==255||b[b.length-2]!==255||b[b.length-1]!==217)){res.status(400).json({error:"Invalid JPEG photo"});return;}
+ await db.transaction(async tx=>{const l=(await tx.execute(sql`SELECT id FROM swap_listings WHERE id=${id} AND owner_email=${email} AND status='active' FOR UPDATE`)).rows[0];if(!l)throw new SwapConflict("Active owned listing required.");
+ await tx.execute(sql`DELETE FROM swap_photos WHERE listing_id=${id}`);for(let i=0;i<buffers.length;i++)await tx.execute(sql`INSERT INTO swap_photos(listing_id,position,mime,data) VALUES(${id},${i},'image/jpeg',decode(${buffers[i].toString("base64")},'base64'))`);});res.json({count:buffers.length});
+ }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Photo upload failed"});}
+});
+function addressKey(){const k=process.env.SWAP_ADDRESS_ENCRYPTION_KEY;if(!k||!/^[a-f0-9]{64}$/i.test(k))throw Error("Address encryption unavailable");return Buffer.from(k,"hex");}
+function encryptAddress(value:string,aad:string){const iv=randomBytes(12),c=createCipheriv("aes-256-gcm",addressKey(),iv);c.setAAD(Buffer.from(aad));const data=Buffer.concat([c.update(value,"utf8"),c.final()]);return [iv,c.getAuthTag(),data].map(b=>b.toString("base64")).join(".");}
+function decryptAddress(value:string,aad:string){const [iv,tag,data]=value.split(".").map(s=>Buffer.from(s,"base64"));const c=createDecipheriv("aes-256-gcm",addressKey(),iv);c.setAAD(Buffer.from(aad));c.setAuthTag(tag);return JSON.parse(Buffer.concat([c.update(data),c.final()]).toString("utf8"));}
+router.post("/swaps/offers/:id/address",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id;if(!uuid(id)){res.status(400).end();return;}
+ const fields=["name","line1","line2","city","postcode","country"] as const;const address:Record<string,string>={};for(const f of fields){const v=req.body?.[f];if(typeof v!=="string"||v.length>150||(f!=="line2"&&!v.trim())){res.status(400).json({error:"Invalid address"});return;}address[f]=v.trim();}
+ await db.transaction(async tx=>{const o=(await tx.execute(sql`SELECT o.status,o.proposer_email,t.owner_email AS target_email FROM swap_offers o JOIN swap_listings t ON t.id=o.target_id WHERE o.id=${id} FOR UPDATE OF o`)).rows[0];if(!o||o.status!=="accepted"||(email!==o.proposer_email&&email!==o.target_email))throw new SwapConflict("Accepted exchange required.");
+ const d=(await tx.execute(sql`SELECT method FROM swap_deliveries WHERE offer_id=${id} LIMIT 1`)).rows[0];if(d)throw new SwapConflict("Address changes unavailable after fulfilment begins.");
+ await tx.execute(sql`INSERT INTO swap_addresses(offer_id,owner_email,ciphertext) VALUES(${id},${email},${encryptAddress(JSON.stringify(address),id+":"+email)}) ON CONFLICT(offer_id,owner_email) DO UPDATE SET ciphertext=EXCLUDED.ciphertext`);});res.setHeader("Cache-Control","private, no-store");res.json({saved:true});
+ }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Secure address storage unavailable"});}
+});
+router.get("/swaps/offers/:id/address",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id;if(!uuid(id)){res.status(400).end();return;}
+ const o=await paymentOffer(id,email);if(!o||o.status!=="accepted"){res.status(404).end();return;}
+ const rows=(await db.execute(sql`SELECT owner_email,ciphertext FROM swap_addresses WHERE offer_id=${id} AND owner_email=${email}`)).rows;
+ res.setHeader("Cache-Control","private, no-store");res.json({own:rows[0]?decryptAddress(String(rows[0].ciphertext),id+":"+email):null});
+ }catch{res.status(503).json({error:"Secure address unavailable"});}
 });
 
 export default router;
