@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
-import { convertAmount } from "../fxRates.js";
+import { convertPaymentAmount } from "../fxRates.js";
 import { calculateFees, minor, percentage, allocate, type FeeItem } from "./marketplaceFees.js";
 import { randomUUID } from "crypto";
 import { featureEnabled } from "./featureFlags.js";
@@ -55,7 +55,7 @@ export async function quoteCart(input: unknown): Promise<CheckoutQuote> {
     const currency = String(row.currency ?? "GBP").toUpperCase();
     const listedPrice = Number(option?.price ?? row.price);
     const gbp = option ? option.priceGbp : row.price_gbp;
-    const priceGbp = gbp != null ? Number(gbp) : currency === "GBP" ? listedPrice : await convertAmount(listedPrice,currency,"GBP");
+    const priceGbp = gbp != null ? Number(gbp) : currency === "GBP" ? listedPrice : await convertPaymentAmount(listedPrice,currency,"GBP");
     let priceMinor=minor(priceGbp);
     // Only server-published, currently active flash events can change checkout prices.
     // The promotion is frozen into the existing fee snapshot and Stripe line items.
