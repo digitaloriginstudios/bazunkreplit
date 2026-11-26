@@ -1,3 +1,4 @@
+import { useToast } from "@/hooks/use-toast";
 import { shippingCountries, shippingCountryLabel, shippingZoneLabel, shipsToCountry } from "@/lib/listingShipping";
 import {useSeoMetadata} from "@/hooks/useSeoMetadata";
 import { createPortal } from "react-dom";
@@ -166,6 +167,7 @@ function ListingDeliveryCalculator({origin,zone,shippingPrice,formatPrice}:{orig
 }
 
 export function ListingPage() {
+  const { toast } = useToast();
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useWouter();
   const staticProduct = ALL_PRODUCTS.find((p) => p.id === parseInt(id ?? "0"));
@@ -336,7 +338,7 @@ export function ListingPage() {
   function handleNextImg() { setActiveImg((i) => (i === images.length - 1 ? 0 : i + 1)); }
 
   function handleBuyNow() {
-    if (isDemoListing || needsOption || shownQuantity === 0) return;
+    if (!product || isDemoListing || needsOption || shownQuantity === 0) return;
     addToCart(option ? { ...product, variantSku:option.sku, title:product.title + " · " + option.label,
       price:option.price, priceGbp:option.priceGbp ?? undefined, currency:apiProduct?.listingCurrency,
       image:option.image || product.image } : product);
@@ -382,6 +384,7 @@ export function ListingPage() {
     setTimeout(() => setWatchToast(null), 2000);
   }
 
+  const offerCurrency = apiProduct?.listingCurrency ?? "";
   const offerPrice = offerPreset ?? (offerCustom ? parseFloat(offerCustom) : 0);
   const offerRatio = product ? offerPrice / product.price : 0;
 
@@ -395,7 +398,7 @@ export function ListingPage() {
       if(!token)throw new Error("Please sign in to send an offer");
       const response=await fetch("/api/offers",{
         method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},
-        body:JSON.stringify({listingId:apiProduct.id,amount:offerPrice,message:offerMsg.trim()})
+        body:JSON.stringify({listingId:apiProduct.id,amount:offerPrice,currency:offerCurrency,message:offerMsg.trim()})
       });
       const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(data.error||"Offer could not be submitted");
@@ -980,7 +983,7 @@ export function ListingPage() {
                         <CheckCircle2 className="w-8 h-8 text-emerald-500" />
                       </motion.div>
                       <p className="font-bold text-gray-900 text-lg">Offer Sent! 🎉</p>
-                      <p className="text-sm text-slate-600 mt-1 mb-4">The seller is reviewing your offer of <span className="font-bold text-gray-700">£{offerPrice.toFixed(2)}</span>.</p>
+                      <p className="text-sm text-slate-600 mt-1 mb-4">The seller is reviewing your offer of <span className="font-bold text-gray-700">{offerCurrency} {offerPrice.toFixed(2)}</span>.</p>
                       <div className="flex gap-2 justify-center">
                         <button
                           onClick={resetOfferModal}
@@ -999,7 +1002,7 @@ export function ListingPage() {
                   ) : (
                     <>
                       {/* Quick presets */}
-                      <p className="text-xs font-semibold text-gray-500 mb-2">Quick offers</p>
+                      <p className="text-xs font-semibold text-gray-500 mb-2">Quick offers ({offerCurrency})</p>
                       <div className="grid grid-cols-4 gap-2 mb-4">
                         {[0.9, 0.85, 0.8, 0.75].map((ratio) => {
                           const price = parseFloat((product.price * ratio).toFixed(2));
@@ -1025,7 +1028,7 @@ export function ListingPage() {
                       {/* Custom input */}
                       <p className="text-xs font-semibold text-gray-500 mb-2">Or enter a custom amount</p>
                       <div className="relative mb-3">
-                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-bold">£</span>
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-bold">{offerCurrency}</span>
                         <input
                           type="number"
                           min="1"
@@ -1077,7 +1080,7 @@ export function ListingPage() {
                           disabled={!offerPrice || offerPrice <= 0 || offerSending}
                           className="flex-[2] py-3 rounded-xl bg-gradient-to-r from-[#3B4FD8] to-[#4A5CE8] text-white font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-40 shadow-sm"
                           data-testid="button-send-offer">
-                          {offerSending ? "Sending offer…" : offerPrice > 0 ? `Send Offer · £${offerPrice.toFixed(2)}` : "Send Offer"}
+                          {offerSending ? "Sending offer…" : offerPrice > 0 ? `Send Offer · ${offerCurrency} ${offerPrice.toFixed(2)}` : "Send Offer"}
                         </button>
                       </div>
                       {offerError && <p role="alert" className="text-sm font-semibold text-red-700 mt-3">{offerError}</p>}

@@ -250,6 +250,8 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
   useEffect(() => { let active = true; loadThirdLevelTaxonomy().then(() => { if (active) refreshThirdLevels(n => n + 1); }); return () => { active = false; }; }, []);
 
   const { t } = useLanguage();
+  const {countryCode: deliveryCountry}=useCurrency();
+  const [deliveryMode,setDeliveryMode]=useState("");
   const rawSearch = useSearch();
   const [, setLocation] = useLocation();
 
@@ -329,6 +331,7 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
   const browseSubsub = browseSub && selectedThirdLevels.length === 1 ? selectedThirdLevels[0] : "";
   const browseScope = new URLSearchParams();
   browseScope.set("region", marketRegion);
+  if(deliveryMode){browseScope.set("deliveryMode",deliveryMode);browseScope.set("destination",deliveryCountry);}
   if(collection)browseScope.set("collection",collection);
   if (browseCategory) browseScope.set("category", browseCategory);
   if (browseSub) browseScope.set("sub", browseSub);
@@ -521,6 +524,7 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
     setVerifiedOnly(false);
     setSort("newest");
     setListingTypes([]);
+    setDeliveryMode("");
     setShipFrom([]);
     setShipTo([]);
     setFreeShipping(false);
@@ -541,6 +545,7 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
     (minPrice ? 1 : 0) +
     (maxPrice ? 1 : 0) +
     (verifiedOnly ? 1 : 0) +
+    (deliveryMode ? 1 : 0) +
     shipFrom.length +
     shipTo.length +
     (freeShipping ? 1 : 0) +
@@ -706,6 +711,12 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
       </FilterSection>
 
       {/* Ships From */}
+      <FilterSection title="Delivery destination">
+        <p className="text-xs text-slate-500 mb-2">Delivering to {deliveryCountry}</p>
+        <select aria-label="Delivery destination filter" className="w-full rounded border p-2 text-sm" value={deliveryMode} onChange={e=>setDeliveryMode(e.target.value)}>
+          <option value="">All listings</option><option value="ships-to-me">Ships to me</option><option value="domestic">Domestic sellers</option><option value="international">International sellers</option>
+        </select>
+      </FilterSection>
       <FilterSection title="Ships From" defaultOpen={false}>
         <div className="space-y-1.5">
           {SHIP_FROM_OPTIONS.map((o) => {

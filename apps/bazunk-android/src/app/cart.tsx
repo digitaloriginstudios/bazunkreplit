@@ -30,7 +30,7 @@ function Checkout({signedIn=false,getToken}:{signedIn?:boolean;getToken?:()=>Pro
  // Persist the attempt BEFORE creating a server session. Retrying uses this same key.
  const attempt=cart.pending||`app_${Date.now()}_${Math.random().toString(36).slice(2,14)}`;
  if(!cart.pending)await cart.setPending(attempt);
- const r=cart.pending?await recoverCheckout(request,attempt):await request('/mobile/checkout',{attempt,items:cart.items,expectedTotal:quote!.total,delivery:'standard'});
+ const r=cart.pending?await recoverCheckout(request,attempt):await request('/mobile/checkout',{attempt,items:cart.items,expectedTotal:quote!.total,expectedCurrency:quote!.currency,delivery:'standard'});
  if(r.status==='expired')throw Error('This checkout expired. Check payment status to unlock your cart.');
  if(r.status==='paid'||r.status==='processing'){setNotice('Check payment status to confirm your order.');return;}
  await WebBrowser.openBrowserAsync(checkoutUrl(r.url));setNotice('Return here after payment. We verify payment with Stripe before clearing your cart.');

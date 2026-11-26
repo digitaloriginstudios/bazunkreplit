@@ -1,4 +1,5 @@
 import swapsRouter from "./swaps.js";
+import marketplacePreferencesRouter from "./marketplacePreferences.js";
 import { Router, type IRouter } from "express";
 import affiliatesRouter from "./affiliates.js";
 import healthRouter from "./health.js";
@@ -95,6 +96,7 @@ router.get("/public/homepage-intro", async (_req, res) => {
 
 router.use(swapsRouter);
 router.use(healthRouter);
+router.use(marketplacePreferencesRouter);
 router.use(stripeRouter);
 router.use(mobileCheckoutRouter);
 // Before legacy admin routes so real ledger endpoints supersede promotional-only settings.

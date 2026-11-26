@@ -1,0 +1,28 @@
+name: Global marketplace checks
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck:libs
+      - run: pnpm --filter @workspace/api-server run typecheck
+      - run: pnpm --filter @workspace/sellbuydeal run typecheck
+      - run: node --test scripts/pricing-cashback-policy.test.mjs scripts/mobile-shopping-contract.test.mjs
+      - run: pnpm build
+      - run: node --experimental-strip-types --test scripts/global-marketplace.test.mjs

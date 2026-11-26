@@ -851,9 +851,12 @@ async function runAppMigrations() {
   await run(sql`CREATE UNIQUE INDEX IF NOT EXISTS seller_compliance_active_unique ON seller_compliance_cases(LOWER(seller_email)) WHERE status IN ('open','awaiting_information','under_review','appealed')`, "seller_compliance_active_unique");
   // Global marketplace preparation: nullable metadata, no inferred historical currency.
   await run(sql`ALTER TABLE listings ADD COLUMN IF NOT EXISTS marketplace_country TEXT`, "listings.marketplace_country");
-  await run(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS delivery_country TEXT; ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_currency TEXT`, "users.global_preferences");
+  await run(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS delivery_country TEXT`, "users.delivery_country");
+  await run(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_currency TEXT`, "users.preferred_currency");
   await run(sql`ALTER TABLE orders ADD COLUMN IF NOT EXISTS transaction_currency TEXT`, "orders.transaction_currency");
-  await run(sql`ALTER TABLE auctions ADD COLUMN IF NOT EXISTS currency TEXT; ALTER TABLE flash_sales ADD COLUMN IF NOT EXISTS currency TEXT; ALTER TABLE classified_ads ADD COLUMN IF NOT EXISTS currency TEXT`, "special_sales.currency");
+  await run(sql`ALTER TABLE auctions ADD COLUMN IF NOT EXISTS currency TEXT`, "auctions.currency");
+  await run(sql`ALTER TABLE flash_sales ADD COLUMN IF NOT EXISTS currency TEXT`, "flash_sales.currency");
+  await run(sql`ALTER TABLE classified_ads ADD COLUMN IF NOT EXISTS currency TEXT`, "classified_ads.currency");
   await run(sql`INSERT INTO site_settings(key,value,updated_at) VALUES('feature_global_marketplace','false',NOW()) ON CONFLICT(key) DO NOTHING`, "site_settings.global_marketplace");
   // Regional activity schema: idempotent, additive and safe on existing databases.
   // Do not backfill historical records on startup: that requires a verified backup

@@ -1003,6 +1003,7 @@ function rowToAd(row: Record<string, unknown>): ClassifiedAd {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export function ClassifiedsPage() {
+  const sellEmbedded = new URLSearchParams(window.location.search).get("sellEmbed") === "1";
   const [marketRegion] = useMarketplaceRegion();
   const search = useSearch();
   const [ads, setAds] = useState<ClassifiedAd[]>([]);

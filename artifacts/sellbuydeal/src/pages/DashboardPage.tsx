@@ -1040,6 +1040,7 @@ function MyListingsSection({ userEmail }: { userEmail: string }) {
 }
 
 function OverviewContent({ user, onNavigate, recentEvents, activityLoading, activityError }: { user: { name: string; email: string; username: string; balance: number }; onNavigate: (section: string) => void; recentEvents: DashboardActivity[]; activityLoading: boolean; activityError: string }) {
+  const overviewFlags = useRawSettings();
   const initial = user.name.charAt(0).toUpperCase();
   const [myListings, setMyListings] = useState<StoredListing[]>([]);
   const [overviewOrders,setOverviewOrders] = useState<{bought:number;sold:number}>({bought:0,sold:0});
@@ -1111,10 +1112,10 @@ function OverviewContent({ user, onNavigate, recentEvents, activityLoading, acti
           <p>Welcome back, <strong>{user.name?.split(" ")[0] || user.username || "Seller"}</strong> 👋</p>
         </div>
         <div className="bz-arcade-actions">
-          <Link href="/sell/direct" className="bz-arcade-action bz-arcade-blue"><Plus size={19}/> List an Item</Link>
-          <button type="button" onClick={() => onNavigate("go-live")} className="bz-arcade-action bz-arcade-red"><Radio size={19}/> Go Live</button>
-          <button type="button" onClick={() => onNavigate("my-auctions")} className="bz-arcade-action bz-arcade-orange"><Gavel size={19}/> Start an Auction</button>
-          <button type="button" onClick={() => onNavigate("my-flash-sales")} className="bz-arcade-action bz-arcade-light"><Zap size={19}/> Flash Deals</button>
+          {isFeatureEnabled(overviewFlags, "quick_sell") && <Link href="/sell/direct" className="bz-arcade-action bz-arcade-blue"><Plus size={19}/> List an Item</Link>}
+          {isFeatureEnabled(overviewFlags, "live") && <button type="button" onClick={() => onNavigate("go-live")} className="bz-arcade-action bz-arcade-red"><Radio size={19}/> Go Live</button>}
+          {isFeatureEnabled(overviewFlags, "auctions") && <button type="button" onClick={() => onNavigate("my-auctions")} className="bz-arcade-action bz-arcade-orange"><Gavel size={19}/> Start an Auction</button>}
+          {isFeatureEnabled(overviewFlags, "flash_sales") && <button type="button" onClick={() => onNavigate("my-flash-sales")} className="bz-arcade-action bz-arcade-light"><Zap size={19}/> Flash Deals</button>}
         </div>
       </div>
       {/* Stats row */}
@@ -5696,12 +5697,12 @@ export function DashboardPage() {
     finally { setPhotoSaving(false); if (photoInputRef.current) photoInputRef.current.value = ""; }
   };
   const rawSettings = useRawSettings();
-  const liveEnabled = isFeatureEnabled(rawSettings, "live");
+
   const dashboardFeatureForItem: Record<string,string> = {
     "my-bids":"auctions", "offers":"offers", "deal-pilot":"deal_pilot", "my-auctions":"auctions", "my-flash-sales":"flash_sales",
     "auto-accept":"offers", "go-live":"live", "open-importers":"importers", "credits":"credits", "cashback":"cashback",
     "promotions":"promotions", "verification":"verification", "buyer-protection":"buyer_protection",
-    "disputes":"disputes_returns", "returns":"disputes_returns"
+    "disputes":"disputes_returns", "returns":"disputes_returns", "messages":"messaging", "watchlist":"watchers"
   };
   const visibleSidebarCategories = SIDEBAR_CATEGORIES.map(cat => ({...cat, items: cat.items.filter(item => {
     const f=dashboardFeatureForItem[item.id]; return !f || isFeatureEnabled(rawSettings,f);
@@ -5709,7 +5710,7 @@ export function DashboardPage() {
   const { items: watchlistItems, removeFromWatchlist, toggleAlert } = useWatchlist();
   const { addToCart } = useCart();
   const [, setLocation] = useLocation();
-  const [activeSection, setActiveSectionRaw] = useState(() => {
+  const [requestedSection, setActiveSectionRaw] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     let s = params.get("section");
     if (s === "payment") s = "seller-payouts"; // legacy redirect
@@ -5723,9 +5724,13 @@ export function DashboardPage() {
     const destination=section?DASHBOARD_PAGE_ROUTES[section]:undefined;
     if(destination) setLocation(destination);
   }, [setLocation]);
+  const requestedFeature = dashboardFeatureForItem[requestedSection];
+  const activeSection = requestedFeature && !isFeatureEnabled(rawSettings, requestedFeature) ? "overview" : requestedSection;
   const dashboardContentRef = useRef<HTMLElement>(null);
   const [sectionNavigation, setSectionNavigation] = useState(0);
   const setActiveSection = (id: string) => {
+    const feature=dashboardFeatureForItem[id];
+    if(feature && !isFeatureEnabled(rawSettings,feature)) return;
     const destination=DASHBOARD_PAGE_ROUTES[id];
     if(destination){
       setSidebarOpen(false);
@@ -5776,7 +5781,7 @@ export function DashboardPage() {
     return () => cancelAnimationFrame(frame);
   }, [sectionNavigation, activeSection]);
 
-  useEffect(() => { const f=dashboardFeatureForItem[activeSection]; if (f && !isFeatureEnabled(rawSettings,f)) setActiveSectionRaw("overview"); }, [activeSection, rawSettings]);
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (categoryMenuRef.current && !categoryMenuRef.current.contains(e.target as Node)) {

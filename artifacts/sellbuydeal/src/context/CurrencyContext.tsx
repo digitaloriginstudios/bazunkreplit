@@ -73,14 +73,25 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     try {
       const saved = localStorage.getItem(STORAGE_KEY) as CurrencyCode | null;
       if (saved && saved in CURRENCIES) return saved as CurrencyCode;
-      // USD is the default for new visitors regardless of browser locale.
-      return "USD";
+      return countryToCurrency(countryCode);
     } catch {
       return "GBP";
     }
   });
 
-  const currency = CURRENCIES[currencyCode];
+  const [rates,setRates]=useState<Partial<Record<CurrencyCode,number>>>({});
+  useEffect(()=>{
+    let active=true;
+    const refresh=async()=>{try{
+      const response=await fetch("/api/public/exchange-rates");
+      if(!response.ok)return;
+      const data=await response.json();
+      if(active && data.base==="GBP")setRates(Object.fromEntries(Object.entries(data.rates??{}).filter(([key,value])=>key in CURRENCIES && typeof value==="number" && Number.isFinite(value) && value>0)) as Partial<Record<CurrencyCode,number>>);
+    }catch{/* Existing display estimates remain available. */}};
+    void refresh();const timer=setInterval(refresh,15*60*1000);
+    return ()=>{active=false;clearInterval(timer);};
+  },[]);
+  const currency = {...CURRENCIES[currencyCode],rate:rates[currencyCode]??CURRENCIES[currencyCode].rate};
   const country = MARKET_COUNTRIES.find(c => c.code === countryCode) ?? MARKET_COUNTRIES.find(c => c.code === "US")!;
 
   function setCountry(code: string) {

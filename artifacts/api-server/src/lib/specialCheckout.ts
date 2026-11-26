@@ -5,7 +5,7 @@ import { getUncachableStripeClient } from "../stripeClient.js";
 import { calculateFees, minor, percentage } from "./marketplaceFees.js";
 import { logger } from "./logger.js";
 import type Stripe from "stripe";
-import { convertAmount } from "../fxRates.js";
+import { convertPaymentAmount } from "../fxRates.js";
 import { recordCashbackForSession } from "./cashback.js";
 import { ensureFindItTables } from "./findIt.js";
 
@@ -28,15 +28,15 @@ async function getSale(kind: SaleKind, id:string, buyer:string):Promise<Sale> {
     if(!r||r.status!=="accepted"||r.selected_offer_id!==id||String(r.buyer_email).toLowerCase()!==buyer)
       throw Error("Only the buyer of the selected Find It offer may pay");
     if(String(r.seller_email).toLowerCase()===buyer)throw Error("Cannot purchase your own offer");
-    const price=r.region==="us" ? await convertAmount(Number(r.price_minor)/100,"USD","GBP") : Number(r.price_minor)/100;
+    const price=r.region==="us" ? await convertPaymentAmount(Number(r.price_minor)/100,"USD","GBP") : Number(r.price_minor)/100;
     if(!Number.isFinite(price)||price<1)throw Error("Invalid offered price");
     return {id,seller_email:r.seller_email,title:r.item_title,image:r.photo??null,
       category:r.category,price,source:`find_it:${id}`,region:r.region,budgetMinor:Number(r.budget_minor)};
   }
   const row = kind === "auction"
-    ? (await db.execute(sql`SELECT id,title,images,category,seller_email,winner_email,winner_bid,status,end_time
+    ? (await db.execute(sql`SELECT id,title,images,category,seller_email,winner_email,winner_bid,status,end_time,currency,marketplace_region
         FROM auctions WHERE id=${id}`)).rows[0] as any
-    : (await db.execute(sql`SELECT id,title,image,category,seller_email,sale_price,status,starts_at,ends_at
+    : (await db.execute(sql`SELECT id,title,image,category,seller_email,sale_price,status,starts_at,ends_at,currency,marketplace_region
         FROM flash_sales WHERE id=${id}`)).rows[0] as any;
   if (!row) throw new Error("Sale not found");
   if (String(row.seller_email).toLowerCase() === buyer) throw new Error("You cannot buy your own item");
@@ -46,7 +46,11 @@ async function getSale(kind: SaleKind, id:string, buyer:string):Promise<Sale> {
   } else if(row.status !== "active" || new Date(row.starts_at).getTime() > Date.now() || new Date(row.ends_at).getTime() <= Date.now()) {
     throw new Error("Flash sale is no longer active");
   }
-  const price = Number(kind === "auction" ? row.winner_bid : row.sale_price);
+  const originalPrice = Number(kind === "auction" ? row.winner_bid : row.sale_price);
+  const currency = row.currency == null ? null : String(row.currency).toUpperCase();
+  if (currency && !["GBP","USD"].includes(currency)) throw new Error("Unsupported sale currency");
+  if (!currency && row.marketplace_region === "us") throw new Error("Sale currency requires confirmation before checkout");
+  const price = currency === "USD" ? await convertPaymentAmount(originalPrice,"USD","GBP") : originalPrice;
   if (!Number.isFinite(price) || price <= 0) throw new Error("Invalid sale price");
   return {id, seller_email:String(row.seller_email), title:String(row.title),image:kind==="auction" ? (Array.isArray(row.images) ? String(row.images[0] ?? "") || null : null) : row.image ?? null,category:row.category ?? null, price,source:`${kind}:${id}`};
 }
@@ -91,7 +95,7 @@ export async function startSpecialCheckout(kind:SaleKind,id:string,buyer:string,
     const quote=calculateFees([item],percentage(fees.buyer_protection_percent,6),fees.buyer_protection_fixed_gbp==null?100:minor(fees.buyer_protection_fixed_gbp),sale.price>=50?0:399);
     if(kind==="find_it"){
       // Recheck the maximum *including* delivery and protection at payment time.
-      const localTotal=sale.region==="us" ? await convertAmount(quote.totalMinor/100,"GBP","USD") : quote.totalMinor/100;
+      const localTotal=sale.region==="us" ? await convertPaymentAmount(quote.totalMinor/100,"GBP","USD") : quote.totalMinor/100;
       if(Math.round(localTotal*100)>Number(sale.budgetMinor))
         throw Error("Current payment total exceeds the buyer's budget; reopen the request");
     }
@@ -139,11 +143,11 @@ export async function fulfillSpecialCheckout(sessionId:string) {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${m.source}))`);
     const present=(await tx.execute(sql`SELECT fulfilled_at FROM special_checkout_reservations WHERE source=${m.source} FOR UPDATE`)).rows[0] as any;
     if(present?.fulfilled_at)return;
-    await tx.execute(sql`INSERT INTO orders(id,buyer_email,seller_email,item_title,item_image,price,status,stripe_session_id,line_no,buyer_protection_fee,seller_fee,seller_net,delivery_fee,buyer_total,fee_policy,created_at,updated_at)
+    await tx.execute(sql`INSERT INTO orders(id,buyer_email,seller_email,item_title,item_image,price,status,stripe_session_id,line_no,buyer_protection_fee,seller_fee,seller_net,delivery_fee,buyer_total,fee_policy,transaction_currency,created_at,updated_at)
       VALUES(${id},${m.buyerEmail},${m.sellerEmail},${String(titleRow?.title??m.source)},${titleRow?.image??null},
       ${Number(m.priceMinor)/100},'confirmed',${sessionId},1,${Number(m.protectionMinor??0)/100},
       ${Number(m.sellerFeeMinor??0)/100},${Number(m.sellerNetMinor??0)/100},${Number(m.deliveryMinor??0)/100},
-      ${Number(m.totalMinor)/100},${m.feePolicy??"special-v1"},NOW(),NOW())
+      ${Number(m.totalMinor)/100},${m.feePolicy??"special-v1"} ,${"GBP"},NOW(),NOW())
       ON CONFLICT(stripe_session_id,line_no) DO NOTHING`);
     // A paid flash-sale checkout must remove the item from active sale discovery.
     // Auction checkout already requires status='ended'; retain that status so

@@ -24,6 +24,7 @@ export async function ensureMarketplaceOffers() {
       expires_at timestamptz NOT NULL DEFAULT (NOW() + INTERVAL '7 days')
     )
   `);
+  await db.execute(sql`ALTER TABLE marketplace_offers ADD COLUMN IF NOT EXISTS currency TEXT`);
   await db.execute(sql`ALTER TABLE marketplace_offers ADD COLUMN IF NOT EXISTS expires_at timestamptz`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS marketplace_offers_buyer_idx ON marketplace_offers (LOWER(buyer_email),created_at DESC)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS marketplace_offers_seller_idx ON marketplace_offers (LOWER(seller_email),created_at DESC)`);
@@ -35,7 +36,7 @@ router.get("/offers", async (req, res) => {
     if (!email) return;
     await ensureMarketplaceOffers();
     const r=await db.execute(sql`
-      SELECT o.id, o.listing_id, o.buyer_email, o.seller_email, o.offer_price, o.listing_price,
+      SELECT o.id, o.listing_id, o.buyer_email, o.seller_email, o.offer_price, o.listing_price, o.currency,
              o.message, o.status, o.counter_price, o.counter_message, o.created_at, o.updated_at, o.expires_at,
              l.title AS product_title, l.image AS product_image, l.public_id AS public_id,
              COALESCE(l.seller_username,l.seller_name,'Bazunk seller') AS seller_name
@@ -60,16 +61,18 @@ router.post("/offers", async (req,res) => {
     }
     await ensureMarketplaceOffers();
     const l=(await db.execute(sql`
-      SELECT id,price,seller_email,status FROM listings WHERE id=${listingId} LIMIT 1
+      SELECT id,price,currency,seller_email,status FROM listings WHERE id=${listingId} LIMIT 1
     `)).rows[0] as any;
     if(!l || l.status!=="active"){res.status(404).json({error:"Listing not available"});return;}
     if(String(l.seller_email).toLowerCase()===email){res.status(403).json({error:"Cannot offer on your own listing"});return;}
+    const currency=String(l.currency??"").toUpperCase();
+    if (!["GBP","USD","EUR","AUD","CAD","NZD","CHF"].includes(currency) || (req.body?.currency ? req.body.currency!==currency : currency!=="GBP")) {res.status(409).json({error:"Confirm offer amount in listing currency",currency});return;}
     const id=randomUUID();
     const r=await db.execute(sql`
-      INSERT INTO marketplace_offers(id,listing_id,buyer_email,seller_email,offer_price,listing_price,message)
+      INSERT INTO marketplace_offers(id,listing_id,buyer_email,seller_email,offer_price,listing_price,message,currency)
       VALUES(${id},${listingId},${email},${String(l.seller_email).toLowerCase()},
-             ${amount.toFixed(2)},${String(l.price)},${message||null})
-      RETURNING id,status,created_at
+             ${amount.toFixed(2)},${String(l.price)},${message||null},${currency})
+      RETURNING id,status,created_at,currency
     `);
     res.status(201).json(r.rows[0]);
   }catch(err){console.error("Could not create offer",err);res.status(500).json({error:"Could not send offer"});}
@@ -93,6 +96,7 @@ router.patch("/offers/:id", async(req,res)=>{
     }else if(isBuyer&&offer.status==="countered"&&["accept-counter","decline-counter"].includes(action)){
       status=action==="accept-counter"?"counter_accepted":"counter_declined";
     }else{res.status(409).json({error:"Offer is not in a state that permits this response"});return;}
+    if (["accept","counter","accept-counter"].includes(action) && (!offer.currency || (req.body?.currency ? req.body.currency!==offer.currency : offer.currency!=="GBP"))) {res.status(409).json({error:"Confirm the original offer currency",currency:offer.currency});return;}
     const counter=action==="counter"?Number(req.body?.counterPrice):null;
     if(action==="counter"&&(!Number.isFinite(counter)||!counter||counter<=0)){
       res.status(400).json({error:"Enter a valid counter amount"});return;

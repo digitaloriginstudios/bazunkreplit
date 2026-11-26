@@ -12,6 +12,7 @@ import { useAuth as useClerkAuth } from "@clerk/react";
 
 type Bid = { id: string; bidder_name: string; bidder_email: string; amount: string; created_at: string };
 type Auction = {
+  marketplace_region?: string;
   id: string; title: string; description: string | null; images: string[];
   category: string | null; condition: string; seller_name: string; seller_email: string;
   starting_bid: string; current_bid: string | null; bid_count: number;

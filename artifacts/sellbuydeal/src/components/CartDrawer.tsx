@@ -259,7 +259,7 @@ export function CartDrawer() {
                     <div className="flex justify-between gap-2"><span>Buyer Protection</span><span>{quoteLoading ? "Calculating…" : quote ? formatPrice(quote.buyerProtectionFee) : "At checkout"}</span></div>
                     <div className="flex justify-between gap-2 border-t border-slate-200 pt-2 font-bold"><span>Estimated total</span><span>{quoteLoading ? "Calculating…" : total == null ? "At checkout" : formatPrice(total)}</span></div>
                     {quoteError && <p role="status" className="text-xs text-amber-800">Live fees are temporarily unavailable. Final charges are calculated at checkout.</p>}
-                    <p className="text-xs">Buyer Protection applies to eligible purchases. Final charges are confirmed at checkout.</p>
+                    <p className="text-xs">Buyer Protection applies to eligible purchases. The final amount is confirmed at checkout in GBP.</p>
                     <button type="button" onClick={() => setProtectionOpen(true)} className="flex items-center gap-2 text-sm font-bold text-blue-800 underline" data-testid="button-cart-buyer-protection"><Shield className="h-4 w-4"/> Buyer Protection details <ArrowRight className="h-4 w-4"/></button>
                   </div>
                 </details>
