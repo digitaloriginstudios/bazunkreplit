@@ -1,5 +1,5 @@
 import { requireAdmin } from "../middlewares/adminAuth.js";
-import { randomBytes,createHash } from "node:crypto";
+import { randomBytes,createHash,createCipheriv,createDecipheriv } from "node:crypto";
 import { getUncachableStripeClient } from "../stripeClient.js";
 import { Router } from "express";
 import { db } from "@workspace/db";
@@ -43,6 +43,12 @@ function ensureTables(){
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_cases(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),offer_id UUID NOT NULL REFERENCES swap_offers(id),opened_by TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('dispute','cancellation')),reason TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','resolved')),resolution TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS swap_open_case ON swap_cases(offer_id) WHERE status='open'`);
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_admin_audit(id BIGSERIAL PRIMARY KEY,subject_id UUID NOT NULL,action TEXT NOT NULL,reason TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_saved(owner_email TEXT NOT NULL,listing_id UUID NOT NULL REFERENCES swap_listings(id),created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(owner_email,listing_id))`);
+ await db.execute(sql`CREATE INDEX IF NOT EXISTS swap_search_idx ON swap_listings USING GIN(to_tsvector('simple',title||' '||description||' '||category||' '||wanted)) WHERE status='active'`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_photos(listing_id UUID NOT NULL REFERENCES swap_listings(id),position INTEGER NOT NULL CHECK(position BETWEEN 0 AND 3),mime TEXT NOT NULL CHECK(mime='image/jpeg'),data BYTEA NOT NULL CHECK(octet_length(data)<=524288),PRIMARY KEY(listing_id,position))`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_addresses(offer_id UUID NOT NULL REFERENCES swap_offers(id),owner_email TEXT NOT NULL,ciphertext TEXT NOT NULL,PRIMARY KEY(offer_id,owner_email))`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_notification_preferences(owner_email TEXT PRIMARY KEY,match_email BOOLEAN NOT NULL DEFAULT false,activity_email BOOLEAN NOT NULL DEFAULT false)`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_notification_outbox(id BIGSERIAL PRIMARY KEY,owner_email TEXT NOT NULL,kind TEXT NOT NULL,subject_id TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),sent_at TIMESTAMPTZ,UNIQUE(owner_email,kind,subject_id))`);
  })().catch(e=>{setup=undefined;throw e;});
 }
 router.use("/swaps",async(_req,res,next)=>{
@@ -53,7 +59,8 @@ router.get("/swaps",async(req,res)=>{
  try{
  const offset=Number(req.query.offset??0);
  if(!Number.isSafeInteger(offset)||offset<0||offset>10000){res.status(400).json({error:"Invalid offset"});return;}
- const rows=(await db.execute(sql`SELECT id,title,description,category,condition,wanted,value_minor,currency,created_at FROM swap_listings WHERE status='active' ORDER BY created_at DESC,id LIMIT 50 OFFSET ${offset}`)).rows;
+ const q=String(req.query.q??"").trim().slice(0,160),category=String(req.query.category??"").trim().slice(0,100);
+ const rows=(await db.execute(sql`SELECT id,title,description,category,condition,wanted,value_minor,currency,created_at FROM swap_listings WHERE status='active' AND (${q}='' OR to_tsvector('simple',title||' '||description||' '||category||' '||wanted) @@ plainto_tsquery('simple',${q})) AND (${category}='' OR lower(category)=lower(${category})) ORDER BY created_at DESC,id LIMIT 50 OFFSET ${offset}`)).rows;
  res.json({items:rows});
  }catch{res.status(503).json({error:"Swap catalogue unavailable"});}
 });
@@ -72,10 +79,66 @@ router.post("/swaps",async(req,res)=>{
  res.status(201).json(row);
  }catch{res.status(503).json({error:"Could not create swap listing"});}
 });
-router.get("/swaps/:id",async(req,res)=>{
+
+router.get("/swaps/saved",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;
+ res.setHeader("Cache-Control","private, no-store");res.json({items:(await db.execute(sql`SELECT l.id,l.title,l.description,l.category,l.condition,l.wanted,l.value_minor,l.currency,l.status,l.created_at FROM swap_saved s JOIN swap_listings l ON l.id=s.listing_id WHERE s.owner_email=${email} ORDER BY s.created_at DESC LIMIT 100`)).rows});
+ }catch{res.status(503).json({error:"Saved swaps unavailable"});}
+});
+router.post("/swaps/saved/:id",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id,saved=req.body?.saved;
+ if(!uuid(id)||typeof saved!=="boolean"){res.status(400).json({error:"Invalid save request"});return;}
+ if(saved){const row=(await db.execute(sql`INSERT INTO swap_saved(owner_email,listing_id) SELECT ${email},id FROM swap_listings WHERE id=${id} AND status='active' AND owner_email<>${email} ON CONFLICT DO NOTHING RETURNING listing_id`)).rows[0];if(!row){const existing=(await db.execute(sql`SELECT listing_id FROM swap_saved WHERE owner_email=${email} AND listing_id=${id}`)).rows[0];if(!existing){res.status(409).json({error:"Listing unavailable to save"});return;}}}
+ else await db.execute(sql`DELETE FROM swap_saved WHERE owner_email=${email} AND listing_id=${id}`);
+ res.json({saved});
+ }catch{res.status(503).json({error:"Could not update saved swaps"});}
+});
+router.get("/swaps/matches",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;
+ const rows=(await db.execute(sql`WITH mine AS (SELECT id,title,category,wanted,value_minor FROM swap_listings WHERE owner_email=${email} AND status='active' ORDER BY created_at DESC LIMIT 30),
+ candidates AS (SELECT id,title,description,category,condition,wanted,value_minor,currency,created_at FROM swap_listings WHERE owner_email<>${email} AND status='active' ORDER BY created_at DESC LIMIT 3000),
+ scored AS (SELECT c.*,m.id AS my_listing_id,m.title AS my_title,
+ ts_rank(to_tsvector('simple',c.title||' '||c.category),plainto_tsquery('simple',m.wanted)) AS wanted_score,
+ ts_rank(to_tsvector('simple',m.title||' '||m.category),plainto_tsquery('simple',c.wanted)) AS reciprocal_score,
+ (CASE WHEN lower(c.category)=lower(m.category) THEN 1 ELSE 0 END) AS category_match,
+ abs(c.value_minor-m.value_minor) AS value_gap FROM candidates c CROSS JOIN mine),
+ ranked AS (SELECT *,row_number() OVER(PARTITION BY id ORDER BY (wanted_score+reciprocal_score) DESC,category_match DESC,value_gap ASC,my_listing_id) AS rn FROM scored WHERE wanted_score>0 OR reciprocal_score>0 OR category_match=1)
+ SELECT id,title,description,category,condition,wanted,value_minor,currency,created_at,my_listing_id,my_title,wanted_score,reciprocal_score,category_match,value_gap FROM ranked WHERE rn=1 ORDER BY (wanted_score+reciprocal_score) DESC,category_match DESC,value_gap ASC,id LIMIT 50`)).rows;
+ res.setHeader("Cache-Control","private, no-store");res.json({items:rows});
+ }catch{res.status(503).json({error:"Recommendations unavailable"});}
+});
+
+
+router.get("/swaps/notification-preferences",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const row=(await db.execute(sql`SELECT match_email,activity_email FROM swap_notification_preferences WHERE owner_email=${email}`)).rows[0];res.setHeader("Cache-Control","private, no-store");res.json(row??{match_email:false,activity_email:false});}catch{res.status(503).json({error:"Preferences unavailable"});}
+});
+router.post("/swaps/notification-preferences",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const {match_email,activity_email}=req.body??{};if(typeof match_email!=="boolean"||typeof activity_email!=="boolean"){res.status(400).end();return;}
+ await db.execute(sql`INSERT INTO swap_notification_preferences(owner_email,match_email,activity_email) VALUES(${email},${match_email},${activity_email}) ON CONFLICT(owner_email) DO UPDATE SET match_email=EXCLUDED.match_email,activity_email=EXCLUDED.activity_email`);res.json({match_email,activity_email});}catch{res.status(503).json({error:"Preferences unavailable"});}
+});
+let notificationRunning=false;
+export async function runSwapNotifications(){
+ if(notificationRunning||process.env.SWAP_EMAIL_ENABLED!=="true"||!process.env.RESEND_API_KEY||!process.env.EMAIL_FROM)return;
+ notificationRunning=true;
+ try{
+ if(!await featureEnabled("swaps"))return;await ensureTables();
+ await db.execute(sql`INSERT INTO swap_notification_outbox(owner_email,kind,subject_id)
+ SELECT DISTINCT p.owner_email,'match',c.id::text FROM swap_notification_preferences p JOIN swap_listings m ON m.owner_email=p.owner_email AND m.status='active' JOIN swap_listings c ON c.owner_email<>m.owner_email AND c.status='active' AND c.created_at>NOW()-INTERVAL '24 hours' WHERE p.match_email AND to_tsvector('simple',c.title||' '||c.category) @@ plainto_tsquery('simple',m.wanted) AND to_tsvector('simple',m.title||' '||m.category) @@ plainto_tsquery('simple',c.wanted) LIMIT 500 ON CONFLICT DO NOTHING`);
+ await db.execute(sql`INSERT INTO swap_notification_outbox(owner_email,kind,subject_id)
+ SELECT p.owner_email,'activity',e.id::text FROM swap_events e JOIN swap_offers o ON o.id=e.offer_id JOIN swap_listings t ON t.id=o.target_id JOIN swap_notification_preferences p ON p.owner_email IN (o.proposer_email,t.owner_email) WHERE p.activity_email AND p.owner_email<>e.actor_email AND e.created_at>NOW()-INTERVAL '24 hours' AND e.event<>'new_message' ORDER BY e.id DESC LIMIT 500 ON CONFLICT DO NOTHING`);
+ const rows=(await db.execute(sql`SELECT q.id,q.owner_email,q.kind FROM swap_notification_outbox q JOIN swap_notification_preferences p ON p.owner_email=q.owner_email WHERE q.sent_at IS NULL AND q.created_at>NOW()-INTERVAL '20 hours' AND ((q.kind='match' AND p.match_email) OR (q.kind='activity' AND p.activity_email)) ORDER BY q.id LIMIT 25`)).rows;
+ for(const row of rows){
+ const match=row.kind==="match";
+ const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+process.env.RESEND_API_KEY,"Idempotency-Key":"bazunk-swap-"+row.id},body:JSON.stringify({from:process.env.EMAIL_FROM,to:[row.owner_email],subject:match?"New Bazunk Swap match":"Bazunk Swap activity",text:(match?"A possible mutual exchange matches your wanted item.":"There is new activity on your exchange.")+" Visit https://www.bazunk.com/dashboard/swaps to review it or change your email preferences."}),signal:AbortSignal.timeout(10000)});
+ if(response.ok)await db.execute(sql`UPDATE swap_notification_outbox SET sent_at=NOW() WHERE id=${row.id}`);
+ }
+ }catch{console.error("Swap notification cycle failed");}finally{notificationRunning=false;}
+}
+
+router.get("/swaps/:id",async(req,res,next)=>{
  try{
  const id=req.params.id;
- if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)){res.status(400).json({error:"Invalid swap ID"});return;}
+ if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)){next();return;}
  const row=(await db.execute(sql`SELECT id,title,description,category,condition,wanted,value_minor,currency,created_at FROM swap_listings WHERE id=${id} AND status='active'`)).rows[0];
  if(!row){res.status(404).json({error:"Swap not found"});return;}res.json(row);
  }catch{res.status(503).json({error:"Swap unavailable"});}
@@ -239,7 +302,13 @@ router.post("/swaps/offers/:id/delivery",async(req,res)=>{
  }
  await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},${"test_"+action})`);
  const done=(await tx.execute(sql`SELECT count(*)::int AS total FROM swap_deliveries WHERE offer_id=${id} AND received_at IS NOT NULL`)).rows[0];
- if(Number(done?.total)===2)await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},'test_both_receipts_confirmed')`);
+ if(Number(done?.total)===2){
+ if(Number(o.cash_minor)===0){
+ await tx.execute(sql`UPDATE swap_offers SET status='completed',revision=revision+1 WHERE id=${id} AND status='accepted'`);
+ await tx.execute(sql`UPDATE swap_listings SET status='completed' WHERE id IN (${o.target_id},${o.offered_id}) AND status='reserved'`);
+ await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},'test_exchange_completed')`);
+ }else await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},'test_both_receipts_confirmed')`);
+ }
  return {...result,bothConfirmed:Number(done?.total)===2};
  });res.json(result);
  }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Delivery update unavailable"});}
@@ -341,6 +410,93 @@ router.post("/admin/swaps/cases/:id/resolve",async(req,res)=>{
  await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${o.id},'admin',${"case_"+action})`);
  });res.json({ok:true});
  }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Resolution failed"});}
+});
+
+
+export async function handleSwapWebhook(req:import("express").Request,res:import("express").Response):Promise<void>{
+ const secret=process.env.SWAP_STRIPE_WEBHOOK_SECRET,signature=req.headers["stripe-signature"];
+ if(!secret||typeof signature!=="string"){res.status(400).json({error:"Webhook not configured"});return;}
+ try{
+ const stripe=await getUncachableStripeClient();
+ const event=stripe.webhooks.constructEvent(req.body,signature,secret);
+ if(event.livemode){res.status(400).json({error:"Test events only"});return;}
+ if(event.type==="checkout.session.completed"||event.type==="checkout.session.async_payment_succeeded"){
+ const s=event.data.object;
+ if(s.metadata?.kind==="bazunk_swap"&&uuid(s.metadata.payment_id)&&uuid(s.metadata.offer_id)&&s.payment_status==="paid"&&s.status==="complete"&&s.currency==="gbp"&&typeof s.payment_intent==="string"){
+ await ensureTables();
+ await db.execute(sql`UPDATE swap_payments SET status='paid',intent_id=${s.payment_intent},session_id=${s.id},updated_at=NOW() WHERE id=${s.metadata.payment_id} AND offer_id=${s.metadata.offer_id} AND status='pending' AND (session_id IS NULL OR session_id=${s.id}) AND amount_minor+fee_minor=${s.amount_total}`);
+ }
+ }else if(event.type==="refund.updated"||event.type==="refund.created"){
+ const refund=event.data.object;
+ if(refund.metadata?.kind==="bazunk_swap"&&uuid(refund.metadata.payment_id)&&typeof refund.payment_intent==="string"&&refund.currency==="gbp"){
+ await ensureTables();
+ if(refund.status==="succeeded")await db.execute(sql`UPDATE swap_payments SET status='refunded',updated_at=NOW() WHERE id=${refund.metadata.payment_id} AND intent_id=${refund.payment_intent} AND amount_minor+fee_minor=${refund.amount} AND status='refund_pending'`);
+ }
+ }
+ res.json({received:true});
+ }catch{res.status(400).json({error:"Swap webhook verification or processing failed"});}
+}
+router.post("/admin/swaps/payments/:id/refund",async(req,res)=>{
+ try{
+ const id=req.params.id,reason=req.body?.reason;
+ if(!uuid(id)||typeof reason!=="string"||reason.trim().length<10||reason.length>2000){res.status(400).json({error:"Refund reason required"});return;}
+ if(process.env.SWAP_TEST_PAYMENTS_ENABLED!=="true"){res.status(503).json({error:"Test payments disabled"});return;}
+ const stripe=await getUncachableStripeClient();if((await stripe.balance.retrieve()).livemode){res.status(409).json({error:"Test Stripe account required"});return;}
+ const p=await db.transaction(async tx=>{
+ const row=(await tx.execute(sql`SELECT p.* FROM swap_payments p JOIN swap_offers o ON o.id=p.offer_id WHERE p.id=${id} AND o.status='disputed' AND p.status IN ('paid','refund_pending') FOR UPDATE OF p,o`)).rows[0];
+ if(!row||!row.intent_id)throw new SwapConflict("Disputed paid exchange required.");
+ if(row.status==="paid"){await tx.execute(sql`UPDATE swap_payments SET status='refund_pending',updated_at=NOW() WHERE id=${id}`);await tx.execute(sql`INSERT INTO swap_admin_audit(subject_id,action,reason) VALUES(${id},'test_refund_requested',${reason.trim()})`);}
+ return row;
+ });
+ const refund=await stripe.refunds.create({payment_intent:String(p.intent_id),amount:Number(p.amount_minor)+Number(p.fee_minor),metadata:{kind:"bazunk_swap",payment_id:id}},{idempotencyKey:"swap-test-refund-"+id});
+ if(refund.status==="succeeded")await db.execute(sql`UPDATE swap_payments SET status='refunded',updated_at=NOW() WHERE id=${id} AND status='refund_pending'`);
+ res.json({status:refund.status,preview:true});
+ }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Test refund unavailable; reconcile before retrying"});}
+});
+
+
+router.get("/seo/swap-sitemap.xml",async(_req,res)=>{
+ try{
+ if(!await featureEnabled("swaps")){res.status(404).end();return;}
+ await ensureTables();
+ const rows=(await db.execute(sql`SELECT id,created_at FROM swap_listings WHERE status='active' ORDER BY id LIMIT 49999`)).rows;
+ res.type("application/xml").setHeader("Cache-Control","public, max-age=60");
+ res.send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://www.bazunk.com/swap</loc></url>'+rows.filter(r=>uuid(r.id)).map(r=>'<url><loc>https://www.bazunk.com/swap/'+r.id+'</loc></url>').join("")+'</urlset>');
+ }catch{res.status(503).end();}
+});
+
+
+router.get("/swaps/:id/photos/:position",async(req,res)=>{
+ try{const id=req.params.id,position=Number(req.params.position);if(!uuid(id)||!Number.isInteger(position)||position<0||position>3){res.status(404).end();return;}
+ const row=(await db.execute(sql`SELECT encode(p.data,'base64') AS data FROM swap_photos p JOIN swap_listings l ON l.id=p.listing_id WHERE p.listing_id=${id} AND p.position=${position} AND l.status='active'`)).rows[0];
+ if(!row){res.status(404).end();return;}res.set({"Content-Type":"image/jpeg","X-Content-Type-Options":"nosniff","Cache-Control":"public, max-age=60"}).send(Buffer.from(String(row.data),"base64"));
+ }catch{res.status(503).end();}
+});
+router.post("/swaps/:id/photos",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id,photos=req.body?.photos;
+ if(!uuid(id)||!Array.isArray(photos)||photos.length>4||photos.some(p=>typeof p!=="string"||p.length>699052||!/^[A-Za-z0-9+/]+={0,2}$/.test(p))){res.status(400).json({error:"Upload up to four JPEG photos, maximum 512 KiB each"});return;}
+ const buffers=photos.map(p=>Buffer.from(p,"base64"));if(buffers.some(b=>b.length<4||b.length>524288||b[0]!==255||b[1]!==216||b[2]!==255||b[b.length-2]!==255||b[b.length-1]!==217)){res.status(400).json({error:"Invalid JPEG photo"});return;}
+ await db.transaction(async tx=>{const l=(await tx.execute(sql`SELECT id FROM swap_listings WHERE id=${id} AND owner_email=${email} AND status='active' FOR UPDATE`)).rows[0];if(!l)throw new SwapConflict("Active owned listing required.");
+ await tx.execute(sql`DELETE FROM swap_photos WHERE listing_id=${id}`);for(let i=0;i<buffers.length;i++)await tx.execute(sql`INSERT INTO swap_photos(listing_id,position,mime,data) VALUES(${id},${i},'image/jpeg',decode(${buffers[i].toString("base64")},'base64'))`);});res.json({count:buffers.length});
+ }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Photo upload failed"});}
+});
+function addressKey(){const k=process.env.SWAP_ADDRESS_ENCRYPTION_KEY;if(!k||!/^[a-f0-9]{64}$/i.test(k))throw Error("Address encryption unavailable");return Buffer.from(k,"hex");}
+function encryptAddress(value:string,aad:string){const iv=randomBytes(12),c=createCipheriv("aes-256-gcm",addressKey(),iv);c.setAAD(Buffer.from(aad));const data=Buffer.concat([c.update(value,"utf8"),c.final()]);return [iv,c.getAuthTag(),data].map(b=>b.toString("base64")).join(".");}
+function decryptAddress(value:string,aad:string){const [iv,tag,data]=value.split(".").map(s=>Buffer.from(s,"base64"));const c=createDecipheriv("aes-256-gcm",addressKey(),iv);c.setAAD(Buffer.from(aad));c.setAuthTag(tag);return JSON.parse(Buffer.concat([c.update(data),c.final()]).toString("utf8"));}
+router.post("/swaps/offers/:id/address",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id;if(!uuid(id)){res.status(400).end();return;}
+ const fields=["name","line1","line2","city","postcode","country"] as const;const address:Record<string,string>={};for(const f of fields){const v=req.body?.[f];if(typeof v!=="string"||v.length>150||(f!=="line2"&&!v.trim())){res.status(400).json({error:"Invalid address"});return;}address[f]=v.trim();}
+ await db.transaction(async tx=>{const o=(await tx.execute(sql`SELECT o.status,o.proposer_email,t.owner_email AS target_email FROM swap_offers o JOIN swap_listings t ON t.id=o.target_id WHERE o.id=${id} FOR UPDATE OF o`)).rows[0];if(!o||o.status!=="accepted"||(email!==o.proposer_email&&email!==o.target_email))throw new SwapConflict("Accepted exchange required.");
+ const d=(await tx.execute(sql`SELECT method FROM swap_deliveries WHERE offer_id=${id} LIMIT 1`)).rows[0];if(d)throw new SwapConflict("Address changes unavailable after fulfilment begins.");
+ await tx.execute(sql`INSERT INTO swap_addresses(offer_id,owner_email,ciphertext) VALUES(${id},${email},${encryptAddress(JSON.stringify(address),id+":"+email)}) ON CONFLICT(offer_id,owner_email) DO UPDATE SET ciphertext=EXCLUDED.ciphertext`);});res.setHeader("Cache-Control","private, no-store");res.json({saved:true});
+ }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Secure address storage unavailable"});}
+});
+router.get("/swaps/offers/:id/address",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id;if(!uuid(id)){res.status(400).end();return;}
+ const o=await paymentOffer(id,email);if(!o||o.status!=="accepted"){res.status(404).end();return;}
+ const rows=(await db.execute(sql`SELECT owner_email,ciphertext FROM swap_addresses WHERE offer_id=${id} AND owner_email=${email}`)).rows;
+ res.setHeader("Cache-Control","private, no-store");res.json({own:rows[0]?decryptAddress(String(rows[0].ciphertext),id+":"+email):null});
+ }catch{res.status(503).json({error:"Secure address unavailable"});}
 });
 
 export default router;
