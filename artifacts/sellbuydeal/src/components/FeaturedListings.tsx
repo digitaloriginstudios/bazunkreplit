@@ -1,3 +1,4 @@
+import {RegionalPromotions,useRegionalGrowth} from "@/components/RegionalGrowth";
 import { useMarketplaceLoadingDelay } from "@/components/useMarketplaceLoadingDelay";
 import { useEffect, useState, useRef } from "react";
 import { MarketplaceLoader } from "@/components/MarketplaceLoader";
@@ -69,7 +70,8 @@ export function FeaturedListings({ mode = "recent" }: { mode?: "recent" | "promo
   const rawDesign=useRawSettings();
   const {resolvedTheme}=useTheme();
   const spotlightStyle=readSection(rawDesign,"home_spotlight",resolvedTheme==="dark"?"dark":"light");
-  const { formatPrice } = useCurrency();
+  const { formatPrice,countryCode } = useCurrency();
+  const regional=useRegionalGrowth();
   const { t } = useLanguage();
   const [spotlightListings, setSpotlightListings] = useState<Listing[]>([]);
   const [recentListings, setRecentListings] = useState<Listing[]>([]);
@@ -88,7 +90,7 @@ export function FeaturedListings({ mode = "recent" }: { mode?: "recent" | "promo
     setRecentListings([]);
     const endpoint = mode === "promoted"
       ? `${API_BASE}/api/listings/spotlight?region=${marketRegion}`
-      : `${API_BASE}/api/listings?limit=16&region=${marketRegion}`;
+      : `${API_BASE}/api/listings?limit=16&region=${marketRegion}${regional?.controls?.personalized_recommendations===false?"":"&deliveryMode=ships-to-me&destination="+encodeURIComponent(countryCode)}`;
     const timeout = setTimeout(() => controller.abort(), 10000);
     fetch(endpoint, { signal: controller.signal })
       .then(async response => {
@@ -110,7 +112,7 @@ export function FeaturedListings({ mode = "recent" }: { mode?: "recent" | "promo
         if (!controller.signal.aborted || controller.signal.reason?.name === "TimeoutError") setLoading(false);
       });
     return () => { clearTimeout(timeout); controller.abort("unmounted"); };
-  }, [marketRegion, mode]);
+  }, [marketRegion, mode,countryCode,regional?.controls?.personalized_recommendations]);
 
   const hasSpotlight = spotlightListings.length > 0;
   const displayListings = mode === "promoted" ? spotlightListings : recentListings;
