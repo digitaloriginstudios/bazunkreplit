@@ -3,7 +3,7 @@ import { featureEnabled } from "../lib/featureFlags.js";
 const rules:[RegExp,string][]=[
  [/^\/trust-proof(?:\/|$)/,"trust_proof"],
  [/^\/deal-pilot(?:\/|$)/,"deal_pilot"],[/^\/find-it(?:\/|$)/,"find_it"],
- [/^\/auctions(?:\/|$)/,"auctions"],[/^\/flash-sales(?:\/|$)/,"flash_sales"],[/^\/classifieds(?:\/|$)/,"classifieds"],[/^\/live(?:\/|$)|^\/livekit(?:\/|$)/,"live"],
+ [/^\/auctions(?:\/|$)/,"auctions"],[/^\/flash-sales(?:\/|$)/,"flash_sales"],[/^\/classifieds(?:\/|$)/,"classifieds"],[/^\/live(?:\/|$)|^\/livekit(?:\/|$)|^\/live-commerce(?:\/|$)/,"live"],
  [/^\/rewards(?:\/|$)|^\/treasure-hunt(?:\/|$)/,"games"],[/^\/referrals(?:\/|$)/,"referrals"],[/^\/promotions(?:\/|$)/,"promotions"],
  [/^\/watch(?:ers)?(?:\/|$)/,"watchers"],[/^\/messages(?:\/|$)/,"messaging"],[/^\/reviews(?:\/|$)/,"reviews"],[/^\/verification(?:\/|$)/,"verification"],
  [/^\/disputes(?:\/|$)|^\/returns(?:\/|$)/,"disputes_returns"],[/^\/user\/(?:search|import)|^\/user\/rapidapi/,"importers"]
