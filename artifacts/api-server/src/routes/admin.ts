@@ -1731,6 +1731,24 @@ router.get("/admin/aliexpress-product-preview", async (req, res) => {
   }
 });
 
+async function getAliExpressUsdToGbpRate(): Promise<number> {
+  const response = await fetch("https://api.frankfurter.dev/v1/latest?base=USD&symbols=GBP", { signal: AbortSignal.timeout(8000) });
+  if (!response.ok) throw new Error("FX unavailable");
+  const data = await response.json() as { rates?: { GBP?: number } };
+  const rate = Number(data.rates?.GBP);
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error("Invalid FX rate");
+  return rate;
+}
+
+router.get("/admin/aliexpress-import-rate", async (_req, res) => {
+  res.set("Cache-Control", "no-store");
+  try {
+    res.json({ usdToGbp: await getAliExpressUsdToGbpRate() });
+  } catch {
+    res.status(503).json({ error: "Verified USD/GBP rate unavailable. Try again before importing." });
+  }
+});
+
 // POST /api/admin/import-aliexpress-product — authenticated, reviewed single-product import.
 router.post("/admin/import-aliexpress-product", async (req, res) => {
   const body = req.body ?? {};
@@ -1765,14 +1783,17 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
   if (!seller) { res.status(400).json({ error: "Select an existing seller" }); return; }
   let rate: number;
   try {
-    const response = await fetch("https://api.frankfurter.dev/v1/latest?base=USD&symbols=GBP", { signal: AbortSignal.timeout(8000) });
-    if (!response.ok) throw new Error("FX unavailable");
-    const data = await response.json() as {rates?:{GBP?:number}};
-    rate = Number(data.rates?.GBP);
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error("Invalid FX rate");
+    rate = await getAliExpressUsdToGbpRate();
   } catch { res.status(503).json({ error: "Verified USD/GBP rate unavailable. No listing created." }); return; }
   const baseGbp = priceUsd * rate;
   const sellingPrice = Math.round((markupType === "fixed" ? baseGbp + markupValue : baseGbp * (1 + markupValue / 100)) * 100) / 100;
+  if (body.expectedSellingPrice !== undefined && body.expectedSellingPrice !== sellingPrice) {
+    res.status(409).json({
+      error: "The GBP price changed. Review the updated price before creating the listing.",
+      usdToGbp: rate,
+    });
+    return;
+  }
   const specs = JSON.stringify({source:"AliExpress",aliexpress_id:id,aliexpress_url:rawUrl,source_price:priceUsd,source_currency:"USD",exchange_rate_to_gbp:rate,markup_type:markupType,markup_value:markupValue,source_sync:true});
   try {
     const listingId = await db.transaction(async (tx) => {
