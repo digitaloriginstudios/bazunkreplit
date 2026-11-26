@@ -423,4 +423,15 @@ router.post("/admin/swaps/payments/:id/refund",async(req,res)=>{
  }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Test refund unavailable; reconcile before retrying"});}
 });
 
+
+router.get("/seo/swap-sitemap.xml",async(_req,res)=>{
+ try{
+ if(!await featureEnabled("swaps")){res.status(404).end();return;}
+ await ensureTables();
+ const rows=(await db.execute(sql`SELECT id,created_at FROM swap_listings WHERE status='active' ORDER BY id LIMIT 49999`)).rows;
+ res.type("application/xml").setHeader("Cache-Control","public, max-age=60");
+ res.send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://www.bazunk.com/swap</loc></url>'+rows.filter(r=>uuid(r.id)).map(r=>'<url><loc>https://www.bazunk.com/swap/'+r.id+'</loc></url>').join("")+'</urlset>');
+ }catch{res.status(503).end();}
+});
+
 export default router;
