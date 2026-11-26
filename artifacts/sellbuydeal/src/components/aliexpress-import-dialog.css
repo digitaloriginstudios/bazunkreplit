@@ -1,0 +1,24 @@
+.aliexpress-import-dialog {
+  position: fixed;
+  inset: 0;
+  width: min(32rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #dce4ee;
+  border-radius: 1rem;
+  background: #fff;
+  color: #152742;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 28%);
+  color-scheme: light;
+}
+
+.aliexpress-import-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.aliexpress-import-dialog::backdrop {
+  background: rgb(15 23 42 / 60%);
+}

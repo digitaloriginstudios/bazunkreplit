@@ -1,5 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useLayoutEffect, useRef, useId } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import "./aliexpress-import-dialog.css";
 import {
   Package, RefreshCw, Trash2, ExternalLink, Edit2, Plus, X,
   AlertCircle, CheckCircle2, Clock, Loader2, ShoppingBag, Info,
@@ -167,167 +169,176 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
     }
   }
 
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const descriptionId = useId();
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    return () => dialog?.close();
+  }, []);
+
   const inputCls = "w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F26B21]/30 focus:border-[#F26B21]";
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 16 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 16 }}
-        className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col"
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#F26B21] flex items-center justify-center">
-              <ShoppingBag className="w-4 h-4 text-white" />
-            </div>
-            <div>
-              <p className="font-bold text-gray-900">Import from AliExpress</p>
-              <p className="text-xs text-gray-400">Fill in the details from the AliExpress listing</p>
-            </div>
+  return createPortal(
+    <dialog
+      ref={dialogRef}
+      className="aliexpress-import-dialog"
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
+      onCancel={event => { event.preventDefault(); onClose(); }}
+      onClick={event => { if (event.target === event.currentTarget) onClose(); }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-[#F26B21] flex items-center justify-center">
+            <ShoppingBag className="w-4 h-4 text-white" />
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
-            <X className="w-4 h-4" />
-          </button>
+          <div>
+            <h2 id={titleId} className="font-bold text-gray-900">Import from AliExpress</h2>
+            <p id={descriptionId} className="text-xs text-gray-600">Fill in the details from the AliExpress listing</p>
+          </div>
         </div>
+        <button type="button" aria-label="Close AliExpress import" onClick={onClose} className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
 
-        {success ? (
-          <div className="px-6 py-10 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-              <CheckCircle2 className="w-7 h-7 text-emerald-600" />
-            </div>
-            <p className="font-bold text-gray-900 text-lg">Imported!</p>
-            <p className="text-sm text-gray-400 mt-1 mb-6 truncate px-4">{importedTitle}</p>
-            <div className="flex gap-3">
-              <button onClick={() => { setSuccess(false); setUrl(""); setTitle(""); setSupplierPriceUsd(""); setImageUrl(""); setDescription(""); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
-                Import Another
-              </button>
-              <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-gray-800 transition-colors">
-                Done
-              </button>
-            </div>
+      {success ? (
+        <div className="px-6 py-10 text-center">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-4">
+            <CheckCircle2 className="w-7 h-7 text-emerald-600" />
           </div>
-        ) : (
-          <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
-            {/* How-to tip */}
-            <div className="bg-blue-50 rounded-xl px-4 py-3 text-xs text-blue-700 flex items-start gap-2">
-              <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-              <span>Open the AliExpress product page, copy the URL and the details below. Bazunk will track this supplier link and manage your markup automatically.</span>
-            </div>
-
-            {/* AliExpress URL */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">AliExpress Product URL <span className="text-red-400">*</span></label>
-              <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://www.aliexpress.com/item/1005007123456789.html" className={inputCls} />
-              <button type="button" disabled={previewLoading || !url.trim()} onClick={() => void fetchPreview(url)} className="mt-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{previewLoading ? "Fetching product details…" : lastPreviewUrl === url ? "Refresh product details" : "Fetch product details"}</button>
-              {previewNotice && <p role="status" className="mt-2 text-xs text-gray-600">{previewNotice}</p>}
-              {imageUrl && <img src={imageUrl} alt="Supplier product preview" className="mt-2 h-28 w-28 rounded-lg border object-contain" />}
-
-            </div>
-
-            {/* Title */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Product Title <span className="text-red-400">*</span></label>
-              <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Waterproof LED Strip Lights 5m RGB" className={inputCls} />
-            </div>
-
-            {/* Price + Image */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Supplier Price (USD) <span className="text-red-400">*</span></label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">$</span>
-                  <input type="number" min="0.01" step="0.01" value={supplierPriceUsd} onChange={e => setSupplierPriceUsd(e.target.value)} placeholder="4.99" className={`${inputCls} pl-7`} />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Category <span className="text-red-400">*</span></label>
-                <select value={category} onChange={e => { setCategory(e.target.value); setSubcategory(""); }} className={`${inputCls} bg-white`}>
-                  <option value="">Select category</option>
-                  {SITE_CATEGORIES.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* Subcategory (same list as Direct Sale) */}
-            {subcategories.length > 0 && (
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Subcategory <span className="text-gray-400 font-normal">(optional)</span></label>
-                <select value={subcategory} onChange={e => setSubcategory(e.target.value)} className={`${inputCls} bg-white`}>
-                  <option value="">All subcategories</option>
-                  {subcategories.map(s => <option key={s.slug} value={s.slug}>{s.name}</option>)}
-                </select>
-              </div>
-            )}
-
-            {/* Condition + Image URL */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Condition</label>
-                <select value={condition} onChange={e => setCondition(e.target.value)} className={`${inputCls} bg-white`}>
-                  {CONDITIONS.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Image URL <span className="text-gray-400 font-normal">(optional)</span></label>
-                <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://ae01.alicdn.com/..." className={inputCls} />
-              </div>
-            </div>
-
-            {/* Description */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Description <span className="text-gray-400 font-normal">(optional)</span></label>
-              <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Copy the product description from AliExpress…" rows={2} className={`${inputCls} resize-none`} />
-            </div>
-
-            {/* Markup */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Markup Type</label>
-                <select value={markupType} onChange={e => setMarkupType(e.target.value as "percentage" | "fixed")} className={`${inputCls} bg-white`}>
-                  <option value="percentage">Percentage (%)</option>
-                  <option value="fixed">Fixed amount (£)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{markupType === "percentage" ? "Markup %" : "Add £"}</label>
-                <input type="number" min="0" step={markupType === "percentage" ? "1" : "0.01"} value={markupValue} onChange={e => setMarkupValue(e.target.value)} className={inputCls} />
-              </div>
-            </div>
-
-            {/* Live price preview */}
-            {bazunkPreview !== null && (
-              <div className="bg-[#F26B21]/8 rounded-xl px-4 py-3 flex items-center justify-between text-sm">
-                <span className="text-gray-500 text-xs">
-                  ${usd.toFixed(2)} USD → £{(usd * 0.79).toFixed(2)} GBP
-                  {markupType === "percentage" ? ` +${mv}%` : ` +£${mv.toFixed(2)}`}
-                </span>
-                <span className="font-black text-[#F26B21] text-base">£{bazunkPreview.toFixed(2)}</span>
-              </div>
-            )}
-
-            {error && (
-              <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                {error}
-              </div>
-            )}
-
-            <button
-              onClick={handleImport}
-              disabled={!canSubmit}
-              className="w-full py-2.5 rounded-xl bg-[#F26B21] text-white font-bold text-sm hover:bg-[#e0601d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              {loading ? "Importing…" : "Create Listing"}
+          <p className="font-bold text-gray-900 text-lg">Imported!</p>
+          <p className="text-sm text-gray-400 mt-1 mb-6 truncate px-4">{importedTitle}</p>
+          <div className="flex gap-3">
+            <button onClick={() => { setSuccess(false); setUrl(""); setTitle(""); setSupplierPriceUsd(""); setImageUrl(""); setDescription(""); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+              Import Another
+            </button>
+            <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-gray-800 transition-colors">
+              Done
             </button>
           </div>
-        )}
-      </motion.div>
-    </div>
+        </div>
+      ) : (
+        <div className="min-h-0 overflow-y-auto overscroll-contain flex-1 px-6 py-5 space-y-4">
+          {/* How-to tip */}
+          <div className="bg-blue-50 rounded-xl px-4 py-3 text-xs text-blue-700 flex items-start gap-2">
+            <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span>Open the AliExpress product page, copy the URL and the details below. Bazunk will track this supplier link and manage your markup automatically.</span>
+          </div>
+
+          {/* AliExpress URL */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">AliExpress Product URL <span className="text-red-400">*</span></label>
+            <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://www.aliexpress.com/item/1005007123456789.html" className={inputCls} />
+            <button type="button" disabled={previewLoading || !url.trim()} onClick={() => void fetchPreview(url)} className="mt-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{previewLoading ? "Fetching product details…" : lastPreviewUrl === url ? "Refresh product details" : "Fetch product details"}</button>
+            {previewNotice && <p role="status" className="mt-2 text-xs text-gray-600">{previewNotice}</p>}
+            {imageUrl && <img src={imageUrl} alt="Supplier product preview" className="mt-2 h-28 w-28 rounded-lg border object-contain" />}
+
+          </div>
+
+          {/* Title */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Product Title <span className="text-red-400">*</span></label>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Waterproof LED Strip Lights 5m RGB" className={inputCls} />
+          </div>
+
+          {/* Price + Image */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Supplier Price (USD) <span className="text-red-400">*</span></label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">$</span>
+                <input type="number" min="0.01" step="0.01" value={supplierPriceUsd} onChange={e => setSupplierPriceUsd(e.target.value)} placeholder="4.99" className={`${inputCls} pl-7`} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Category <span className="text-red-400">*</span></label>
+              <select value={category} onChange={e => { setCategory(e.target.value); setSubcategory(""); }} className={`${inputCls} bg-white`}>
+                <option value="">Select category</option>
+                {SITE_CATEGORIES.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Subcategory (same list as Direct Sale) */}
+          {subcategories.length > 0 && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Subcategory <span className="text-gray-400 font-normal">(optional)</span></label>
+              <select value={subcategory} onChange={e => setSubcategory(e.target.value)} className={`${inputCls} bg-white`}>
+                <option value="">All subcategories</option>
+                {subcategories.map(s => <option key={s.slug} value={s.slug}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Condition + Image URL */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Condition</label>
+              <select value={condition} onChange={e => setCondition(e.target.value)} className={`${inputCls} bg-white`}>
+                {CONDITIONS.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Image URL <span className="text-gray-400 font-normal">(optional)</span></label>
+              <input value={imageUrl} onChange={e => setImageUrl(e.target.value)} placeholder="https://ae01.alicdn.com/..." className={inputCls} />
+            </div>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Description <span className="text-gray-400 font-normal">(optional)</span></label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Copy the product description from AliExpress…" rows={2} className={`${inputCls} resize-none`} />
+          </div>
+
+          {/* Markup */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Markup Type</label>
+              <select value={markupType} onChange={e => setMarkupType(e.target.value as "percentage" | "fixed")} className={`${inputCls} bg-white`}>
+                <option value="percentage">Percentage (%)</option>
+                <option value="fixed">Fixed amount (£)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">{markupType === "percentage" ? "Markup %" : "Add £"}</label>
+              <input type="number" min="0" step={markupType === "percentage" ? "1" : "0.01"} value={markupValue} onChange={e => setMarkupValue(e.target.value)} className={inputCls} />
+            </div>
+          </div>
+
+          {/* Live price preview */}
+          {bazunkPreview !== null && (
+            <div className="bg-[#F26B21]/8 rounded-xl px-4 py-3 flex items-center justify-between text-sm">
+              <span className="text-gray-500 text-xs">
+                ${usd.toFixed(2)} USD → £{(usd * 0.79).toFixed(2)} GBP
+                {markupType === "percentage" ? ` +${mv}%` : ` +£${mv.toFixed(2)}`}
+              </span>
+              <span className="font-black text-[#F26B21] text-base">£{bazunkPreview.toFixed(2)}</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              {error}
+            </div>
+          )}
+
+          <button
+            onClick={handleImport}
+            disabled={!canSubmit}
+            className="w-full py-2.5 rounded-xl bg-[#F26B21] text-white font-bold text-sm hover:bg-[#e0601d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            {loading ? "Importing…" : "Create Listing"}
+          </button>
+        </div>
+      )}
+    </dialog>,
+    document.body,
   );
 }
 
