@@ -193,6 +193,8 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
   const [aliQueued, setAliQueued] = useState<string[]>([]);
   const [aliSelected, setAliSelected] = useState<Set<string>>(new Set());
   const [aliActiveUrl, setAliActiveUrl] = useState("");
+  const [aliMarket, setAliMarket] = useState<"uk" | "us">("uk");
+  const [aliQuantity, setAliQuantity] = useState("1");
   const [aliMarkup, setAliMarkup] = useState("30");
   const [aliShipping, setAliShipping] = useState("0");
   const [aliNotice, setAliNotice] = useState("");
@@ -1421,7 +1423,7 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
               {aliSearched&&!aliSearching&&!aliSearchError&&aliProducts.length===0&&<p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{aliSearchDiagnostic || "No usable AliExpress products were returned for this search."} You can also prepare products from AliExpress URLs below.</p>}
               {aliProducts.length>0&&<>
                 <p className="text-sm text-gray-500">{aliProducts.length} results · Page {aliPage} · {aliBulkSelected.size} selected</p>
-                <div className="flex flex-wrap gap-2"><button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={()=>setAliBulkSelected(new Set(aliProducts.map(p=>p.id)))}>Select all results</button><button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={()=>setAliBulkSelected(new Set())}>Clear selection</button><button type="button" disabled={aliBulkImporting||!aliBulkSelected.size} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" onClick={async()=>{setAliBulkImporting(true);setAliSearchError("");try{const response=await authFetch("/api/admin/import-selected-aliexpress",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[...aliBulkSelected].slice(0,30),markup:Number(aliMarkup),shipping:Number(aliShipping),sellerEmail:aliSeller})});const data=await response.json();if(!response.ok)throw new Error(data.error??"Bulk import failed");setAliDone(n=>n+(data.imported??0));setAliNotice(`${data.imported??0} imported; ${(data.results??[]).filter((r:{status:string})=>r.status==="failed").length} failed. ${(data.results??[]).filter((r:{reason?:string})=>r.reason).slice(0,3).map((r:{reason:string})=>r.reason).join("; ")}`)}catch(err){setAliSearchError(err instanceof Error?err.message:"Bulk import failed")}finally{setAliBulkImporting(false)}}}>{aliBulkImporting?"Importing…":`Bulk import (${Math.min(aliBulkSelected.size,30)})`}</button></div>
+                <div className="flex flex-wrap gap-2"><button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={()=>setAliBulkSelected(new Set(aliProducts.map(p=>p.id)))}>Select all results</button><button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={()=>setAliBulkSelected(new Set())}>Clear selection</button><button type="button" disabled={aliBulkImporting||!aliBulkSelected.size} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50" onClick={async()=>{setAliBulkImporting(true);setAliSearchError("");try{const response=await authFetch("/api/admin/import-selected-aliexpress",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[...aliBulkSelected].slice(0,30),markup:Number(aliMarkup),shipping:Number(aliShipping),sellerEmail:aliSeller,market:aliMarket,quantity:Number(aliQuantity)})});const data=await response.json();if(!response.ok)throw new Error(data.error??"Bulk import failed");setAliDone(n=>n+(data.imported??0));setAliNotice(`${data.imported??0} imported; ${(data.results??[]).filter((r:{status:string})=>r.status==="failed").length} failed. ${(data.results??[]).filter((r:{reason?:string})=>r.reason).slice(0,3).map((r:{reason:string})=>r.reason).join("; ")}`)}catch(err){setAliSearchError(err instanceof Error?err.message:"Bulk import failed")}finally{setAliBulkImporting(false)}}}>{aliBulkImporting?"Importing…":`Bulk import (${Math.min(aliBulkSelected.size,30)})`}</button></div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">{aliProducts.map(p=><div key={p.id} className="min-w-0 rounded-xl border border-gray-200 p-3 flex flex-col gap-2">
                   <div className="flex gap-3"><input type="checkbox" aria-label={`Select ${p.title}`} checked={aliBulkSelected.has(p.id)} onChange={e=>setAliBulkSelected(prev=>{const n=new Set(prev);e.target.checked?n.add(p.id):n.delete(p.id);return n})}/>{p.image?<img src={p.image} alt="" className="h-20 w-20 shrink-0 rounded-lg object-contain" loading="lazy"/>:<div className="h-20 w-20 shrink-0 rounded-lg bg-gray-100"/>}<div className="min-w-0"><p className="text-sm font-semibold text-gray-900 line-clamp-3">{p.title}</p><p className="mt-1 text-sm font-bold text-orange-600">{p.priceUsd>0?"$"+p.priceUsd.toFixed(2):"Price unavailable"}</p><p className="text-xs text-gray-500">{p.rating>0?p.rating.toFixed(1)+" ★":""} {p.sales>0?" · "+p.sales+" sold":""}</p></div></div>
                   <div className="mt-auto flex items-center justify-between gap-2"><a href={p.url} target="_blank" rel="noreferrer" className="text-xs text-indigo-600">View source ↗</a><button type="button" onClick={()=>{setAliActiveUrl(p.url);setAliModalOpen(true)}} className="rounded-lg bg-orange-500 px-3 py-2 text-xs font-bold text-white">Review & import</button></div>
@@ -1452,11 +1454,24 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
               <h3 className="font-black text-gray-900">Import settings</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label className="block text-sm font-bold text-gray-700 mb-2">Destination seller</label><select value={aliSeller} onChange={e=>setAliSeller(e.target.value)} className={inputCls+" w-full"}>{users.length===0?<option value={aliSeller}>{aliSeller}</option>:users.map(u=><option key={u.email} value={u.email}>{u.name?`${u.name} (${u.email})`:u.email}</option>)}</select></div>
               <div><label className="block text-sm font-bold text-gray-700 mb-2">Default markup (%)</label><input type="number" min="0" max="1000" step="1" value={aliMarkup} onChange={e=>setAliMarkup(e.target.value)} className={inputCls+" w-full"}/></div></div>
-              <p className="text-xs text-gray-500">AliExpress product details are not yet automatically retrieved. Each product must be reviewed before listing; the markup default is passed to the import form.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <label className="block text-sm font-bold text-gray-700">
+                  Marketplace
+                  <select value={aliMarket} onChange={e => setAliMarket(e.target.value === "us" ? "us" : "uk")} className={inputCls + " mt-2 w-full"}>
+                    <option value="uk">UK · GBP</option>
+                    <option value="us">USA · USD</option>
+                  </select>
+                </label>
+                <label className="block text-sm font-bold text-gray-700">
+                  Quantity per product
+                  <input type="number" min="1" max="2147483647" step="1" value={aliQuantity} onChange={e => setAliQuantity(e.target.value)} className={inputCls + " mt-2 w-full"} />
+                </label>
+              </div>
+              <p className="text-xs text-gray-500">These settings apply to bulk imports and are the defaults for products you review individually.</p>
               <button onClick={()=>{setAliActiveUrl(aliQueued.find(u=>aliSelected.has(u))??"");setAliModalOpen(true)}} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-white font-bold text-sm hover:bg-orange-600"><Plus className="w-4 h-4"/>Import a product</button>
               {aliDone>0&&<p className="text-sm text-green-700">{aliDone} product(s) imported this session.</p>}
             </div>
-            {aliModalOpen&&<ImportModal key={aliActiveUrl} initialUrl={aliActiveUrl} initialMarkup={aliMarkup} onClose={()=>setAliModalOpen(false)} onSuccess={()=>{setAliDone(n=>n+1);setAliSelected(prev=>{const next=new Set(prev);next.delete(aliActiveUrl);return next})}} userEmail={aliSeller} userName={users.find(u=>u.email===aliSeller)?.name??""}/>}
+            {aliModalOpen&&<ImportModal key={aliActiveUrl} initialUrl={aliActiveUrl} initialMarkup={aliMarkup} initialMarket={aliMarket} initialQuantity={aliQuantity} onClose={()=>setAliModalOpen(false)} onSuccess={()=>{setAliDone(n=>n+1);setAliSelected(prev=>{const next=new Set(prev);next.delete(aliActiveUrl);return next})}} userEmail={aliSeller} userName={users.find(u=>u.email===aliSeller)?.name??""}/>}
           </motion.div>
         )}
 

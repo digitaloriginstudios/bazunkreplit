@@ -1,3 +1,4 @@
+import { getAliExpressUsdToGbpRate } from "../lib/aliExpressImportDetails.js";
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
@@ -35,6 +36,7 @@ router.get("/supplier/imports", async (req, res) => {
         si.updated_at,
         l.title,
         l.price AS bazunk_price,
+        l.currency AS listing_currency,
         l.image,
         l.status AS listing_status,
         l.public_id
@@ -63,6 +65,7 @@ router.get("/supplier/imports", async (req, res) => {
         si.updated_at,
         l.title,
         l.price AS bazunk_price,
+        l.currency AS listing_currency,
         l.image,
         l.status AS listing_status,
         l.public_id
@@ -179,22 +182,31 @@ router.patch("/supplier/imports/:id", async (req, res) => {
   }
 
   const check = await db.execute(sql`
-    SELECT si.id, si.supplier_price, l.id AS listing_id
+    SELECT si.id, si.supplier_price, l.id AS listing_id,
+      CASE WHEN si.supplier_source = 'aliexpress' AND COALESCE(l.specifications, '') ~ '^\\s*\\{' THEN l.specifications::jsonb->>'marketplace_region' END AS market
     FROM supplier_imports si
     JOIN listings l ON l.id = si.listing_id
     WHERE si.id = ${id} ${sellerEmail ? sql`AND l.seller_email = ${String(sellerEmail)}` : sql``}
   `);
   if (check.rows.length === 0) { res.status(404).json({ error: "not found" }); return; }
 
-  const row = check.rows[0] as { supplier_price: string; listing_id: number };
-  const newPrice = calculateBazunkPrice(parseFloat(row.supplier_price), String(markupType), mv);
+  const row = check.rows[0] as { supplier_price: string; listing_id: number; market: string | null };
+  const regional = row.market === "uk" || row.market === "us";
+  let usdToGbp: number | undefined;
+  try {
+    if (regional) usdToGbp = await getAliExpressUsdToGbpRate();
+  } catch {
+    res.status(503).json({ error: "Verified USD/GBP rate unavailable. Try again before updating markup." }); return;
+  }
+  const newPrice = calculateBazunkPrice(parseFloat(row.supplier_price), String(markupType), mv, row.market === "us" ? 1 : usdToGbp);
+  const priceGbp = row.market === "us" ? Math.round(newPrice * usdToGbp! * 100) / 100 : newPrice;
 
   await db.execute(sql`
     UPDATE supplier_imports SET markup_type = ${String(markupType)}, markup_value = ${mv}, updated_at = NOW()
     WHERE id = ${id}
   `);
   await db.execute(sql`
-    UPDATE listings SET price = ${newPrice}, updated_at = NOW()
+    UPDATE listings SET price = ${newPrice}, price_gbp = CASE WHEN ${regional} THEN ${priceGbp} ELSE price_gbp END, updated_at = NOW()
     WHERE id = ${row.listing_id}
   `);
 

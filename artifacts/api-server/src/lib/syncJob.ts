@@ -1,3 +1,4 @@
+import { getAliExpressUsdToGbpRate } from "./aliExpressImportDetails.js";
 import { browseShopify } from "./shopifyPublic.js";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
@@ -18,6 +19,7 @@ interface ImportRow {
   markupType: string;
   markupValue: string;
   sellerEmail: string;
+  market: string | null;
   supplierUrl: string;
   supplierData: any;
 }
@@ -30,7 +32,7 @@ export async function syncImport(importId: number): Promise<{ ok: boolean; error
     if(Number.isInteger(parsed.syncDays)&&parsed.syncDays>=1&&parsed.syncDays<=90) ebayDays=parsed.syncDays;
   } catch { /* default to seven days */ }
   const rows = await db.execute(sql`
-    SELECT si.id, si.listing_id AS "listingId", si.supplier_id AS "supplierId", si.supplier_source AS "supplierSource", si.markup_type AS "markupType", si.markup_value AS "markupValue", si.supplier_url AS "supplierUrl", si.supplier_data AS "supplierData", l.seller_email AS "sellerEmail"
+    SELECT si.id, si.listing_id AS "listingId", si.supplier_id AS "supplierId", si.supplier_source AS "supplierSource", si.markup_type AS "markupType", si.markup_value AS "markupValue", si.supplier_url AS "supplierUrl", si.supplier_data AS "supplierData", l.seller_email AS "sellerEmail", CASE WHEN COALESCE(l.specifications, '') ~ '^\\s*\\{' THEN l.specifications::jsonb->>'marketplace_region' END AS market
     FROM supplier_imports si JOIN listings l ON l.id=si.listing_id WHERE si.id = ${importId}
   `);
 
@@ -48,7 +50,7 @@ export async function syncAllImports(): Promise<{ synced: number; errors: number
     if (Number.isInteger(parsed.syncDays) && parsed.syncDays >= 1 && parsed.syncDays <= 90) ebayDays = parsed.syncDays;
   } catch { /* use fallback */ }
   const rows = await db.execute(sql`
-    SELECT si.id, si.listing_id AS "listingId", si.supplier_id AS "supplierId", si.supplier_source AS "supplierSource", si.markup_type AS "markupType", si.markup_value AS "markupValue", si.supplier_url AS "supplierUrl", si.supplier_data AS "supplierData", l.seller_email AS "sellerEmail"
+    SELECT si.id, si.listing_id AS "listingId", si.supplier_id AS "supplierId", si.supplier_source AS "supplierSource", si.markup_type AS "markupType", si.markup_value AS "markupValue", si.supplier_url AS "supplierUrl", si.supplier_data AS "supplierData", l.seller_email AS "sellerEmail", CASE WHEN COALESCE(l.specifications, '') ~ '^\\s*\\{' THEN l.specifications::jsonb->>'marketplace_region' END AS market
     FROM supplier_imports si JOIN listings l ON l.id=si.listing_id
     WHERE si.sync_status <> 'disabled' AND COALESCE(si.supplier_data->>'syncEnabled','true') <> 'false'
       AND (si.supplier_source <> 'ebay-public' OR si.last_synced_at IS NULL OR si.last_synced_at <= NOW() - (${ebayDays} * INTERVAL '1 day'))
@@ -114,11 +116,15 @@ async function syncRow(row: ImportRow): Promise<{ ok: boolean; error?: string }>
     const apiKey = await rapidKeyForEmail(row.sellerEmail);
     if (!apiKey) return { ok: false, error: "Seller RapidAPI key is not connected" };
     const product = await fetchAliExpressProduct(row.supplierId, apiKey);
+    const regional = row.market === "uk" || row.market === "us";
+    const usdToGbp = regional ? await getAliExpressUsdToGbpRate() : undefined;
     const bazunkPrice = calculateBazunkPrice(
       product.priceUsd,
       row.markupType,
       parseFloat(row.markupValue),
+      row.market === "us" ? 1 : usdToGbp,
     );
+    const priceGbp = row.market === "us" ? Math.round(bazunkPrice * usdToGbp! * 100) / 100 : bazunkPrice;
 
     await db.execute(sql`
       UPDATE supplier_imports SET
@@ -134,6 +140,7 @@ async function syncRow(row: ImportRow): Promise<{ ok: boolean; error?: string }>
     await db.execute(sql`
       UPDATE listings SET
         price = ${bazunkPrice},
+        price_gbp = CASE WHEN ${regional} THEN ${priceGbp} ELSE price_gbp END,
         updated_at = NOW()
       WHERE id = ${row.listingId}
     `);
