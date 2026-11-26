@@ -49,6 +49,7 @@ function ensureTables(){
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_addresses(offer_id UUID NOT NULL REFERENCES swap_offers(id),owner_email TEXT NOT NULL,ciphertext TEXT NOT NULL,PRIMARY KEY(offer_id,owner_email))`);
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_notification_preferences(owner_email TEXT PRIMARY KEY,match_email BOOLEAN NOT NULL DEFAULT false,activity_email BOOLEAN NOT NULL DEFAULT false)`);
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_notification_outbox(id BIGSERIAL PRIMARY KEY,owner_email TEXT NOT NULL,kind TEXT NOT NULL,subject_id TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),sent_at TIMESTAMPTZ,UNIQUE(owner_email,kind,subject_id))`);
+ await db.execute(sql`ALTER TABLE swap_addresses ADD COLUMN IF NOT EXISTS share_shipping BOOLEAN NOT NULL DEFAULT false`);
  })().catch(e=>{setup=undefined;throw e;});
 }
 router.use("/swaps",async(_req,res,next)=>{
@@ -488,14 +489,17 @@ router.post("/swaps/offers/:id/address",async(req,res)=>{
  const fields=["name","line1","line2","city","postcode","country"] as const;const address:Record<string,string>={};for(const f of fields){const v=req.body?.[f];if(typeof v!=="string"||v.length>150||(f!=="line2"&&!v.trim())){res.status(400).json({error:"Invalid address"});return;}address[f]=v.trim();}
  await db.transaction(async tx=>{const o=(await tx.execute(sql`SELECT o.status,o.proposer_email,t.owner_email AS target_email FROM swap_offers o JOIN swap_listings t ON t.id=o.target_id WHERE o.id=${id} FOR UPDATE OF o`)).rows[0];if(!o||o.status!=="accepted"||(email!==o.proposer_email&&email!==o.target_email))throw new SwapConflict("Accepted exchange required.");
  const d=(await tx.execute(sql`SELECT method FROM swap_deliveries WHERE offer_id=${id} LIMIT 1`)).rows[0];if(d)throw new SwapConflict("Address changes unavailable after fulfilment begins.");
- await tx.execute(sql`INSERT INTO swap_addresses(offer_id,owner_email,ciphertext) VALUES(${id},${email},${encryptAddress(JSON.stringify(address),id+":"+email)}) ON CONFLICT(offer_id,owner_email) DO UPDATE SET ciphertext=EXCLUDED.ciphertext`);});res.setHeader("Cache-Control","private, no-store");res.json({saved:true});
+ await tx.execute(sql`INSERT INTO swap_addresses(offer_id,owner_email,ciphertext,share_shipping) VALUES(${id},${email},${encryptAddress(JSON.stringify(address),id+":"+email)},${req.body?.shareShipping===true}) ON CONFLICT(offer_id,owner_email) DO UPDATE SET ciphertext=EXCLUDED.ciphertext,share_shipping=EXCLUDED.share_shipping`);});res.setHeader("Cache-Control","private, no-store");res.json({saved:true});
  }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Secure address storage unavailable"});}
 });
 router.get("/swaps/offers/:id/address",async(req,res)=>{
  try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id;if(!uuid(id)){res.status(400).end();return;}
  const o=await paymentOffer(id,email);if(!o||o.status!=="accepted"){res.status(404).end();return;}
- const rows=(await db.execute(sql`SELECT owner_email,ciphertext FROM swap_addresses WHERE offer_id=${id} AND owner_email=${email}`)).rows;
- res.setHeader("Cache-Control","private, no-store");res.json({own:rows[0]?decryptAddress(String(rows[0].ciphertext),id+":"+email):null});
+ const rows=(await db.execute(sql`SELECT owner_email,ciphertext,share_shipping FROM swap_addresses WHERE offer_id=${id} AND owner_email IN (${email},${String(o.proposer_email===email?o.target_email:o.proposer_email)})`)).rows;
+ const own=rows.find(r=>r.owner_email===email),other=rows.find(r=>r.owner_email!==email);
+ const local=(await db.execute(sql`SELECT 1 FROM swap_deliveries WHERE offer_id=${id} AND method='local' LIMIT 1`)).rows.length>0;
+ const share=process.env.SWAP_TEST_FULFILMENT_ENABLED==="true"&&!local&&Number(o.cash_minor)===0&&own?.share_shipping===true&&other?.share_shipping===true;
+ res.setHeader("Cache-Control","private, no-store");res.json({own:own?decryptAddress(String(own.ciphertext),id+":"+email):null,shareShipping:own?.share_shipping===true,recipient:share&&other?decryptAddress(String(other.ciphertext),id+":"+String(other.owner_email)):null});
  }catch{res.status(503).json({error:"Secure address unavailable"});}
 });
 
