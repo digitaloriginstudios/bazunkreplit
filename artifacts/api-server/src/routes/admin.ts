@@ -1,4 +1,4 @@
-import adminInternationalRouter from "./adminInternational.js";
+import adminInternationalRouter, {publicInternationalRouter} from "./adminInternational.js";
 import { FEATURE_DEFINITIONS as PUBLIC_FEATURE_DEFINITIONS } from "../lib/featureFlags.js";
 import { shippingCountry, shippingZone, shipsToCountry } from "../lib/listingShipping.js";
 import { getAliExpressUsdToGbpRate, tidyAliExpressDescription } from "../lib/aliExpressImportDetails.js";
@@ -128,6 +128,7 @@ const cashbackDefaults={enabled:false,payoutPolicy:"Cashback payouts are not yet
 async function readCashback(){const r=await db.execute(sql`SELECT value FROM site_settings WHERE key='cashback_program_settings'`);try{return JSON.parse(String(r.rows[0]?.value))||cashbackDefaults}catch{return cashbackDefaults}}
 router.get("/cashback/settings",async(_req,res)=>{try{res.json(await readCashback())}catch{res.status(500).json({error:"Unavailable"})}});
 router.use(publicThemeStudioRouter);
+router.use(publicInternationalRouter);
 router.use("/admin", requireAdmin);
 router.use(adminThemeStudioRouter);
 router.use(adminInternationalRouter);
