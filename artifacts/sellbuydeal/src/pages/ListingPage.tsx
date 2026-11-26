@@ -1,3 +1,4 @@
+import { useToast } from "@/hooks/use-toast";
 import { shippingCountries, shippingCountryLabel, shippingZoneLabel, shipsToCountry } from "@/lib/listingShipping";
 import {useSeoMetadata} from "@/hooks/useSeoMetadata";
 import { createPortal } from "react-dom";
@@ -166,6 +167,7 @@ function ListingDeliveryCalculator({origin,zone,shippingPrice,formatPrice}:{orig
 }
 
 export function ListingPage() {
+  const { toast } = useToast();
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useWouter();
   const staticProduct = ALL_PRODUCTS.find((p) => p.id === parseInt(id ?? "0"));
@@ -336,7 +338,7 @@ export function ListingPage() {
   function handleNextImg() { setActiveImg((i) => (i === images.length - 1 ? 0 : i + 1)); }
 
   function handleBuyNow() {
-    if (isDemoListing || needsOption || shownQuantity === 0) return;
+    if (!product || isDemoListing || needsOption || shownQuantity === 0) return;
     addToCart(option ? { ...product, variantSku:option.sku, title:product.title + " · " + option.label,
       price:option.price, priceGbp:option.priceGbp ?? undefined, currency:apiProduct?.listingCurrency,
       image:option.image || product.image } : product);
