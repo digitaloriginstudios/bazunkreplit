@@ -67,7 +67,7 @@ function Negotiation({target,mine}:{target:string|null;mine:boolean}){
  {!offers.length&&<p>No offers yet.</p>}
  {offers.map(o=><article key={o.id} className="space-y-2 rounded-xl border p-4"><h3 className="font-bold">{o.offered_title} ↔ {o.target_title}</h3><p>{o.is_proposer?"Outgoing":"Incoming"} · {o.status} · Revision {o.revision}</p><p>{o.cash_minor===0?"No cash adjustment":((o.cash_minor>0)===o.is_proposer?"You pay ":"You receive ")+"£"+(Math.abs(o.cash_minor)/100).toFixed(2)}</p>
  {o.status==="accepted"&&<p>Items reserved. Do not dispatch or make real payments until exchange protection is available.</p>}
- {o.status==="accepted"&&<SwapPayment offer={o}/>}
+ {o.status==="accepted"&&<><SwapPayment offer={o}/><SwapDelivery offer={o}/></>}
  {o.status==="pending"&&<div className="flex flex-wrap gap-2">{(o.is_last_actor?["withdraw"]:["accept","decline","counter"]).map(action=><button key={action} className={button} disabled={busy} onClick={()=>{if(action==="accept"&&!window.confirm("Reserve both items? Payments and dispatch are not available yet."))return;void act(()=>api("/offers/"+o.id+"/action",{action,revision:o.revision,...(action==="counter"?{cashMinor:minor(counter[o.id]??String(o.cash_minor/100))}:{})}),"Offer updated.");}}>{action}</button>)}
  {!o.is_last_actor&&<label className="w-full">Counter amount (positive: original proposer pays; negative: target owner pays)<input className={field} type="number" step=".01" value={counter[o.id]??String(o.cash_minor/100)} onChange={e=>setCounter(v=>({...v,[o.id]:e.target.value}))}/></label>}</div>}
  <button className="font-bold text-blue-700" disabled={busy} onClick={()=>void act(async()=>{const data=await api("/offers/"+o.id+"/history");setHistory(h=>({...h,[o.id]:data.items}));},"History loaded.")}>View history</button>
@@ -88,4 +88,29 @@ function SwapPayment({offer}:{offer:Offer}){
  {owes&&data?.testEnabled&&(!own||own.status==="pending")&&<button disabled={busy} className={button} onClick={()=>void run("checkout")}>Open test checkout</button>}
  {owes&&own?.status==="pending"&&<button disabled={busy} className="ml-2 font-bold text-blue-700" onClick={()=>void run("verify")}>Verify test payment</button>}
  <button disabled={busy} className="ml-2 font-bold text-blue-700" onClick={()=>void run("load")}>Refresh status</button></div>;
+}
+
+type Delivery={is_mine:boolean;carrier:string|null;tracking:string|null;dispatched_at:string|null;received_at:string|null;method:"shipping"|"local"};
+function SwapDelivery({offer}:{offer:Offer}){
+ const {getToken}=useAuth();
+ const [items,setItems]=useState<Delivery[]>([]),[method,setMethod]=useState<"shipping"|"local">("shipping"),[carrier,setCarrier]=useState(""),[tracking,setTracking]=useState(""),[code,setCode]=useState(""),[secret,setSecret]=useState(""),[error,setError]=useState(""),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
+ async function api(body?:unknown){const token=await getToken();if(!token)throw Error("Sign in required.");const r=await fetch("/api/swaps/offers/"+offer.id+"/delivery",{cache:"no-store",method:body?"POST":"GET",headers:{Authorization:"Bearer "+token,...(body?{"Content-Type":"application/json"}:{})},...(body?{body:JSON.stringify(body)}:{})});const data=await r.json();if(!r.ok)throw Error(data.error||"Delivery request failed");return data;}
+ async function refresh(){const d=await api();setItems(d.items);if(d.items.length)setMethod(d.items[0].method);}
+ useEffect(()=>{void refresh().catch(e=>setError(e.message));},[offer.id]);
+ async function act(action:string){if(busy)return;setBusy(true);setError("");setNotice("");try{const d=await api({action,carrier,tracking,code:code.trim()});if(d.code)setSecret(d.code);if(action==="local_confirm")setCode("");setNotice(d.bothConfirmed?"Both test receipts confirmed. No funds released.":"Test exchange updated.");await refresh();}catch(e){setError(e instanceof Error?e.message:"Update failed");}finally{setBusy(false);}}
+ const own=items.find(i=>i.is_mine),other=items.find(i=>!i.is_mine);
+ return <section className="space-y-3 rounded-xl border bg-white p-4"><h4 className="font-bold text-blue-800">Two-way delivery · test preview</h4><p className="text-sm">Use fictional tracking details only. Do not dispatch or meet for a real exchange yet.</p>
+ {error&&<p role="alert" className="text-red-700">{error}</p>}{notice&&<p role="status">{notice}</p>}
+ <div className="grid gap-2 sm:grid-cols-2">{[true,false].map(mine=>{const d=mine?own:other;return <div key={String(mine)} className="rounded-xl border p-3"><b>{mine?"Your item":"Other member's item"}</b><p>{d?.received_at?"Receipt confirmed":d?.dispatched_at?"Dispatched":d?.method==="local"?"Collection code generated":"Awaiting handover"}</p>{d?.tracking&&<p className="break-all">{d.carrier}: {d.tracking}</p>}</div>;})}</div>
+ {own?.received_at&&other?.received_at?<p className="font-bold">Both receipts confirmed in test mode.</p>:<>
+ <label className="block">Exchange method<select className={field} disabled={items.length>0||busy} value={method} onChange={e=>setMethod(e.target.value as "shipping"|"local")}><option value="shipping">Tracked shipping</option><option value="local">Local collection</option></select></label>
+ {method==="shipping"?<>
+ {!own&&<form className="space-y-2" onSubmit={e=>{e.preventDefault();void act("dispatch");}}><label className="block">Carrier<input className={field} required maxLength={80} value={carrier} onChange={e=>setCarrier(e.target.value)}/></label><label className="block">Tracking reference<input className={field} required minLength={3} maxLength={120} value={tracking} onChange={e=>setTracking(e.target.value)}/></label><button className={button} disabled={busy}>Record test dispatch</button></form>}
+ {other?.dispatched_at&&!other.received_at&&<button className={button} disabled={busy} onClick={()=>{if(window.confirm("Confirm simulated receipt of the other item?"))void act("receive");}}>Confirm test receipt</button>}
+ </>:<>
+ {!own?.received_at&&<button className={button} disabled={busy} onClick={()=>void act("local_code")}>Generate test collection code</button>}
+ {secret&&!own?.received_at&&<p className="break-all">Your code (expires in 15 minutes): <b>{secret}</b></p>}
+ {!other?.received_at&&<form className="space-y-2" onSubmit={e=>{e.preventDefault();void act("local_confirm");}}><label className="block">Other member's collection code<input className={field} required minLength={32} maxLength={32} value={code} onChange={e=>setCode(e.target.value)}/></label><button className={button} disabled={busy}>Confirm test collection</button></form>}
+ </>}</>}
+ <button className="font-bold text-blue-700" disabled={busy} onClick={()=>void refresh().catch(e=>setError(e.message))}>Refresh delivery status</button></section>;
 }
