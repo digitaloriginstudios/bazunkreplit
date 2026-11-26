@@ -99,6 +99,7 @@ const DashboardPage = React.lazy(() => import("@/pages/DashboardPage").then(modu
 const MyStorePage = React.lazy(() => import("@/pages/DashboardPage").then(module => ({ default: module.MyStorePage })));
 const ImportersPage = React.lazy(() => import("@/pages/ImportersPage").then(module => ({ default: module.ImportersPage })));
 const ImporterWorkspacePage = React.lazy(() => import("@/pages/ImporterWorkspacePage").then(module => ({ default: module.ImporterWorkspacePage })));
+import {DiscoveryPage,discoveryPages} from "@/pages/DiscoveryPage";
 import { BrowsePage } from "@/pages/BrowsePage";
 const ListingPage = React.lazy(() => import("@/pages/ListingPage").then(module => ({ default: module.ListingPage })));
 const TrustProofPage = React.lazy(() => import("@/pages/TrustProofPage").then(module => ({ default: module.TrustProofPage })));
@@ -457,6 +458,7 @@ function Router() {
       <Route path="/importers">{() => <FeatureGate feature="importers" name="Importers"><ImportersPage /></FeatureGate>}</Route>
       <Route path="/browse">{() => <BrowsePage />}</Route>
       <Route path="/deals">{()=><BrowsePage collection="deals" />}</Route>
+      {discoveryPages.filter(([slug])=>slug!=="deals").map(([slug])=><Route key={slug} path={"/"+slug}>{()=><DiscoveryPage key={slug} slug={slug}/>}</Route>)}
       <Route path="/eco">{()=><BrowsePage collection="eco" />}</Route>
       <Route path="/search">{() => <BrowsePage />}</Route>
       <Route path="/listing/:id">{()=><ListingErrorBoundary><ListingPage /></ListingErrorBoundary>}</Route>
