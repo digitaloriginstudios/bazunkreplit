@@ -64,6 +64,7 @@ const NAV = [
   { label: "Feature Toggles", href: "/admin/feature-toggles", icon: Flag },
   { label: "Email Templates", href: "/admin/emails", icon: Mail },
   { label: "Settings",   href: "/admin/settings",   icon: Settings        },
+  { label: "Affiliate Programme", href: "/admin/affiliates", icon: Megaphone },
   { label: "Advertising", href: "/admin/advertising", icon: Megaphone },
 ];
 
