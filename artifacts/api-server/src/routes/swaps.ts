@@ -1,3 +1,4 @@
+import { requireAdmin } from "../middlewares/adminAuth.js";
 import { randomBytes,createHash } from "node:crypto";
 import { getUncachableStripeClient } from "../stripeClient.js";
 import { Router } from "express";
@@ -39,6 +40,9 @@ function ensureTables(){
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_messages(id BIGSERIAL PRIMARY KEY,offer_id UUID NOT NULL REFERENCES swap_offers(id),sender_email TEXT NOT NULL,body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
  await db.execute(sql`CREATE INDEX IF NOT EXISTS swap_messages_thread ON swap_messages(offer_id,id DESC)`);
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_activity_reads(event_id BIGINT NOT NULL REFERENCES swap_events(id),reader_email TEXT NOT NULL,PRIMARY KEY(event_id,reader_email))`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_cases(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),offer_id UUID NOT NULL REFERENCES swap_offers(id),opened_by TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('dispute','cancellation')),reason TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','resolved')),resolution TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+ await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS swap_open_case ON swap_cases(offer_id) WHERE status='open'`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_admin_audit(id BIGSERIAL PRIMARY KEY,subject_id UUID NOT NULL,action TEXT NOT NULL,reason TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
  })().catch(e=>{setup=undefined;throw e;});
 }
 router.use("/swaps",async(_req,res,next)=>{
@@ -275,6 +279,68 @@ router.post("/swaps/offers/:id/messages",async(req,res)=>{
  await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},'new_message')`);return row;
  });res.status(201).json({...result,is_mine:true});
  }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Message could not be sent"});}
+});
+
+
+router.post("/swaps/offers/:id/dispute",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id,{reason,kind}=req.body??{};
+ if(!uuid(id)||!["dispute","cancellation"].includes(kind)||typeof reason!=="string"||reason.trim().length<10||reason.length>2000){res.status(400).json({error:"Enter a reason of 10–2000 characters"});return;}
+ const row=await db.transaction(async tx=>{
+ const o=(await tx.execute(sql`SELECT o.*,t.owner_email AS target_email FROM swap_offers o JOIN swap_listings t ON t.id=o.target_id WHERE o.id=${id} FOR UPDATE OF o`)).rows[0];
+ if(!o||o.status!=="accepted"||(email!==o.proposer_email&&email!==o.target_email))throw new SwapConflict("Accepted exchange required.");
+ const c=(await tx.execute(sql`INSERT INTO swap_cases(offer_id,opened_by,kind,reason) VALUES(${id},${email},${kind},${reason.trim()}) RETURNING id,status`)).rows[0];
+ await tx.execute(sql`UPDATE swap_offers SET status='disputed',revision=revision+1 WHERE id=${id}`);
+ await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},'case_opened')`);return c;
+ });res.status(201).json(row);
+ }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Could not open case"});}
+});
+router.get("/swaps/offers/:id/dispute",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id;
+ if(!uuid(id)||!await paymentOffer(id,email)){res.status(404).json({error:"Exchange unavailable"});return;}
+ res.setHeader("Cache-Control","private, no-store");res.json({items:(await db.execute(sql`SELECT id,kind,reason,status,resolution,created_at,updated_at FROM swap_cases WHERE offer_id=${id} ORDER BY created_at DESC`)).rows});
+ }catch{res.status(503).json({error:"Cases unavailable"});}
+});
+router.use("/admin/swaps",requireAdmin,async(_req,res,next)=>{try{await ensureTables();res.setHeader("Cache-Control","private, no-store");next();}catch{res.status(503).json({error:"Swap administration unavailable"});}});
+router.get("/admin/swaps",async(req,res)=>{
+ try{const offset=Number(req.query.offset??0);if(!Number.isInteger(offset)||offset<0||offset>10000){res.status(400).json({error:"Invalid offset"});return;}
+ const [listings,offers,cases,payments]=await Promise.all([
+ db.execute(sql`SELECT id,title,status,created_at FROM swap_listings ORDER BY created_at DESC LIMIT 50 OFFSET ${offset}`),
+ db.execute(sql`SELECT o.id,o.status,o.cash_minor,t.title AS target_title,p.title AS offered_title,o.created_at FROM swap_offers o JOIN swap_listings t ON t.id=o.target_id JOIN swap_listings p ON p.id=o.offered_id ORDER BY o.created_at DESC LIMIT 50 OFFSET ${offset}`),
+ db.execute(sql`SELECT id,offer_id,kind,reason,status,resolution,created_at FROM swap_cases ORDER BY (status='open') DESC,created_at DESC LIMIT 50 OFFSET ${offset}`),
+ db.execute(sql`SELECT id,offer_id,amount_minor,fee_minor,status,created_at FROM swap_payments ORDER BY created_at DESC LIMIT 50 OFFSET ${offset}`)]);
+ res.json({listings:listings.rows,offers:offers.rows,cases:cases.rows,payments:payments.rows});
+ }catch{res.status(503).json({error:"Admin data unavailable"});}
+});
+router.post("/admin/swaps/listings/:id/withdraw",async(req,res)=>{
+ try{const id=req.params.id,reason=req.body?.reason;if(!uuid(id)||typeof reason!=="string"||reason.trim().length<10||reason.length>2000){res.status(400).json({error:"Moderation reason required"});return;}
+ await db.transaction(async tx=>{
+ const row=(await tx.execute(sql`UPDATE swap_listings SET status='withdrawn' WHERE id=${id} AND status='active' RETURNING id`)).rows[0];if(!row)throw new SwapConflict("Only active listings can be withdrawn.");
+ const closed=(await tx.execute(sql`UPDATE swap_offers SET status='declined',revision=revision+1 WHERE status='pending' AND (target_id=${id} OR offered_id=${id}) RETURNING id`)).rows;
+ for(const o of closed)await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${o.id},'admin','listing_moderated')`);
+ await tx.execute(sql`INSERT INTO swap_admin_audit(subject_id,action,reason) VALUES(${id},'withdraw_listing',${reason.trim()})`);
+ });res.json({ok:true});
+ }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Moderation failed"});}
+});
+router.post("/admin/swaps/cases/:id/resolve",async(req,res)=>{
+ try{const id=req.params.id,{action,reason}=req.body??{};if(!uuid(id)||!["resume","cancel"].includes(action)||typeof reason!=="string"||reason.trim().length<10||reason.length>2000){res.status(400).json({error:"Resolution reason required"});return;}
+ await db.transaction(async tx=>{
+ const initial=(await tx.execute(sql`SELECT o.id,o.target_id,o.offered_id FROM swap_cases c JOIN swap_offers o ON o.id=c.offer_id WHERE c.id=${id}`)).rows[0];if(!initial)throw new SwapConflict("Case unavailable.");
+ await tx.execute(sql`SELECT id FROM swap_listings WHERE id IN (${initial.target_id},${initial.offered_id}) ORDER BY id FOR UPDATE`);
+ const o=(await tx.execute(sql`SELECT * FROM swap_offers WHERE id=${initial.id} FOR UPDATE`)).rows[0];
+ const c=(await tx.execute(sql`SELECT * FROM swap_cases WHERE id=${id} FOR UPDATE`)).rows[0];
+ if(!o||o.status!=="disputed"||c?.status!=="open")throw new SwapConflict("Case already resolved.");
+ if(action==="cancel"){
+ const payment=(await tx.execute(sql`SELECT id FROM swap_payments WHERE offer_id=${o.id} LIMIT 1`)).rows[0];
+ const delivery=(await tx.execute(sql`SELECT offer_id FROM swap_deliveries WHERE offer_id=${o.id} LIMIT 1`)).rows[0];
+ if(payment||delivery)throw new SwapConflict("Payment or delivery records require manual reconciliation; cancellation blocked.");
+ await tx.execute(sql`UPDATE swap_listings SET status='active' WHERE id IN (${o.target_id},${o.offered_id}) AND status='reserved'`);
+ }
+ await tx.execute(sql`UPDATE swap_offers SET status=${action==="resume"?"accepted":"withdrawn"},revision=revision+1 WHERE id=${o.id}`);
+ await tx.execute(sql`UPDATE swap_cases SET status='resolved',resolution=${reason.trim()},updated_at=NOW() WHERE id=${id}`);
+ await tx.execute(sql`INSERT INTO swap_admin_audit(subject_id,action,reason) VALUES(${id},${action},${reason.trim()})`);
+ await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${o.id},'admin',${"case_"+action})`);
+ });res.json({ok:true});
+ }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Resolution failed"});}
 });
 
 export default router;
