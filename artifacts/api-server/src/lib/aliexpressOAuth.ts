@@ -58,13 +58,27 @@ function unseal(value: string, purpose: string, key: Buffer) {
 
 export class AliExpressConnectionError extends Error {}
 
-export function aliExpressRedirectUri() {
-  const uri = new URL(process.env.ALIEXPRESS_REDIRECT_URI || "https://www.bazunk.com/api/integrations/aliexpress/callback");
-  if (uri.protocol !== "https:" || uri.username || uri.password || uri.search || uri.hash ||
-      uri.pathname !== "/api/integrations/aliexpress/callback") {
-    throw new AliExpressConnectionError("Invalid AliExpress callback URL.");
+const defaultRedirectUri = "https://www.bazunk.com/api/integrations/aliexpress/callback";
+
+function validRedirectUri(value: string) {
+  try {
+    const uri = new URL(value);
+    if (uri.protocol === "https:" && !uri.username && !uri.password && !uri.search && !uri.hash &&
+        uri.pathname === "/api/integrations/aliexpress/callback") return uri.toString();
+  } catch {
+    return null;
   }
-  return uri.toString();
+  return null;
+}
+
+export function aliExpressRedirectUri() {
+  const override = process.env.BAZUNK_ALIEXPRESS_REDIRECT_URI?.trim();
+  if (override) {
+    const uri = validRedirectUri(override);
+    if (!uri) throw new AliExpressConnectionError("BAZUNK_ALIEXPRESS_REDIRECT_URI must be an HTTPS Bazunk OAuth callback URL.");
+    return uri;
+  }
+  return defaultRedirectUri;
 }
 
 const stateHash = (state: string) => createHash("sha256").update(state).digest("hex");
@@ -242,6 +256,17 @@ export async function managedAliExpressAccessToken(options: { force?: boolean; d
 }
 
 export function startAliExpressRenewal() {
+  void aliExpressConnectionStatus().then(status => {
+    const legacyRedirect = process.env.ALIEXPRESS_REDIRECT_URI?.trim();
+    logger.info({
+      appCredentialsConfigured: Boolean(aliExpressCredentials()),
+      encryptionKeyConfigured: Boolean(encryptionKey()),
+      ignoredLegacyCallback: Boolean(legacyRedirect && !validRedirectUri(legacyRedirect)),
+      configured: status.configured,
+    }, "AliExpress connection manager readiness");
+  }).catch(error => {
+    logger.warn({ reason: aliExpressErrorMessage(error) }, "AliExpress connection manager status unavailable");
+  });
   if (!encryptionKey() || !aliExpressCredentials()) return;
   const renew = () => {
     void managedAliExpressAccessToken({ dueOnly: true }).catch(error => {
