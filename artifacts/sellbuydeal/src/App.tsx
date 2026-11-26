@@ -484,6 +484,8 @@ function Router() {
       <Route path="/admin/demo-creator" component={AdminDemoCreatorPage} />
       <Route path="/admin/dashboard" component={AdminWordPressDashboard} />
       <Route path="/admin/affiliates" component={AdminAffiliatesPage} />
+      <Route path="/affiliates/apply" component={AffiliatesPage} />
+      <Route path="/affiliates/login" component={AffiliatesPage} />
       <Route path="/affiliates" component={AffiliatesPage} />
       <Route path="/admin/marketing/images" component={AdminPromoImagesPage} />
       <Route path="/admin/marketing" component={AdminMarketingOverviewPage} />
