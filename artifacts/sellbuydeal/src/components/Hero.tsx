@@ -9,7 +9,6 @@ import {
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/context/AuthContext";
 import { useCurrency } from "@/context/CurrencyContext";
-import { useMarketplaceRegion } from "@/hooks/useMarketplaceRegion";
 import { useLanguage } from "@/context/LanguageContext";
 import { useState } from "react";
 import { useRawSettings } from "@/context/SiteSettingsContext";
@@ -85,7 +84,7 @@ const HERO_CATS = [
 
 export function Hero() {
   const { currency, country } = useCurrency();
-  const [marketRegion] = useMarketplaceRegion();
+
   const { t } = useLanguage();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
@@ -130,7 +129,7 @@ export function Hero() {
             transition={{ duration: 0.55 }}
           >
             <div className="mb-4">
-              <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-orange-300 bz-hero-kicker">Discover something great · {marketRegion === "uk" ? "UK" : "USA"} marketplace</p>
+              <p className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-orange-300 bz-hero-kicker">Discover something great · Bazunk marketplace</p>
               <h1 data-theme-edit="hero_title" className="max-w-xl text-4xl font-extrabold leading-[1.12] tracking-tight text-white sm:text-5xl">{featureSettings.theme_studio_enabled==="true"?featureSettings.hero_title||"Buy. Sell. Find Amazing Deals on Bazunk.":<>Buy. Sell.<br />Find Amazing Deals <span className="bz-hero-brand">on Bazunk.</span></>}</h1>
               <p data-theme-edit="hero_subtitle" className="mt-4 max-w-lg text-base leading-relaxed text-slate-200 bz-hero-summary">{featureSettings.theme_studio_enabled==="true"?featureSettings.hero_subtitle||"Explore unique finds from independent sellers.":"Explore unique finds, everyday essentials and new arrivals from independent sellers. Browse at your own pace, or make an offer."}</p>
             </div>
