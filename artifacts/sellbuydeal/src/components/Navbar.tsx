@@ -305,8 +305,20 @@ export function Navbar() {
     <>
       <nav data-bz-site-header className="bz-mockup-header relative z-50 w-full bg-white shadow-sm">
         <div className="bz-mockup-topbar border-b border-gray-100 bg-gray-50 px-4 py-1.5 flex items-center gap-2" aria-label="Delivery and currency preferences">
-          <label className="flex items-center gap-1 text-xs font-semibold text-gray-600">Deliver to <select aria-label="Delivery country" value={country.code} onChange={e=>changeCountry(e.target.value)} className="max-w-[130px] rounded-md border bg-white px-1 py-1 text-xs">{MARKET_COUNTRIES.map(c=><option key={c.code} value={c.code}>{c.flag} {c.name}</option>)}</select></label>
-          <label className="flex items-center gap-1 text-xs font-semibold text-gray-600"><span className="sr-only">Display currency</span><select aria-label="Display currency" value={currency.code} onChange={e=>setCurrency(e.target.value as CurrencyCode)} className="rounded-md border bg-white px-1 py-1 text-xs">{Object.values(CURRENCIES).map(c=><option key={c.code} value={c.code}>{c.code}</option>)}</select></label>
+          <div className="inline-flex min-w-0 shrink-0 items-stretch divide-x divide-slate-200 rounded-xl border border-slate-200 bg-white shadow-sm">
+            <label className="relative flex min-w-0 cursor-pointer items-center gap-2 rounded-l-xl px-2.5 py-1.5 transition hover:bg-orange-50 focus-within:ring-2 focus-within:ring-orange-500 sm:px-3">
+              <span aria-hidden="true" className="text-xl leading-none">{country.flag}</span>
+              <span className="min-w-0"><span className="block text-[10px] font-medium leading-tight text-slate-500">Deliver to</span><span className="block max-w-[92px] truncate text-xs font-bold text-slate-900 sm:max-w-[145px]">{country.name}</span></span>
+              <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-orange-600"/>
+              <select aria-label="Delivery country" value={country.code} onChange={e=>changeCountry(e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0">{MARKET_COUNTRIES.map(c=><option key={c.code} value={c.code}>{c.flag} {c.name}</option>)}</select>
+            </label>
+            <label className="relative flex cursor-pointer items-center gap-2 rounded-r-xl px-2.5 py-1.5 transition hover:bg-sky-50 focus-within:ring-2 focus-within:ring-sky-500 sm:px-3">
+              <span aria-hidden="true" className="flex h-7 min-w-7 items-center justify-center rounded-lg bg-sky-50 px-1 text-sm font-bold text-sky-700">{currency.symbol}</span>
+              <span><span className="block text-[10px] font-medium leading-tight text-slate-500">Currency</span><span className="block text-xs font-bold text-slate-900">{currency.code}</span></span>
+              <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 text-sky-700"/>
+              <select aria-label="Display currency" value={currency.code} onChange={e=>setCurrency(e.target.value as CurrencyCode)} className="absolute inset-0 h-full w-full cursor-pointer opacity-0">{Object.values(CURRENCIES).map(c=><option key={c.code} value={c.code}>{c.code} · {c.symbol}</option>)}</select>
+            </label>
+          </div>
           <div className="bz-mockup-top-links">
             <Link href="/support">Help</Link>
             <button type="button" onClick={() => {setMoreOpen(false);setSellOpen(false);setProtectionOpen(true)}} aria-haspopup="dialog" aria-expanded={protectionOpen}><ShieldCheck size={17}/> Buyer Protection</button>
