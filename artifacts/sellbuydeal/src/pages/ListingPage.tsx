@@ -76,7 +76,7 @@ function normaliseCondition(raw: unknown): string {
 
 type SpecRow = { key: string; value: string };
 type SupplierOption = { sku: string; label: string; quantity: number; price: number; priceGbp: number | null; image?: string | null };
-type ApiListingExtra = { supplierOptions?: SupplierOption[]; _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string; isAliExpress?: boolean; aliExpressOptions?: { token: string; label: string; quantity: number | null }[]; dispatchTime?: string; deliveryEstimate?: string };
+type ApiListingExtra = { listingVideo?: { src: string; embedded: boolean }; supplierOptions?: SupplierOption[]; _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string; isAliExpress?: boolean; aliExpressOptions?: { token: string; label: string; quantity: number | null }[]; dispatchTime?: string; deliveryEstimate?: string };
 
 const TAG_COLORS = [
   "bg-[#4A5CE8]/10 text-[#4A5CE8]",
@@ -95,8 +95,15 @@ function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & A
   let supplierOptions: SupplierOption[] = [];
   let dispatchTime: string | undefined;
   let deliveryEstimate: string | undefined;
+  let listingVideo: ApiListingExtra["listingVideo"];
   try {
     const parsed = typeof l.specifications === "string" ? JSON.parse(l.specifications) : l.specifications;
+    const video = parsed?.listing_video;
+    if (typeof video?.assetId === "string" && /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(video.assetId)) {
+      listingVideo = { src: API_BASE + "/api/listing-media/" + video.assetId, embedded: false };
+    } else if (typeof video?.embed === "string" && /^https:\/\/(?:www\.youtube-nocookie\.com\/embed\/[\w-]{11}|player\.vimeo\.com\/video\/\d{1,15}(?:\?h=[a-f0-9]{6,32})?)$/i.test(video.embed)) {
+      listingVideo = { src: video.embed, embedded: true };
+    }
     isAliExpress = typeof parsed?.source === "string" && parsed.source.toLowerCase() === "aliexpress";
     supplierOptions = Array.isArray(parsed?.aliexpress_options) ? parsed.aliexpress_options : [];
     dispatchTime = typeof parsed?.dispatch_time === "string" ? parsed.dispatch_time : undefined;
@@ -129,7 +136,7 @@ function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & A
     _tags: tagsRaw,
     _specifications: parsedSpecs,
     _gallery: gallery,
-    supplierOptions, isAliExpress, dispatchTime, deliveryEstimate,
+    supplierOptions, listingVideo, isAliExpress, dispatchTime, deliveryEstimate,
     aliExpressOptions: Array.isArray(l.aliExpressOptions) ? l.aliExpressOptions : [],
     shipOrigin: (l.shipOrigin as string) ?? undefined,
     shipOriginOther: (l.shipOriginOther as string) ?? undefined,
@@ -586,6 +593,15 @@ export function ListingPage() {
               <details className="bz-visual-description"><summary><BookOpen size={18}/> About this item <ChevronDown size={16}/></summary><p>{String(product.description||"See the description and details below for more information.").replace(/<[^>]*>/g," ").slice(0,500)}</p></details>
 
             </section>
+
+            {richProduct.listingVideo && <section aria-label="Product video" className="space-y-2 rounded-xl border border-slate-300 p-4">
+              <h2 className="font-bold">Product video</h2>
+              {richProduct.listingVideo.embedded
+                ? <iframe title="Product video" src={richProduct.listingVideo.src} loading="lazy" allowFullScreen
+                    className="aspect-video w-full rounded-lg bg-black" />
+                : <video aria-label="Product video" src={richProduct.listingVideo.src} controls playsInline preload="metadata"
+                    className="max-h-96 w-full rounded-lg bg-black" />}
+            </section>}
 
             {/* TrustProof is an optional feature-flagged tab, not a permanent large panel. */}
             <div className="overflow-hidden rounded-xl border border-slate-300 dark:border-slate-600 bazunk-listing-tabs">
