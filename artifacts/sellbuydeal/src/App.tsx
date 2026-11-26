@@ -156,6 +156,7 @@ const AdminAuditLogPage = React.lazy(() => import("@/pages/admin/AdminAuditLogPa
 const AdminSystemStatusPage = React.lazy(() => import("@/pages/admin/AdminSystemStatusPage").then(module => ({ default: module.AdminSystemStatusPage })));
 const AdminSnapSellPage = React.lazy(() => import("@/pages/admin/AdminSnapSellPage").then(module => ({ default: module.AdminSnapSellPage })));
 const AdminDealPilotPage = React.lazy(() => import("@/pages/admin/AdminDealPilotPage").then(module => ({ default: module.AdminDealPilotPage })));
+const AdminSwapsPage = React.lazy(() => import("@/pages/admin/AdminSwapsPage").then(module => ({default:module.AdminSwapsPage})));
 const AdminFindItPage = React.lazy(() => import("@/pages/admin/AdminFindItPage").then(module => ({ default: module.AdminFindItPage })));
 const AdminFeatureFlagsPage = React.lazy(() => import("@/pages/admin/AdminFeatureFlagsPage").then(module => ({ default: module.AdminFeatureFlagsPage })));
 import { FeatureGate, FeatureVisible } from "@/components/FeatureGate";
@@ -513,6 +514,7 @@ function Router() {
       <Route path="/admin/system-status" component={AdminSystemStatusPage} />
       <Route path="/admin/snap-sell" component={AdminSnapSellPage} />
       <Route path="/admin/deal-pilot" component={AdminDealPilotPage} />
+      <Route path="/admin/swaps" component={AdminSwapsPage} />
       <Route path="/admin/find-it" component={AdminFindItPage} />
       <Route path="/admin/feature-toggles" component={AdminFeatureFlagsPage} />
       <Route path="/admin/feature-flags">{() => { window.location.replace("/admin/feature-toggles"); return null; }}</Route>
