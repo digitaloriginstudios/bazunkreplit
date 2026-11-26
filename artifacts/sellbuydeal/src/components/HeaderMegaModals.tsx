@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
+import { useRawSettings } from "@/context/SiteSettingsContext";
+import { featureForHref, isFeatureEnabled } from "@/components/FeatureGate";
 import { ArrowRight, BadgeCheck, Boxes, ChevronRight, CircleHelp, Coins, Film, Database, Flame, Gavel, Gift, Grid2X2, Handshake, Heart, Layers, LifeBuoy, Package, Radio, Rocket, Search, ShieldCheck, ShoppingCart, Sparkles, Store, Tag, TrendingUp, Truck, Users, Wrench, X, Zap } from "lucide-react";
 
 type ModalKind = "more" | "sell";
@@ -37,6 +39,8 @@ const sellSide:Tile[] = [
  {title:"Seller Support",subtitle:"",href:"/support",icon:CircleHelp,tone:"purple"}
 ];
 export function HeaderMegaModals({kind,onClose}:{kind:ModalKind|null;onClose:()=>void}) {
+ const settings=useRawSettings();
+ const visible=(item:Tile)=>{const feature=featureForHref(item.href);return !feature||isFeatureEnabled(settings,feature);};
  const [section,setSection]=useState("Start Selling");
  useEffect(()=>{if(!kind)return;const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose()};document.addEventListener("keydown",onKey);const old=document.body.style.overflow;document.body.style.overflow="hidden";return()=>{document.removeEventListener("keydown",onKey);document.body.style.overflow=old}},[kind,onClose]);
  if(!kind)return null;
@@ -46,11 +50,11 @@ export function HeaderMegaModals({kind,onClose}:{kind:ModalKind|null;onClose:()=
    <button type="button" className="bz-mega-close" onClick={onClose} aria-label="Close menu"><X/></button>
    {kind==="more"?<>
     <header className="bz-mega-more-head"><Grid2X2 className="bz-mega-head-icon"/><div><h2>More on Bazunk</h2><p>Discover more ways to buy, sell and get rewarded</p></div></header>
-    <div className="bz-mega-more-grid">{moreTiles.map(item=><TileLink key={item.title} item={item}/>)}</div>
+    <div className="bz-mega-more-grid">{moreTiles.filter(visible).map(item=><TileLink key={item.title} item={item}/>)}</div>
    </>:<>
     <header className="bz-mega-sell-head"><div className="bz-mega-sell-art" aria-hidden="true"><Store/><Package/><TrendingUp/></div><div><h2>Sell on Bazunk</h2><p>Turn your items into cash, reach more buyers and grow your business with a marketplace that's fair, flexible and full of opportunities.</p><div className="bz-mega-checks">{["List for free","Reach thousands of buyers","Sell new or used","Get paid securely"].map(x=><span key={x}><BadgeCheck/>{x}</span>)}</div></div></header>
-    <div className="bz-mega-sell-body"><aside className="bz-mega-sidebar">{sellSide.map(item=>{const Icon=item.icon;return <Link key={item.title} href={item.href} onClick={onClose} className={item.title===section?"selected":""}><Icon/>{item.title}<ChevronRight/></Link>})}<div className="bz-mega-verified"><BadgeCheck/><strong>Become a Verified Seller</strong><small>Build trust, get a badge and more exposure.</small><Link href="/dashboard?section=verification" onClick={onClose}>Get Verified <ArrowRight size={16}/></Link></div></aside>
-    <div className="bz-mega-sell-main"><h3>Choose how you want to sell</h3><div className="bz-mega-sell-grid">{sellTiles.map(item=><TileLink key={item.title} item={item}/>)}</div><div className="bz-mega-tools-head"><h3>More selling options &amp; tools</h3><Link href="/sell" onClick={onClose}>View all seller tools <ArrowRight size={16}/></Link></div><div className="bz-mega-tools-grid">{sellTools.map(item=><TileLink key={item.title} item={item}/>)}</div></div></div>
+    <div className="bz-mega-sell-body"><aside className="bz-mega-sidebar">{sellSide.filter(visible).map(item=>{const Icon=item.icon;return <Link key={item.title} href={item.href} onClick={onClose} className={item.title===section?"selected":""}><Icon/>{item.title}<ChevronRight/></Link>})}<div className="bz-mega-verified"><BadgeCheck/><strong>Become a Verified Seller</strong><small>Build trust, get a badge and more exposure.</small><Link href="/dashboard?section=verification" onClick={onClose}>Get Verified <ArrowRight size={16}/></Link></div></aside>
+    <div className="bz-mega-sell-main"><h3>Choose how you want to sell</h3><div className="bz-mega-sell-grid">{sellTiles.filter(visible).map(item=><TileLink key={item.title} item={item}/>)}</div><div className="bz-mega-tools-head"><h3>More selling options &amp; tools</h3><Link href="/sell" onClick={onClose}>View all seller tools <ArrowRight size={16}/></Link></div><div className="bz-mega-tools-grid">{sellTools.filter(visible).map(item=><TileLink key={item.title} item={item}/>)}</div></div></div>
    </>}
   </section>
  </div>;
