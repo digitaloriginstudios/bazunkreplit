@@ -2,6 +2,12 @@ import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
 export const FEATURE_DEFINITIONS = [
+  ["social","Bazunk Social","Community"],
+  ["social_profiles","Social profiles","Community"],
+  ["social_follows","Social follows","Community"],
+  ["social_blocks","Social blocking","Community"],
+  ["social_reports","Social reports","Community"],
+  ["social_notifications","Social notifications","Community"],
   ["swaps","Bazunk Swap (preview)","Selling"],
   ["global_marketplace","Global marketplace catalogue (preview)","Buying"],
   ["quick_sell","Direct Sale","Selling"],["offers","Make an Offer","Selling"],["auctions","Auctions","Selling"],["flash_sales","Flash Sales","Selling"],["classifieds","Classifieds","Selling"],["live","Live selling","Selling"],["product_video","Product Video","Selling"],
@@ -11,7 +17,7 @@ export const FEATURE_DEFINITIONS = [
 ] as const;
 
 export function resolveFeatureValue(key:string,value:unknown):boolean {
-  if(value==null) return key!=="global_marketplace" && key!=="swaps";
+  if(value==null) return key!=="global_marketplace" && key!=="swaps" && key!=="social" && !key.startsWith("social_");
   return String(value).trim().toLowerCase()==="true";
 }
 

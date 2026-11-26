@@ -159,6 +159,7 @@ const AdminDealPilotPage = React.lazy(() => import("@/pages/admin/AdminDealPilot
 const AdminSwapsPage = React.lazy(() => import("@/pages/admin/AdminSwapsPage").then(module => ({default:module.AdminSwapsPage})));
 const AdminFindItPage = React.lazy(() => import("@/pages/admin/AdminFindItPage").then(module => ({ default: module.AdminFindItPage })));
 const AdminFeatureFlagsPage = React.lazy(() => import("@/pages/admin/AdminFeatureFlagsPage").then(module => ({ default: module.AdminFeatureFlagsPage })));
+import { SocialPage } from "@/pages/SocialPage";
 import { FeatureGate, FeatureVisible } from "@/components/FeatureGate";
 const AdminPaymentsPage = React.lazy(() => import("@/pages/admin/AdminPaymentsPage").then(module => ({ default: module.AdminPaymentsPage })));
 const AdminOrdersPage = React.lazy(() => import("@/pages/admin/AdminOrdersPage").then(module => ({ default: module.AdminOrdersPage })));
@@ -450,6 +451,7 @@ function Router() {
       <Route path="/register">{() => <Redirect to="/sign-up" />}</Route>
       <Route path="/categories" component={CategoriesPage} />
       <Route path="/sell" component={SellPage} />
+      <Route path="/social">{() => <FeatureGate feature="social" name="Bazunk Social"><SocialPage /></FeatureGate>}</Route>
       <Route path="/swap/create">{() => <FeatureGate feature="swaps" name="Bazunk Swap"><SwapPage /></FeatureGate>}</Route>
       <Route path="/swap/:id">{() => <FeatureGate feature="swaps" name="Bazunk Swap"><SwapPage /></FeatureGate>}</Route>
       <Route path="/swap">{() => <FeatureGate feature="swaps" name="Bazunk Swap"><SwapPage /></FeatureGate>}</Route>

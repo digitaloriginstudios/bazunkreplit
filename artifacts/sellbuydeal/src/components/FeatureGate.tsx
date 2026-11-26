@@ -15,6 +15,7 @@ export function featureForHref(href:string):string|undefined {
   if(path==="/credits") return "credits";
   if(path==="/rewards/referrals") return "referrals";
 
+  if(path==="/social" || path.startsWith("/social/")) return "social";
   if(path.startsWith("/trust-proof")) return "trust_proof";
   if(path.startsWith("/deal-pilot")) return "deal_pilot";
   if(path.startsWith("/find-it")) return "find_it";

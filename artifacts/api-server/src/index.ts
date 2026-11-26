@@ -60,6 +60,45 @@ async function runAppMigrations() {
   `, "users");
 
   await run(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned BOOLEAN NOT NULL DEFAULT FALSE`, "users.banned");
+  await run(sql`
+    CREATE TABLE IF NOT EXISTS social_profiles (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      username TEXT NOT NULL UNIQUE CHECK (username ~ '^[a-z0-9_]{3,24}$'),
+      display_name TEXT NOT NULL CHECK (char_length(btrim(display_name)) BETWEEN 1 AND 60),
+      bio TEXT NOT NULL DEFAULT '' CHECK (char_length(bio) <= 280)
+    )
+  `, "social_profiles");
+  await run(sql`
+    CREATE TABLE IF NOT EXISTS social_follows (
+      follower_id TEXT REFERENCES social_profiles(user_id) ON DELETE CASCADE,
+      followed_id TEXT REFERENCES social_profiles(user_id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (follower_id, followed_id),
+      CHECK (follower_id <> followed_id)
+    )
+  `, "social_follows");
+  await run(sql`CREATE INDEX IF NOT EXISTS social_follows_followed_idx
+    ON social_follows (followed_id, created_at DESC)`, "social_follows_followed_idx");
+  await run(sql`
+    CREATE TABLE IF NOT EXISTS social_blocks (
+      blocker_id TEXT REFERENCES social_profiles(user_id) ON DELETE CASCADE,
+      blocked_id TEXT REFERENCES social_profiles(user_id) ON DELETE CASCADE,
+      PRIMARY KEY (blocker_id, blocked_id),
+      CHECK (blocker_id <> blocked_id)
+    )
+  `, "social_blocks");
+  await run(sql`
+    CREATE TABLE IF NOT EXISTS social_reports (
+      reporter_id TEXT REFERENCES social_profiles(user_id) ON DELETE CASCADE,
+      reported_id TEXT REFERENCES social_profiles(user_id) ON DELETE CASCADE,
+      reason TEXT NOT NULL CHECK (reason IN ('spam', 'harassment', 'impersonation', 'other')),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (reporter_id, reported_id),
+      CHECK (reporter_id <> reported_id)
+    )
+  `, "social_reports");
+  await run(sql`CREATE INDEX IF NOT EXISTS social_reports_created_idx
+    ON social_reports (created_at DESC)`, "social_reports_created_idx");
   await run(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS seller_type TEXT NOT NULL DEFAULT 'private'`, "users.seller_type");
   await run(sql`CREATE TABLE IF NOT EXISTS user_rapidapi_keys (email TEXT PRIMARY KEY, encrypted_key TEXT NOT NULL, key_last4 TEXT NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`, "user_rapidapi_keys");
 

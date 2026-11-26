@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { refreshSavedSearchMatches } from "../lib/savedSearches.js";
 import { ensureDealPilotTables, pilotSettings } from "../lib/dealPilot.js";
 import { ensureFindItTables } from "../lib/findIt.js";
@@ -6,10 +7,11 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { authenticatedSellerEmail } from "../lib/authenticatedSeller.js";
+import { featureEnabled } from "../lib/featureFlags.js";
 import { ensureMarketplaceOffers } from "./marketplaceOffers.js";
 
 const router=Router();
-type Event={id:string;type:"order"|"sale"|"offer"|"bid"|"message"|"search"|"price_drop"|"restock"|"deal_pilot"|"find_it"|"cashback";title:string;desc:string;time:string;href:string};
+type Event={id:string;type:"order"|"sale"|"offer"|"bid"|"message"|"search"|"price_drop"|"restock"|"deal_pilot"|"find_it"|"cashback"|"social";title:string;desc:string;time:string;href:string};
 async function ensureReads(){
   await db.execute(sql`CREATE TABLE IF NOT EXISTS marketplace_notification_reads (
     recipient_email text NOT NULL, event_id text NOT NULL, read_at timestamptz NOT NULL DEFAULT NOW(),
@@ -163,6 +165,30 @@ router.get("/notifications",async(req,res)=>{
           x.reviewed_at||x.requested_at,"/cashback"));
       }
     }catch(err){console.error("Cashback notification lookup unavailable",err);}
+    try {
+      const enabled = await Promise.all(["social", "social_profiles", "social_follows", "social_notifications"].map(featureEnabled));
+      if (enabled.every(Boolean)) {
+        const { rows } = await db.execute<{ username: string; follower_id: string; created_at: Date }>(sql`
+          SELECT p.username, f.follower_id, f.created_at
+          FROM social_follows f
+          JOIN social_profiles p ON p.user_id = f.follower_id
+          JOIN users actor ON actor.id = f.follower_id
+          JOIN users recipient ON recipient.id = f.followed_id
+          WHERE recipient.id = (SELECT id FROM users WHERE LOWER(email) = ${email}
+            ORDER BY (users.email = ${email}) DESC, id LIMIT 1)
+            AND NOT actor.banned AND NOT recipient.banned
+          ORDER BY f.created_at DESC LIMIT 35
+        `);
+        for (const follow of rows) {
+          const time = new Date(follow.created_at).toISOString();
+          const actorKey = createHash("sha256").update(follow.follower_id).digest("hex");
+          events.push(event(`social:follow:${actorKey}:${time}`, "social", "New social follower",
+            `@${follow.username} followed you`, time, "/social"));
+        }
+      }
+    } catch (err) {
+      console.error("Social notification lookup unavailable", err);
+    }
     const seen=new Set((reads.rows as any[]).map(r=>String(r.event_id)));
     const filtered=events.sort((a,b)=>Date.parse(b.time)-Date.parse(a.time)).slice(0,100)
       .map(e=>({...e,unread:!seen.has(e.id)}));
