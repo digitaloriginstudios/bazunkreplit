@@ -618,34 +618,60 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
   const inputCls = "px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F26B21]/30 focus:border-[#F26B21] bg-white";
   const ebayInputCls = "px-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#4A5CE8]/30 focus:border-[#4A5CE8] bg-white";
 
-  async function importAliExpressUrls() {
-    if (aliBulkImporting || !aliSelected.size) return;
-    const ids = [...aliSelected].flatMap(url => url.match(/\/item\/(\d{10,20})\.html$/)?.[1] ?? []);
+  async function importAliExpressUrls(urls: Iterable<string>) {
+    if (aliBulkImporting) return;
+    const batch = [...urls];
+    if (!batch.length) return;
+    const completed = new Set<string>();
+    let skipped = 0;
     setAliBulkImporting(true);
     let imported = 0;
     const failed: string[] = [];
     try {
-      for (let index = 0; index < ids.length; index++) {
-        setAliNotice(`Importing product ${index + 1} of ${ids.length}…`);
-        const id = ids[index];
+      for (const [index, url] of batch.entries()) {
+        setAliNotice(`Importing product ${index + 1} of ${batch.length}… Keep this page open.`);
+        const id = url.slice(url.lastIndexOf("/") + 1, -5);
         try {
           const res = await authFetch("/api/admin/import-selected-aliexpress", {
-            method: "POST", body: JSON.stringify({ ids:[id], markup:Number(aliMarkup), sellerEmail:aliSeller,
+            method: "POST", body: JSON.stringify({ ids:[id], requireVariantDetails:true, markup:Number(aliMarkup), sellerEmail:aliSeller,
               market:aliMarket, quantity:Number(aliQuantity), shipOrigin:aliOrigin, shipZone:aliExpressShipZone(aliDestinations), postage:aliShipping }),
           });
           const data = await res.json();
+          if ([400, 401, 403, 503].includes(res.status)) {
+            failed.push(data.error || "Check the import settings or sign in again.");
+            break;
+          }
           if (!res.ok) throw Error(data.error || "Import failed");
-          if (!data.imported) throw Error(data.results?.[0]?.reason || "No listing created");
-          imported += data.imported;
-          setAliSelected(current => new Set([...current].filter(url => !url.endsWith("/" + id + ".html"))));
+          const result = data.results?.[0];
+          if (result?.status === "imported") imported++;
+          else if (result?.status === "skipped") skipped++;
+          else throw Error(result?.reason || "No listing created");
+          completed.add(url);
         } catch (error) {
           failed.push(`#${id} ${error instanceof Error ? error.message : "Import failed"}`);
         }
       }
       setAliDone(count => count + imported);
-      setAliNotice(`${imported} imported. ${failed.length} skipped or failed.${failed.length ? "\n" + failed.join("\n") : ""}`);
+      setAliQueued(current => current.filter(url => !completed.has(url)));
+      setAliSelected(current => new Set([...current].filter(url => !completed.has(url))));
+      setAliNotice(`${imported} imported. ${skipped} already imported. ${batch.length - completed.size} remaining.${failed.length ? "\n" + failed.join("\n") : ""}`);
     } finally { setAliBulkImporting(false); }
   }
+
+  const aliBatchActions = aliQueued.length > 0 && (
+    <div className="flex flex-wrap items-center gap-3">
+      <button type="button" onClick={() => void importAliExpressUrls(aliQueued)} disabled={aliBulkImporting}
+        className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">
+        {aliBulkImporting ? "Importing…" : `Import all ${aliQueued.length} with variations`}
+      </button>
+      {aliSelected.size > 0 && aliSelected.size < aliQueued.length && (
+        <button type="button" onClick={() => void importAliExpressUrls(aliSelected)} disabled={aliBulkImporting}
+          className="rounded-xl border px-4 py-3 text-sm font-bold disabled:opacity-50">
+          Import selected ({aliSelected.size})
+        </button>
+      )}
+    </div>
+  );
 
   return (
     <AdminLayout>
@@ -1473,25 +1499,19 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
                 <AliExpressPageLinks setProductUrls={setAliUrls} />
                 <label className="block text-sm font-bold text-gray-700">Product URLs · up to 50</label>
                 <textarea rows={3} value={aliUrls} onChange={e=>setAliUrls(e.target.value)} placeholder="Paste AliExpress item links here, one per line" className={inputCls+" w-full min-h-24 break-all"} />
-                <button type="button" className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-white font-bold text-sm" onClick={()=>{
-                  const links=aliUrls.split(/[\s,]+/).map(v=>v.trim()).filter(Boolean).map(v=>{try{const u=new URL(v);const host=u.hostname.toLowerCase();const id=u.pathname.match(/\/item\/(\d{10,})(?:\.html)?/i)?.[1];return u.protocol==="https:"&&(host==="aliexpress.com"||host.endsWith(".aliexpress.com"))&&id?`https://www.aliexpress.com/item/${id}.html`:null}catch{return null}}).filter((v):v is string=>Boolean(v));
-                  const unique=[...new Set(links)].slice(0,50);setAliQueued(unique);setAliSelected(new Set(unique));setAliNotice(unique.length?`${unique.length} valid product link(s) ready. Select a product to enter or review its details.`:"No valid AliExpress product URLs found. Paste an item URL ending in a product ID.");
+                <button type="button" disabled={aliBulkImporting} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-white font-bold text-sm disabled:opacity-50" onClick={()=>{
+                  const links=aliUrls.split(/[\s,]+/).map(v=>v.trim()).filter(Boolean).map(v=>{try{const u=new URL(v);const host=u.hostname.toLowerCase();const id=u.pathname.match(/\/item\/(\d{10,20})(?:\.html)?(?=/|$)/i)?.[1];return u.protocol==="https:"&&(host==="aliexpress.com"||host.endsWith(".aliexpress.com"))&&id?`https://www.aliexpress.com/item/${id}.html`:null}catch{return null}}).filter((v):v is string=>Boolean(v));
+                  const unique=[...new Set(links)].slice(0,50);setAliQueued(unique);setAliSelected(new Set(unique));setAliNotice(unique.length?`${unique.length} valid product link(s) ready to import.`:"No valid AliExpress product URLs found. Paste an item URL ending in a product ID.");
                 }}><Search className="w-4 h-4"/>Prepare products</button>
                 {!aliQueued.length && aliNotice && <p role="status" className="whitespace-pre-line text-sm text-gray-600">{aliNotice}</p>}
               </div>
             </div>
             {aliQueued.length>0&&<div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 shadow-sm space-y-4">
               <div className="flex flex-wrap justify-between items-center gap-3"><div><h3 className="font-black text-gray-900">Choose products</h3><p className="text-sm text-gray-500">{aliSelected.size} of {aliQueued.length} selected</p></div><div className="flex gap-2"><button type="button" className="border rounded-lg px-3 py-2 text-sm" onClick={()=>setAliSelected(new Set(aliQueued))}>Select all</button><button type="button" className="border rounded-lg px-3 py-2 text-sm" onClick={()=>setAliSelected(new Set())}>Clear</button></div></div>
-              <div className="flex flex-wrap items-center gap-3">
-                <button type="button" onClick={() => void importAliExpressUrls()} disabled={aliBulkImporting || !aliSelected.size}
-                  className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">
-                  {aliBulkImporting ? "Batch creating…" : `Batch create ${aliSelected.size} selected ${aliSelected.size === 1 ? "listing" : "listings"}`}
-                </button>
-                <a href="#ali-import-settings" className="text-sm font-semibold underline">Import settings</a>
-              </div>
-              <p className="text-xs text-gray-500">Batch create uses the shared settings. Use Review &amp; import only for products you want to edit individually.</p>
+              {aliBatchActions}
+              <p className="text-sm text-gray-500">Each product becomes one listing with all its variations. <a href="#ali-import-settings" className="font-semibold underline">Review import settings</a></p>
               {aliNotice && <p role="status" className="whitespace-pre-line text-sm text-gray-600">{aliNotice}</p>}
-              <div className="space-y-2 max-h-80 overflow-y-auto">{aliQueued.map((url,i)=><div key={url} className="flex flex-wrap sm:flex-nowrap gap-3 items-center rounded-xl border border-gray-200 p-3 text-sm"><input aria-label={`Select product ${i+1}`} type="checkbox" checked={aliSelected.has(url)} onChange={e=>setAliSelected(prev=>{const n=new Set(prev);e.target.checked?n.add(url):n.delete(url);return n})}/><span className="min-w-0 flex-1 truncate text-gray-700">Product #{url.match(/\/(\d+)\.html/)?.[1]??i+1}</span><a href={url} target="_blank" rel="noreferrer" className="text-indigo-600" aria-label="Open AliExpress product"><ExternalLink className="w-4 h-4"/></a><button type="button" onClick={()=>{setAliActiveUrl(url);setAliModalOpen(true)}} className="rounded-lg bg-orange-50 px-3 py-2 font-bold text-orange-700 hover:bg-orange-100">Review & import</button></div>)}</div>
+              <div className="space-y-2 max-h-80 overflow-y-auto">{aliQueued.map((url,i)=><div key={url} className="flex flex-wrap sm:flex-nowrap gap-3 items-center rounded-xl border border-gray-200 p-3 text-sm"><input aria-label={`Select product ${i+1}`} type="checkbox" disabled={aliBulkImporting} checked={aliSelected.has(url)} onChange={e=>setAliSelected(prev=>{const n=new Set(prev);e.target.checked?n.add(url):n.delete(url);return n})}/><span className="min-w-0 flex-1 truncate text-gray-700">Product #{url.match(/\/(\d+)\.html/)?.[1]??i+1}</span><a href={url} target="_blank" rel="noreferrer" className="text-indigo-600" aria-label="Open AliExpress product"><ExternalLink className="w-4 h-4"/></a><button type="button" disabled={aliBulkImporting} onClick={()=>{setAliActiveUrl(url);setAliModalOpen(true)}} className="rounded-lg bg-orange-50 px-3 py-2 font-bold text-orange-700 hover:bg-orange-100">Review & import</button></div>)}</div>
             </div>}
             <div id="ali-import-settings" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 shadow-sm space-y-4">
               <h3 className="font-black text-gray-900">Import settings</h3>
@@ -1516,10 +1536,12 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
                   className={inputCls + " mt-1 block w-full"} placeholder="Leave blank if unconfirmed" />
               </label>
               <p className="text-xs text-gray-500">These settings apply to bulk imports and are the defaults for products you review individually.</p>
-              <button onClick={()=>{setAliActiveUrl(aliQueued.find(u=>aliSelected.has(u))??"");setAliModalOpen(true)}} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-white font-bold text-sm hover:bg-orange-600"><Plus className="w-4 h-4"/>Import a product</button>
+              {aliBatchActions}
+              {aliQueued.length > 0 && aliNotice && <p role="status" className="whitespace-pre-line text-sm text-gray-600">{aliNotice}</p>}
+              {!aliQueued.length && <button disabled={aliBulkImporting} onClick={()=>{setAliActiveUrl(aliQueued.find(u=>aliSelected.has(u))??"");setAliModalOpen(true)}} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-white font-bold text-sm hover:bg-orange-600"><Plus className="w-4 h-4"/>Import a product</button>}
               {aliDone>0&&<p className="text-sm text-green-700">{aliDone} product(s) imported this session.</p>}
             </div>
-            {aliModalOpen&&<ImportModal key={aliActiveUrl} initialUrl={aliActiveUrl} initialMarkup={aliMarkup} initialMarket={aliMarket} initialQuantity={aliQuantity} initialOrigin={aliOrigin} initialDestinations={aliDestinations} initialPostage={aliShipping} onClose={()=>setAliModalOpen(false)} onSuccess={()=>{setAliDone(n=>n+1);setAliSelected(prev=>{const next=new Set(prev);next.delete(aliActiveUrl);return next})}} userEmail={aliSeller} userName={users.find(u=>u.email===aliSeller)?.name??""}/>}
+            {aliModalOpen&&<ImportModal key={aliActiveUrl} initialUrl={aliActiveUrl} initialMarkup={aliMarkup} initialMarket={aliMarket} initialQuantity={aliQuantity} initialOrigin={aliOrigin} initialDestinations={aliDestinations} initialPostage={aliShipping} onClose={()=>setAliModalOpen(false)} onSuccess={()=>{setAliDone(n=>n+1);setAliSelected(prev=>{const next=new Set(prev);next.delete(aliActiveUrl);return next});setAliQueued(prev=>prev.filter(url=>url!==aliActiveUrl))}} userEmail={aliSeller} userName={users.find(u=>u.email===aliSeller)?.name??""}/>}
           </motion.div>
         )}
 

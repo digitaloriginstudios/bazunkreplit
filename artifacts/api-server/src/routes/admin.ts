@@ -1917,6 +1917,10 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
   const base = official ? process.env.BAZUNK_DATA_API_URL : process.env.ALIEXPRESS_SCRAPER_URL;
   const token = official ? process.env.BAZUNK_DATA_INTERNAL_TOKEN : process.env.ALIEXPRESS_SCRAPER_TOKEN;
   const useDropship = await dropshipConfigured();
+  const requireVariantDetails = req.body?.requireVariantDetails === true;
+  if (requireVariantDetails && !useDropship) {
+    res.status(503).json({ error: "Connect AliExpress under AliExpress OAuth to import products with all their variations." }); return;
+  }
   if (!useDropship && (!base || !token)) { res.status(503).json({error:"AliExpress product provider not configured"});return; }
   const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map((v: unknown) => String(v)))] as string[] : [];
   if (!ids.length || ids.length > 30 || ids.some(id => !/^\d{10,20}$/.test(id))) {
@@ -1968,6 +1972,7 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
       const listingRate = currency === listingCurrency ? 1 : gbpRate && fxRates[listingCurrency] ? gbpRate / fxRates[listingCurrency] : null;
       if (!listingRate) throw new Error("No verified exchange rate from " + currency + " to " + listingCurrency);
       if (p.availability === "out_of_stock") throw new Error("Product out of stock");
+      if (requireVariantDetails && !choices.length) throw new Error("AliExpress did not return verified variation details. Review this product individually.");
       if (choices.length > 200) throw new Error("Too many supplier options. Review this product individually.");
       const options = choices.length > 1 ? choices.map(choice => {
         if (choice.priceUsd === null || choice.quantity === null) throw new Error("An option is missing a verified USD price or stock. Review this product individually.");
