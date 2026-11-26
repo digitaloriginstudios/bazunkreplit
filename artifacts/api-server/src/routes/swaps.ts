@@ -47,6 +47,8 @@ function ensureTables(){
  await db.execute(sql`CREATE INDEX IF NOT EXISTS swap_search_idx ON swap_listings USING GIN(to_tsvector('simple',title||' '||description||' '||category||' '||wanted)) WHERE status='active'`);
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_photos(listing_id UUID NOT NULL REFERENCES swap_listings(id),position INTEGER NOT NULL CHECK(position BETWEEN 0 AND 3),mime TEXT NOT NULL CHECK(mime='image/jpeg'),data BYTEA NOT NULL CHECK(octet_length(data)<=524288),PRIMARY KEY(listing_id,position))`);
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_addresses(offer_id UUID NOT NULL REFERENCES swap_offers(id),owner_email TEXT NOT NULL,ciphertext TEXT NOT NULL,PRIMARY KEY(offer_id,owner_email))`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_notification_preferences(owner_email TEXT PRIMARY KEY,match_email BOOLEAN NOT NULL DEFAULT false,activity_email BOOLEAN NOT NULL DEFAULT false)`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_notification_outbox(id BIGSERIAL PRIMARY KEY,owner_email TEXT NOT NULL,kind TEXT NOT NULL,subject_id TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),sent_at TIMESTAMPTZ,UNIQUE(owner_email,kind,subject_id))`);
  })().catch(e=>{setup=undefined;throw e;});
 }
 router.use("/swaps",async(_req,res,next)=>{
@@ -105,6 +107,33 @@ router.get("/swaps/matches",async(req,res)=>{
  res.setHeader("Cache-Control","private, no-store");res.json({items:rows});
  }catch{res.status(503).json({error:"Recommendations unavailable"});}
 });
+
+
+router.get("/swaps/notification-preferences",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const row=(await db.execute(sql`SELECT match_email,activity_email FROM swap_notification_preferences WHERE owner_email=${email}`)).rows[0];res.setHeader("Cache-Control","private, no-store");res.json(row??{match_email:false,activity_email:false});}catch{res.status(503).json({error:"Preferences unavailable"});}
+});
+router.post("/swaps/notification-preferences",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const {match_email,activity_email}=req.body??{};if(typeof match_email!=="boolean"||typeof activity_email!=="boolean"){res.status(400).end();return;}
+ await db.execute(sql`INSERT INTO swap_notification_preferences(owner_email,match_email,activity_email) VALUES(${email},${match_email},${activity_email}) ON CONFLICT(owner_email) DO UPDATE SET match_email=EXCLUDED.match_email,activity_email=EXCLUDED.activity_email`);res.json({match_email,activity_email});}catch{res.status(503).json({error:"Preferences unavailable"});}
+});
+let notificationRunning=false;
+export async function runSwapNotifications(){
+ if(notificationRunning||process.env.SWAP_EMAIL_ENABLED!=="true"||!process.env.RESEND_API_KEY||!process.env.EMAIL_FROM)return;
+ notificationRunning=true;
+ try{
+ if(!await featureEnabled("swaps"))return;await ensureTables();
+ await db.execute(sql`INSERT INTO swap_notification_outbox(owner_email,kind,subject_id)
+ SELECT DISTINCT p.owner_email,'match',c.id::text FROM swap_notification_preferences p JOIN swap_listings m ON m.owner_email=p.owner_email AND m.status='active' JOIN swap_listings c ON c.owner_email<>m.owner_email AND c.status='active' AND c.created_at>NOW()-INTERVAL '24 hours' WHERE p.match_email AND to_tsvector('simple',c.title||' '||c.category) @@ plainto_tsquery('simple',m.wanted) AND to_tsvector('simple',m.title||' '||m.category) @@ plainto_tsquery('simple',c.wanted) LIMIT 500 ON CONFLICT DO NOTHING`);
+ await db.execute(sql`INSERT INTO swap_notification_outbox(owner_email,kind,subject_id)
+ SELECT p.owner_email,'activity',e.id::text FROM swap_events e JOIN swap_offers o ON o.id=e.offer_id JOIN swap_listings t ON t.id=o.target_id JOIN swap_notification_preferences p ON p.owner_email IN (o.proposer_email,t.owner_email) WHERE p.activity_email AND p.owner_email<>e.actor_email AND e.created_at>NOW()-INTERVAL '24 hours' AND e.event<>'new_message' ORDER BY e.id DESC LIMIT 500 ON CONFLICT DO NOTHING`);
+ const rows=(await db.execute(sql`SELECT q.id,q.owner_email,q.kind FROM swap_notification_outbox q JOIN swap_notification_preferences p ON p.owner_email=q.owner_email WHERE q.sent_at IS NULL AND q.created_at>NOW()-INTERVAL '20 hours' AND ((q.kind='match' AND p.match_email) OR (q.kind='activity' AND p.activity_email)) ORDER BY q.id LIMIT 25`)).rows;
+ for(const row of rows){
+ const match=row.kind==="match";
+ const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+process.env.RESEND_API_KEY,"Idempotency-Key":"bazunk-swap-"+row.id},body:JSON.stringify({from:process.env.EMAIL_FROM,to:[row.owner_email],subject:match?"New Bazunk Swap match":"Bazunk Swap activity",text:(match?"A possible mutual exchange matches your wanted item.":"There is new activity on your exchange.")+" Visit https://www.bazunk.com/dashboard/swaps to review it or change your email preferences."}),signal:AbortSignal.timeout(10000)});
+ if(response.ok)await db.execute(sql`UPDATE swap_notification_outbox SET sent_at=NOW() WHERE id=${row.id}`);
+ }
+ }catch{console.error("Swap notification cycle failed");}finally{notificationRunning=false;}
+}
 
 router.get("/swaps/:id",async(req,res)=>{
  try{
