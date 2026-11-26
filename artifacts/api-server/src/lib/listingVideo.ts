@@ -2,7 +2,7 @@ import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
 export const listingVideoId = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
-export const listingVideoLimit = 8 * 1024 * 1024;
+export const listingVideoLimit = 25 * 1024 * 1024;
 
 let tablesReady: Promise<unknown> | undefined;
 export function ensureListingVideoTables() {

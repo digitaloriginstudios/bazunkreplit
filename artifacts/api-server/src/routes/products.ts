@@ -25,7 +25,7 @@ router.post("/seller/products/video-upload", async (req, res, next) => {
   if (!Buffer.isBuffer(bytes) || bytes.length < 16 ||
       (mime === "video/mp4" ? bytes.toString("ascii", 4, 8) !== "ftyp" :
         mime !== "video/webm" || bytes.readUInt32BE(0) !== 0x1a45dfa3)) {
-    res.status(400).json({ error: "Choose a valid MP4 or WebM video up to 8 MB." }); return;
+    res.status(400).json({ error: "Choose a valid MP4 or WebM video up to 25 MB." }); return;
   }
   try {
     await ensureListingVideoTables();
