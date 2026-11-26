@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import affiliatesRouter from "./affiliates.js";
 import healthRouter from "./health.js";
 import demoCreatorRouter from "./demoCreator.js";
 import mobileCheckoutRouter from "./mobileCheckout.js";
@@ -96,6 +97,7 @@ router.use(stripeRouter);
 router.use(mobileCheckoutRouter);
 // Before legacy admin routes so real ledger endpoints supersede promotional-only settings.
 router.use(cashbackRouter);
+router.use(affiliatesRouter);
 router.use(adminRouter);
 router.use(setupRouter);
 router.use(productsRouter);
