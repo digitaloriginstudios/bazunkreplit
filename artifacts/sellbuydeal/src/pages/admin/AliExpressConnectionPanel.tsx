@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAdmin } from "@/context/AdminContext";
 
 type Connection = {
@@ -9,12 +9,6 @@ type Connection = {
   refreshExpiresAt: string | null;
   renewedAt: string | null;
   needsAuthorization: boolean;
-};
-
-type SearchTest = {
-  count: number;
-  counts?: { returned: number; recommendations: number; matching: number; priced: number };
-  products: { externalId: string; title: string; price: { amount: number; currency: string } }[];
 };
 
 const path = "/api/admin/aliexpress/connection";
@@ -28,8 +22,6 @@ export function AliExpressConnectionPanel() {
   const [connection, setConnection] = useState<Connection | null>(null);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-  const [query, setQuery] = useState("");
-  const [test, setTest] = useState<SearchTest | null>(null);
   const [message, setMessage] = useState("");
 
   async function request<T>(suffix = "", options?: RequestInit): Promise<T> {
@@ -48,7 +40,6 @@ export function AliExpressConnectionPanel() {
     setPending(true);
     setError("");
     setMessage("");
-    setTest(null);
     try {
       await operation();
     } catch (err) {
@@ -74,20 +65,13 @@ export function AliExpressConnectionPanel() {
     });
   }
 
-  async function check(keyword: string, showProducts: boolean) {
-    const result = await request<SearchTest>("/test", {
+  async function testConnection() {
+    await request("/test", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: keyword }),
+      body: JSON.stringify({ query: "usb cable" }),
     });
-    if (showProducts) setTest(result);
-    else setMessage("AliExpress accepted a live product search using the saved connection.");
+    setMessage("AliExpress accepted a live request using the saved connection.");
     setConnection(await request<Connection>());
-  }
-
-  function search(event: FormEvent) {
-    event.preventDefault();
-    void run(() => check(query.trim(), true));
   }
 
   const connected = Boolean(connection?.connectedAt);
@@ -117,7 +101,7 @@ export function AliExpressConnectionPanel() {
         <button type="button" className={button} disabled={pending} onClick={() => void run(async () => setConnection(await request<Connection>()))}>
           Refresh status
         </button>
-        <button type="button" className={button} disabled={pending || !canTest} onClick={() => void run(() => check("usb cable", false))}>
+        <button type="button" className={button} disabled={pending || !canTest} onClick={() => void run(testConnection)}>
           Test connection
         </button>
         <button type="button" className={button} disabled={pending || !canTest} onClick={() => void run(async () => {
@@ -132,33 +116,9 @@ export function AliExpressConnectionPanel() {
           }
         }}>Disconnect</button>}
       </div>
-      <form onSubmit={search} className="flex flex-wrap items-end gap-2">
-        <label className="text-sm font-medium">
-          Test product search
-          <input value={query} onChange={event => setQuery(event.target.value)} maxLength={120} required
-            className="mt-1 block rounded-lg border border-gray-300 bg-transparent px-3 py-2" />
-        </label>
-        <button className={button} disabled={pending || !canTest || !query.trim()}>Run search</button>
-      </form>
       {pending && <p role="status" className="text-sm">Contacting the API…</p>}
       {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}
       {message && <p role="status" className="text-sm">{message}</p>}
-      {test && (
-        <div className="text-sm" role="status">
-          <p>AliExpress search completed. {test.count} priced products matched.</p>
-          {test.count === 0 && test.counts && (
-            <p>
-              {test.counts.returned === 0 ? "AliExpress returned no products for this search." :
-                test.counts.recommendations === test.counts.returned ? "AliExpress returned only recommended products." :
-                test.counts.matching === 0 ? "The returned products did not match the keywords or had incomplete details." :
-                "Matching products had no usable USD price."}
-            </p>
-          )}
-          <ul className="mt-1 list-inside list-disc">
-            {test.products.map(product => <li key={product.externalId}>{product.title} ({product.price.currency} {product.price.amount.toFixed(2)})</li>)}
-          </ul>
-        </div>
-      )}
     </section>
   );
 }
