@@ -133,7 +133,10 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
   const [previewNotice, setPreviewNotice] = useState("");
   const [supplierCurrency, setSupplierCurrency] = useState("USD");
   const [lastPreviewUrl, setLastPreviewUrl] = useState("");
-  const [choices, setChoices] = useState<{ id: string; label: string }[]>([]);
+  type Choice = { id: string; label: string; image: string | null; priceUsd: number | null; quantity: number | null; origin: string | null };
+  const [choices, setChoices] = useState<Choice[]>([]);
+  const [variantEdits, setVariantEdits] = useState<Record<string, { enabled: boolean; usd: string; quantity: string }>>({});
+  const [savedCount, setSavedCount] = useState(0);
   const [sku, setSku] = useState("");
   const [shipOrigin, setShipOrigin] = useState("");
   const [deliversToMarket, setDeliversToMarket] = useState(false);
@@ -160,7 +163,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
       const response = await fetchRef.current("/api/admin/aliexpress-product-preview?" + query);
       const data = await response.json() as {
         error?: string; title?: string; description?: string; imageUrl?: string; supplierPrice?: number; currency?: string;
-        origin?: string; selectedSku?: string; choices?: { id: string; label: string }[];
+        origin?: string; selectedSku?: string; choices?: Choice[];
         shipping?: { origin: string | null; destination: string; amount: number; estimate: string };
         images?: string[]; attributes?: { key: string; value: string }[];
       };
@@ -178,8 +181,18 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
         : null);
       setSupplierCurrency(data.currency || "USD");
       setLastPreviewUrl(productUrl);
-      setChoices(data.choices ?? []);
+      const available = data.choices ?? [];
+      const selected = available.find(choice => choice.id === data.selectedSku);
+      setChoices(available);
+      setVariantEdits(previous => Object.fromEntries(available.map(choice => [choice.id, previous[choice.id] ?? {
+        enabled: true, usd: choice.priceUsd == null ? "" : String(choice.priceUsd),
+        quantity: choice.quantity == null ? "" : String(choice.quantity),
+      }])));
       setSku(data.selectedSku ?? "");
+      const fetchedPrice = selected?.priceUsd ?? (data.currency === "USD" && available.length <= 1 ? data.supplierPrice : undefined);
+      if (typeof fetchedPrice === "number" && Number.isFinite(fetchedPrice) && fetchedPrice > 0)
+        setSupplierPriceUsd(previous => previous || String(fetchedPrice));
+      if (selected?.quantity != null) setQuantity(String(selected.quantity));
       setShipOrigin(data.shipping?.origin ?? data.origin ?? "");
       if (data.shipping) {
         setDeliversToMarket(true);
@@ -211,7 +224,19 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
     : null;
 
   const subcategories = SITE_CATEGORIES.find(c => c.slug === category)?.subcategories ?? [];
-  const canSubmit = url.trim() && title.trim() && bazunkPreview !== null && bazunkPreview > 0 && !!category && !loading && !previewLoading && (market === "us" || !rateLoading) && Number.isInteger(stock) && stock > 0 && stock <= 2147483647;
+  const multi = choices.length > 1;
+  const variants = choices.filter(choice => variantEdits[choice.id]?.enabled).map(choice => {
+    const edit = variantEdits[choice.id];
+    const priceUsd = Number(edit.usd);
+    const quantity = edit.quantity === "" ? NaN : Number(edit.quantity);
+    return { sku: choice.id, label: choice.label, origin: choice.origin, image: choice.image, priceUsd, quantity,
+      expectedSellingPrice: listingRate === null ? 0 : calcBazunkPrice(priceUsd, markupType, mv, listingRate) };
+  });
+  const canSubmit = url.trim() && title.trim() && !!category && !loading && !previewLoading &&
+    listingRate !== null && (market === "us" || !rateLoading) && Number.isFinite(mv) && mv >= 0 && mv <= 1000 &&
+    (multi ? variants.length > 0 && variants.length <= 200 && variants.every(row => Number.isFinite(row.priceUsd) && row.priceUsd > 0 &&
+      Number.isInteger(row.quantity) && row.quantity >= 0 && row.quantity <= 2147483647 && row.expectedSellingPrice > 0)
+    : bazunkPreview !== null && bazunkPreview > 0 && Number.isInteger(stock) && stock > 0 && stock <= 2147483647);
 
   async function handleImport() {
     if (!canSubmit) return;
@@ -226,7 +251,9 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           title: title.trim(),
           supplierPriceUsd: usd,
           market,
-          quantity: stock,
+          quantity: multi ? 1 : stock,
+          variants: multi ? variants : undefined,
+          shippingSku: sku,
           shipOrigin: shipOrigin || null,
           deliversToMarket,
           shippingPrice: deliversToMarket ? shippingPrice : null,
@@ -248,6 +275,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
         setError((data.error as string) ?? "Import failed");
       } else {
         setImportedTitle(title.trim());
+        setSavedCount(typeof data.imported === "number" ? data.imported : 1);
         setSavedPrice(typeof data.sellingPrice === "number" ? data.sellingPrice : null);
         setSuccess(true);
         onSuccess();
@@ -300,10 +328,10 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-7 h-7 text-emerald-600" />
           </div>
-          <p className="font-bold text-gray-900 text-lg">{savedPrice === null ? "Imported!" : `Imported at ${currencySymbol}${savedPrice.toFixed(2)}`}</p>
+          <p className="font-bold text-gray-900 text-lg">{savedCount > 1 ? `${savedCount} options imported` : savedPrice === null ? "Imported!" : `Imported at ${currencySymbol}${savedPrice.toFixed(2)}`}</p>
           <p className="text-sm text-gray-400 mt-1 mb-6 truncate px-4">{importedTitle}</p>
           <div className="flex gap-3">
-            <button onClick={() => { setSuccess(false); clearShipping(); setChoices([]); setSku(""); setGallery([]); setAttributes([]); setUrl(""); setTitle(""); setSupplierPriceUsd(""); setSupplierQuote(null); setImageUrl(""); setDescription(""); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+            <button onClick={() => { setSuccess(false); clearShipping(); setChoices([]); setVariantEdits({}); setSku(""); setGallery([]); setAttributes([]); setUrl(""); setTitle(""); setSupplierPriceUsd(""); setSupplierQuote(null); setImageUrl(""); setDescription(""); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
               Import Another
             </button>
             <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-gray-800 transition-colors">
@@ -324,7 +352,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">AliExpress Product URL <span className="text-red-400">*</span></label>
             <input value={url} onChange={e => { previewSequence.current++;
               setPreviewLoading(false); setPreviewNotice(""); setLastPreviewUrl(""); setUrl(e.target.value);
-              setSupplierPriceUsd(""); setSupplierQuote(null); clearShipping(); setChoices([]); setSku("");
+              setSupplierPriceUsd(""); setSupplierQuote(null); clearShipping(); setChoices([]); setVariantEdits({}); setSku("");
               setTitle(""); setDescription(""); setImageUrl(""); setGallery([]); setAttributes([]); }} placeholder="https://www.aliexpress.com/item/1005007123456789.html" className={inputCls} />
             <button type="button" disabled={previewLoading || !url.trim()} onClick={() => void fetchPreview(url, market, sku)} className="mt-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{previewLoading ? "Fetching product details…" : lastPreviewUrl === url ? "Refresh product details" : "Fetch product details"}</button>
             {previewNotice && <p role="status" className="mt-2 text-xs text-gray-600">{previewNotice}</p>}
@@ -340,7 +368,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
 
           {/* Price + Image */}
           <div className="grid grid-cols-2 gap-3">
-            <div>
+            {!multi && <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Supplier Price (USD) <span className="text-red-400">*</span></label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">$</span>
@@ -349,7 +377,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
               <p className="mt-1 text-xs text-gray-600">Enter the USD price of the exact option you’re importing.
                 {supplierQuote && ` API quote: ${supplierQuote.amount.toFixed(2)} ${supplierQuote.currency}.`}
               </p>
-            </div>
+            </div>}
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Category <span className="text-red-400">*</span></label>
               <select value={category} onChange={e => { setCategory(e.target.value); setSubcategory(""); }} className={`${inputCls} bg-white`}>
@@ -390,6 +418,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
               <select value={market} onChange={e => {
                 const next = e.target.value === "us" ? "us" : "uk";
                 setMarket(next);
+                setVariantEdits({});
                 setSupplierPriceUsd("");
                 void fetchPreview(url, next, sku);
                 if (!url.trim()) clearShipping();
@@ -398,11 +427,35 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
                 <option value="us">USA · USD</option>
               </select>
             </label>
-            <label className="block text-xs font-semibold text-gray-600">
+            {!multi && <label className="block text-xs font-semibold text-gray-600">
               Quantity
               <input type="number" min="1" max="2147483647" step="1" value={quantity} onChange={e => setQuantity(e.target.value)} className={`${inputCls} mt-1.5`} />
-            </label>
+            </label>}
           </div>
+
+          {multi && <section className="space-y-2 rounded-xl border border-gray-200 p-3" aria-label="Product options to import">
+            <h3 className="text-sm font-bold">Product options to import</h3>
+            <p className="text-xs text-gray-600">Each selected option gets its own listing, price and stock. Buyers can switch between options. Confirm any missing USD price or stock before importing.</p>
+            {choices.map(choice => {
+              const edit = variantEdits[choice.id];
+              if (!edit) return null;
+              const update = (change: Partial<typeof edit>) => setVariantEdits(current => ({
+                ...current, [choice.id]: { ...current[choice.id], ...change },
+              }));
+              const price = variants.find(row => row.sku === choice.id)?.expectedSellingPrice;
+              return <div key={choice.id} className="grid grid-cols-2 gap-2 rounded-lg border p-2 text-xs">
+                <label className="col-span-2 flex items-center gap-2 font-semibold">
+                  <input type="checkbox" checked={edit.enabled} onChange={e => update({ enabled: e.target.checked })} />{choice.label}
+                </label>
+                <label>Supplier USD<input type="number" min="0.01" step="0.01" value={edit.usd} disabled={!edit.enabled}
+                  onChange={e => update({ usd:e.target.value })} className={inputCls} /></label>
+                <label>Quantity<input type="number" min="0" step="1" value={edit.quantity} disabled={!edit.enabled}
+                  onChange={e => update({ quantity:e.target.value })} className={inputCls} /></label>
+                {price != null && Number.isFinite(price) && Number(edit.usd) > 0 &&
+                  <p className="col-span-2">Listing price {currencySymbol}{price.toFixed(2)}</p>}
+              </div>;
+            })}
+          </section>}
 
           <section className="space-y-2 rounded-xl border border-gray-200 p-3" aria-label="Shipping details">
             <h3 className="text-sm font-bold">Shipping</h3>
@@ -467,7 +520,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           </p>}
 
           {/* Live price preview */}
-          {bazunkPreview !== null && (
+          {!multi && bazunkPreview !== null && (
             <div className="bg-[#F26B21]/8 rounded-xl px-4 py-3 flex items-center justify-between text-sm">
               <span className="text-gray-500 text-xs">
                 ${usd.toFixed(2)} USD {market === "uk" && `→ £${(usd * (usdToGbp ?? 0)).toFixed(2)} GBP`}
@@ -490,7 +543,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
             className="w-full py-2.5 rounded-xl bg-[#F26B21] text-white font-bold text-sm hover:bg-[#e0601d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            {loading ? "Importing…" : "Create Listing"}
+            {loading ? "Importing…" : multi ? `Create listings (${variants.length})` : "Create Listing"}
           </button>
         </div>
       )}

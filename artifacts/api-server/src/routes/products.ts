@@ -485,7 +485,7 @@ router.get("/admin/products/:id", async (req, res) => {
         status, condition, seller_email, seller_name, seller_username,
         category AS category_id, category AS category_slug, category AS category_name,
         subcategory, image, tags, specifications, currency, price_gbp,
-        ship_origin, ship_origin_other, ship_zone, shipping_price, handling_charge,
+        ship_origin, ship_origin_other, ship_zone, shipping_price, handling_charge, quantity,
         created_at, updated_at
       FROM listings WHERE id = ${parseInt(req.params.id) || 0}
     `).then(r => r.rows as any[]);
@@ -498,7 +498,7 @@ router.get("/admin/products/:id", async (req, res) => {
       images: Array.isArray(specs.admin_gallery_images) && specs.admin_gallery_images.length ? specs.admin_gallery_images : (row.image ? [row.image] : []),
       variants: Array.isArray(specs.admin_variants) ? specs.admin_variants : [],
       status: row.status === "active" ? "approved" : row.status,
-      inventory: Number(specs.inventory ?? 1),
+      inventory: Number(row.quantity ?? specs.inventory ?? 1),
       brand: String(specs.brand ?? ""),
       sku: String(specs.sku ?? row.public_id ?? ""),
       ships_from: String(specs.ships_from ?? specs.source_country ?? ""),
@@ -567,6 +567,10 @@ router.put("/admin/products/:id", async (req, res) => {
       admin_manual_override: true,
       admin_manual_override_at: new Date().toISOString(),
     });
+    const stock = inventory === undefined ? null : Number(inventory);
+    if (stock !== null && (!Number.isInteger(stock) || stock < 0 || stock > 2147483647)) {
+      res.status(400).json({ error: "Enter a non-negative whole-number quantity." }); return;
+    }
     const dbStatus = status === "approved" ? "active" : status ?? "pending";
     const image = Array.isArray(images) && images.length ? String(images[0]) : null;
     const [row] = await db.execute(sql`
@@ -579,7 +583,7 @@ router.put("/admin/products/:id", async (req, res) => {
         seller_email = ${seller_email ?? ""}, tags = ${tags || null}, image = ${image},
         ship_origin = ${origin ?? null}, ship_zone = ${zone ?? null},
         ship_origin_other = ${ships_from_location === undefined ? current.ship_origin_other : String(ships_from_location).trim().slice(0, 120) || null},
-        shipping_price = ${postage}, handling_charge = ${handling},
+        shipping_price = ${postage}, handling_charge = ${handling}, quantity = COALESCE(${stock}::integer, quantity),
         specifications = ${JSON.stringify(specs)}, updated_at = NOW()
       WHERE id = ${id} RETURNING id::text, title, status
     `).then(r => r.rows as any[]);

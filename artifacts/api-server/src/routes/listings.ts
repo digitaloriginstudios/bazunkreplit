@@ -414,7 +414,7 @@ router.get("/listings/:id", async (req, res) => {
       tags: listingsTable.tags, extraCategories: listingsTable.extraCategories, specifications: listingsTable.specifications,
       currency: listingsTable.currency, priceGbp: listingsTable.priceGbp,
       shipOrigin: listingsTable.shipOrigin, shipOriginOther: listingsTable.shipOriginOther, shipZone: listingsTable.shipZone,
-      carrier: listingsTable.carrier, shippingPrice: listingsTable.shippingPrice, handlingCharge: listingsTable.handlingCharge,
+      carrier: listingsTable.carrier, shippingPrice: listingsTable.shippingPrice, handlingCharge: listingsTable.handlingCharge, quantity: listingsTable.quantity, sku: listingsTable.sku,
       createdAt: listingsTable.createdAt, updatedAt: listingsTable.updatedAt,
     }).from(listingsTable).where(sql`public_url_token = ${rawId} OR public_id = ${rawId}`).limit(1);
     if (!row && /^\\d+$/.test(rawId)) {
@@ -427,7 +427,7 @@ router.get("/listings/:id", async (req, res) => {
       tags: listingsTable.tags, extraCategories: listingsTable.extraCategories, specifications: listingsTable.specifications,
       currency: listingsTable.currency, priceGbp: listingsTable.priceGbp,
       shipOrigin: listingsTable.shipOrigin, shipOriginOther: listingsTable.shipOriginOther, shipZone: listingsTable.shipZone,
-      carrier: listingsTable.carrier, shippingPrice: listingsTable.shippingPrice, handlingCharge: listingsTable.handlingCharge,
+      carrier: listingsTable.carrier, shippingPrice: listingsTable.shippingPrice, handlingCharge: listingsTable.handlingCharge, quantity: listingsTable.quantity, sku: listingsTable.sku,
       createdAt: listingsTable.createdAt, updatedAt: listingsTable.updatedAt,
     }).from(listingsTable).where(eq(listingsTable.id, Number(rawId))).limit(1);
     }
@@ -453,7 +453,25 @@ router.get("/listings/:id", async (req, res) => {
     }
 
     const tokenResult=await db.execute(sql`SELECT public_url_token FROM listings WHERE id=${row.id}`);
-    res.json(normalizeListingMedia({ ...withPromo, publicUrlToken:tokenResult.rows[0]?.public_url_token ?? null, sellerVerified }));
+    let aliExpressOptions: unknown[] = [];
+    let supplier: {aliexpress_id?: string; aliexpress_sku?: string; marketplace_region?: string} = {};
+    try { supplier = JSON.parse(row.specifications || "{}") || {}; } catch { /* Ignore non-JSON legacy data. */ }
+    if (supplier.aliexpress_id && supplier.aliexpress_sku) {
+      aliExpressOptions = (await db.execute(sql`
+        SELECT public_url_token AS token, quantity,
+          specs->>'aliexpress_option' AS label
+        FROM (
+          SELECT public_url_token, quantity, id,
+            CASE WHEN COALESCE(specifications,'') ~ '^\\s*\\{' THEN specifications::jsonb ELSE '{}'::jsonb END AS specs
+          FROM listings WHERE seller_email = ${row.sellerEmail} AND status = 'active' AND public_url_token IS NOT NULL
+        ) AS options
+        WHERE specs->>'aliexpress_id' = ${supplier.aliexpress_id}
+          AND specs->>'marketplace_region' = ${supplier.marketplace_region ?? "uk"}
+          AND specs->>'aliexpress_sku' IS NOT NULL
+        ORDER BY id LIMIT 200
+      `)).rows;
+    }
+    res.json(normalizeListingMedia({ ...withPromo, aliExpressOptions, publicUrlToken:tokenResult.rows[0]?.public_url_token ?? null, sellerVerified }));
   } catch (err) {
     console.error("Error fetching listing:", err);
     res.status(500).json({ error: "internal_server_error", message: String(err) });
