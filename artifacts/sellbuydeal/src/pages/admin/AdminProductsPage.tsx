@@ -1,3 +1,4 @@
+import { shippingCountries, shippingCountryLabel, shippingZones, shippingZoneLabel } from "@/lib/listingShipping";
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "wouter";
@@ -28,6 +29,7 @@ interface Product {
   images: string[]; variants: Variant[]; seller_email: string | null;
   category_id: string | null; category_name: string | null; subcategory?: string | null; subsubcategory?: string | null; created_at: string;
   currency?: string; brand?: string; sku?: string; ships_from?: string; ships_from_location?: string;
+  shipOrigin?: string | null; shipZone?: string | null; shipOriginOther?: string | null;
   ships_to?: string; shipping_price?: string | number; handling_charge?: string | number; free_shipping?: boolean; dispatch_time?: string;
   delivery_estimate?: string; source?: string | null; source_url?: string | null; source_item_id?: string | null;
   source_condition?: string | null; source_price?: string | number | null; source_postage?: string | number | null;
@@ -38,15 +40,15 @@ interface ProductForm {
   title: string; description: string; price: string; category_id: string;
   condition: string; status: string; inventory: string; tags: string;
   seller_email: string; images: string[]; variants: Variant[]; subcategory: string; subsubcategory: string; currency: string;
-  brand: string; sku: string; ships_from: string; ships_from_location: string; ships_to: string;
+  brand: string; sku: string; shipOrigin: string; ships_from_location: string; shipZone: string;
   shipping_price: string; handling_charge: string; free_shipping: boolean; dispatch_time: string; delivery_estimate: string;
 }
 
 const EMPTY_FORM: ProductForm = {
   title: "", description: "", price: "0", category_id: "", condition: "new",
   status: "pending", inventory: "0", tags: "", seller_email: "", images: [], variants: [],
-  subcategory: "", subsubcategory: "", currency: "GBP", brand: "", sku: "", ships_from: "", ships_from_location: "",
-  ships_to: "", shipping_price: "", handling_charge: "", free_shipping: false, dispatch_time: "", delivery_estimate: "",
+  subcategory: "", subsubcategory: "", currency: "GBP", brand: "", sku: "", shipOrigin: "", ships_from_location: "",
+  shipZone: "", shipping_price: "", handling_charge: "", free_shipping: false, dispatch_time: "", delivery_estimate: "",
 };
 
 const STATUS_STYLE: Record<string, string> = {
@@ -361,7 +363,7 @@ function ProductDrawer({
     images: Array.isArray(product.images) ? [...product.images] : [],
     variants: Array.isArray(product.variants) ? product.variants.map(v => ({ ...v, priceModifier: String(v.priceModifier), inventory: String(v.inventory) })) : [],
     subcategory: product.subcategory ?? "", subsubcategory: product.subsubcategory ?? "", currency: product.currency ?? "GBP", brand: product.brand ?? "", sku: product.sku ?? "",
-    ships_from: product.ships_from ?? "", ships_from_location: product.ships_from_location ?? "", ships_to: product.ships_to ?? "",
+    shipOrigin: product.shipOrigin === "UK" ? "GB" : product.shipOrigin === "China" ? "CN" : product.shipOrigin ?? "", ships_from_location: product.shipOriginOther ?? product.ships_from_location ?? "", shipZone: product.shipZone === "international" ? "worldwide" : product.shipZone ?? "",
     shipping_price: product.shipping_price == null ? "" : String(product.shipping_price), handling_charge: product.handling_charge == null ? "" : String(product.handling_charge), free_shipping: Boolean(product.free_shipping),
     dispatch_time: product.dispatch_time ?? "", delivery_estimate: product.delivery_estimate ?? "",
   } : { ...EMPTY_FORM });
@@ -698,11 +700,27 @@ function ProductDrawer({
               <div><h3 className="text-sm font-black text-gray-800">Shipping & fulfilment</h3><p className="text-xs text-gray-400">Customer-facing delivery information for this listing.</p></div>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block"><span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Ships from country</span>
-                  <input value={form.ships_from} onChange={e => set("ships_from", e.target.value)} className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm" placeholder="United Kingdom" /></label>
-                <label className="block"><span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Ship-from location</span>
-                  <input value={form.ships_from_location} onChange={e => set("ships_from_location", e.target.value)} className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm" placeholder="Sunderland, UK" /></label>
+                  <select value={form.shipOrigin} onChange={e => set("shipOrigin", e.target.value)} className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm">
+                    <option value="">Select country</option>
+                    {form.shipOrigin && form.shipOrigin !== "Other" && !shippingCountries.some(country => country.code === form.shipOrigin) &&
+                      <option value={form.shipOrigin}>{shippingCountryLabel(form.shipOrigin)}</option>}
+                    {shippingCountries.map(country => <option key={country.code} value={country.code}>{country.name}</option>)}
+                    <option value="Other">Other (enter location)</option>
+                  </select></label>
+                <label className="block"><span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Ship-from town or city (optional)</span>
+                  <input value={form.ships_from_location} onChange={e => set("ships_from_location", e.target.value)} className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm" placeholder="Sunderland" /></label>
                 <label className="block"><span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Ships to</span>
-                  <input value={form.ships_to} onChange={e => set("ships_to", e.target.value)} className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm" placeholder="United Kingdom" /></label>
+                  <select value={form.shipZone} onChange={e => set("shipZone", e.target.value)} className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm">
+                    <option value="">Select destination</option>
+                    {(form.shipZone === "domestic" || (form.shipZone.startsWith("country:") && !shippingCountries.some(country => "country:" + country.code === form.shipZone))) &&
+                      <option value={form.shipZone}>{shippingZoneLabel(form.shipZone, form.shipOrigin)}</option>}
+                    <optgroup label="Countries">
+                      {shippingCountries.map(country => <option key={country.code} value={`country:${country.code}`}>{country.name} only</option>)}
+                    </optgroup>
+                    <optgroup label="Regions">
+                      {Object.entries(shippingZones).filter(([zone]) => zone !== "international").map(([zone, label]) => <option key={zone} value={zone}>{label}</option>)}
+                    </optgroup>
+                  </select></label>
                 <label className="block"><span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Postage price</span>
                   <input type="number" min="0" step="0.01" disabled={form.free_shipping} value={form.shipping_price} onChange={e => set("shipping_price", e.target.value)} className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm disabled:bg-gray-50" /></label>
                 <label className="block"><span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Handling charge</span><input type="number" min="0" step="0.01" value={form.handling_charge} onChange={e=>set("handling_charge",e.target.value)} className="mt-1 w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm" /></label>

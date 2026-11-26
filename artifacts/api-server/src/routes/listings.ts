@@ -1,3 +1,4 @@
+import { listingShipping } from "../lib/listingShipping.js";
 import { recordCreditEconomy } from "../lib/creditEconomy.js";
 import { isBanned } from "../lib/banned.js";
 import { Router } from "express";
@@ -413,6 +414,8 @@ router.get("/listings/:id", async (req, res) => {
       sellerEmail: listingsTable.sellerEmail, sellerName: listingsTable.sellerName, sellerUsername: listingsTable.sellerUsername,
       tags: listingsTable.tags, extraCategories: listingsTable.extraCategories, specifications: listingsTable.specifications,
       currency: listingsTable.currency, priceGbp: listingsTable.priceGbp,
+      shipOrigin: listingsTable.shipOrigin, shipOriginOther: listingsTable.shipOriginOther, shipZone: listingsTable.shipZone,
+      carrier: listingsTable.carrier, shippingPrice: listingsTable.shippingPrice, handlingCharge: listingsTable.handlingCharge,
       createdAt: listingsTable.createdAt, updatedAt: listingsTable.updatedAt,
     }).from(listingsTable).where(sql`public_url_token = ${rawId} OR public_id = ${rawId}`).limit(1);
     if (!row && /^\\d+$/.test(rawId)) {
@@ -424,6 +427,8 @@ router.get("/listings/:id", async (req, res) => {
       sellerEmail: listingsTable.sellerEmail, sellerName: listingsTable.sellerName, sellerUsername: listingsTable.sellerUsername,
       tags: listingsTable.tags, extraCategories: listingsTable.extraCategories, specifications: listingsTable.specifications,
       currency: listingsTable.currency, priceGbp: listingsTable.priceGbp,
+      shipOrigin: listingsTable.shipOrigin, shipOriginOther: listingsTable.shipOriginOther, shipZone: listingsTable.shipZone,
+      carrier: listingsTable.carrier, shippingPrice: listingsTable.shippingPrice, handlingCharge: listingsTable.handlingCharge,
       createdAt: listingsTable.createdAt, updatedAt: listingsTable.updatedAt,
     }).from(listingsTable).where(eq(listingsTable.id, Number(rawId))).limit(1);
     }
@@ -449,7 +454,7 @@ router.get("/listings/:id", async (req, res) => {
     }
 
     const tokenResult=await db.execute(sql`SELECT public_url_token FROM listings WHERE id=${row.id}`);
-    res.json(normalizeListingMedia({ ...withPromo, publicUrlToken:tokenResult.rows[0]?.public_url_token ?? null, sellerVerified }));
+    res.json(normalizeListingMedia({ ...withPromo, ...listingShipping(withPromo.shipOrigin, withPromo.shipZone, withPromo.shipOriginOther, withPromo.specifications), publicUrlToken:tokenResult.rows[0]?.public_url_token ?? null, sellerVerified }));
   } catch (err) {
     console.error("Error fetching listing:", err);
     res.status(500).json({ error: "internal_server_error", message: String(err) });

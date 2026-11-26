@@ -1,3 +1,4 @@
+import { listingShipping, shippingCountry, shippingZone } from "../lib/listingShipping.js";
 import { COMPLETE_THIRD_LEVEL_LIBRARY } from "../data/thirdLevelLibrary.js";
 import { Router } from "express";
 import { sql } from "drizzle-orm";
@@ -484,6 +485,7 @@ router.get("/admin/products/:id", async (req, res) => {
         status, condition, seller_email, seller_name, seller_username,
         category AS category_id, category AS category_slug, category AS category_name,
         subcategory, image, tags, specifications, currency, price_gbp,
+        ship_origin, ship_origin_other, ship_zone, shipping_price, handling_charge,
         created_at, updated_at
       FROM listings WHERE id = ${parseInt(req.params.id) || 0}
     `).then(r => r.rows as any[]);
@@ -492,6 +494,7 @@ router.get("/admin/products/:id", async (req, res) => {
     try { specs = row.specifications ? JSON.parse(row.specifications) : {}; } catch { specs = {}; }
     res.json({
       ...row,
+      ...listingShipping(row.ship_origin, row.ship_zone, row.ship_origin_other, specs),
       images: Array.isArray(specs.admin_gallery_images) && specs.admin_gallery_images.length ? specs.admin_gallery_images : (row.image ? [row.image] : []),
       variants: Array.isArray(specs.admin_variants) ? specs.admin_variants : [],
       status: row.status === "active" ? "approved" : row.status,
@@ -501,8 +504,8 @@ router.get("/admin/products/:id", async (req, res) => {
       ships_from: String(specs.ships_from ?? specs.source_country ?? ""),
       ships_from_location: String(specs.ships_from_location ?? specs.source_item_location ?? ""),
       ships_to: String(specs.ships_to ?? ""),
-      shipping_price: specs.shipping_price ?? specs.shipping ?? "",
-      handling_charge: specs.handling_charge ?? "",
+      shipping_price: row.shipping_price ?? specs.shipping_price ?? specs.shipping ?? "",
+      handling_charge: row.handling_charge ?? specs.handling_charge ?? "",
       free_shipping: Boolean(specs.free_shipping ?? (String(specs.source_shipping_label ?? "").toLowerCase() === "free")),
       dispatch_time: String(specs.dispatch_time ?? ""),
       delivery_estimate: String(specs.delivery_estimate ?? ""),
@@ -529,23 +532,34 @@ router.put("/admin/products/:id", async (req, res) => {
       title, description, price, condition, status, category_id, subcategory, subsubcategory,
       seller_email, tags, images, currency, inventory, brand, sku,
       ships_from, ships_from_location, ships_to, shipping_price, handling_charge, free_shipping,
-      dispatch_time, delivery_estimate,
+      dispatch_time, delivery_estimate, shipOrigin, shipZone,
     } = req.body;
     if (!title) { res.status(400).json({ error: "title required" }); return; }
     const id = parseInt(req.params.id) || 0;
-    const [current] = await db.execute(sql`SELECT specifications FROM listings WHERE id = ${id}`)
+    const [current] = await db.execute(sql`SELECT specifications, ship_origin, ship_zone, ship_origin_other, shipping_price, handling_charge, price, price_gbp, currency FROM listings WHERE id = ${id}`)
       .then(r => r.rows as any[]);
     if (!current) { res.status(404).json({ error: "Product not found" }); return; }
     let specs: Record<string, any> = {};
     try { specs = current.specifications ? JSON.parse(current.specifications) : {}; } catch { specs = {}; }
+    const origin = shipOrigin === undefined ? current.ship_origin : shipOrigin === "Other" ? "Other" : shippingCountry(shipOrigin);
+    const zone = shipZone === undefined ? current.ship_zone : shippingZone(shipZone);
+    if ((shipOrigin && !origin) || (shipZone && !zone) || (shipZone === "domestic" && !shippingCountry(origin))) {
+      res.status(400).json({ error: "Select a valid ship-from country and delivery destination." }); return;
+    }
+    const postage = free_shipping === true ? 0 : shipping_price === undefined ? current.shipping_price : shipping_price === "" ? null : Number(shipping_price);
+    const handling = handling_charge === undefined ? current.handling_charge : handling_charge === "" ? null : Number(handling_charge);
+    if ([postage, handling].some(value => value !== null && (!Number.isFinite(Number(value)) || Number(value) < 0))) {
+      res.status(400).json({ error: "Enter a valid postage price and handling charge." }); return;
+    }
     // Admin-editable merchandising/fulfilment fields live alongside private source metadata.
     // Source identifiers/prices are intentionally preserved so manual edits never break syncing.
     Object.assign(specs, {
       inventory: Math.max(0, Number(inventory ?? specs.inventory ?? 1)),
       brand: brand ?? "", sku: sku ?? "",
-      ships_from: ships_from ?? "", ships_from_location: ships_from_location ?? "",
-      ships_to: ships_to ?? "", shipping_price: shipping_price === "" ? null : Number(shipping_price),
-      handling_charge: handling_charge === "" ? null : Math.max(0, Number(handling_charge ?? specs.handling_charge ?? 0)),
+      ships_from: shipOrigin === undefined ? ships_from ?? specs.ships_from : origin ?? "",
+      ships_from_location: ships_from_location ?? specs.ships_from_location ?? "",
+      ships_to: shipZone === undefined ? ships_to ?? specs.ships_to : zone ?? "",
+      shipping_price: postage, handling_charge: handling,
       free_shipping: Boolean(free_shipping), dispatch_time: dispatch_time ?? "",
       delivery_estimate: delivery_estimate ?? "",
       admin_gallery_images: Array.isArray(images)?images.slice(0,12):specs.admin_gallery_images,
@@ -558,11 +572,14 @@ router.put("/admin/products/:id", async (req, res) => {
     const [row] = await db.execute(sql`
       UPDATE listings SET
         title = ${title}, description = ${description ?? ""}, price = ${price ?? 0},
-        price_gbp = ${price ?? 0}, currency = ${currency ?? "GBP"},
+        price_gbp = ${Number(price ?? 0) === Number(current.price) && (currency ?? "GBP") === current.currency ? current.price_gbp : price ?? 0}, currency = ${currency ?? "GBP"},
         category = ${category_id || "other"}, subcategory = ${subcategory || null},
         subsubcategory = ${subcategory && typeof subsubcategory === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(subsubcategory) ? subsubcategory : null},
         condition = ${condition ?? "used"}, status = ${dbStatus},
         seller_email = ${seller_email ?? ""}, tags = ${tags || null}, image = ${image},
+        ship_origin = ${origin ?? null}, ship_zone = ${zone ?? null},
+        ship_origin_other = ${ships_from_location === undefined ? current.ship_origin_other : String(ships_from_location).trim().slice(0, 120) || null},
+        shipping_price = ${postage}, handling_charge = ${handling},
         specifications = ${JSON.stringify(specs)}, updated_at = NOW()
       WHERE id = ${id} RETURNING id::text, title, status
     `).then(r => r.rows as any[]);
