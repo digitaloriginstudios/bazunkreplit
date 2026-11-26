@@ -13,21 +13,21 @@ export default function SwapPage(){
  const {isLoaded,isSignedIn,getToken}=useAuth();
  const create=path==="/swap/create",mine=path==="/dashboard/swaps";
  const detail=!create&&!mine&&path.startsWith("/swap/")?path.split("/")[2]:null;
- const [items,setItems]=useState<Item[]>([]),[draft,setDraft]=useState(initial),[error,setError]=useState(""),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[offset,setOffset]=useState(0),[search,setSearch]=useState("");
+ const [items,setItems]=useState<Item[]>([]),[draft,setDraft]=useState(initial),[error,setError]=useState(""),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[offset,setOffset]=useState(0),[search,setSearch]=useState(""),[query,setQuery]=useState(""),[category,setCategory]=useState("");
  useEffect(()=>{let cancelled=false;setItems([]);setError("");setLoading(true);
  if(create||!isLoaded||(mine&&!isSignedIn)){setLoading(false);return;}
  void(async()=>{try{const token=mine?await getToken():null;if(mine&&!token)throw Error("Sign in to continue.");
- const r=await fetch(detail?"/api/swaps/"+encodeURIComponent(detail):mine?"/api/swaps/mine":"/api/swaps?offset="+offset,{cache:"no-store",headers:token?{Authorization:"Bearer "+token}:{}});
+ const r=await fetch(detail?"/api/swaps/"+encodeURIComponent(detail):mine?"/api/swaps/mine":"/api/swaps?"+new URLSearchParams({offset:String(offset),q:query,category}).toString(),{cache:"no-store",headers:token?{Authorization:"Bearer "+token}:{}});
  const data=await r.json();if(!r.ok)throw Error(data.error||"Unable to load swaps");if(!cancelled)setItems(detail?[data]:data.items);
  }catch(e){if(!cancelled)setError(e instanceof Error?e.message:"Unable to load swaps");}finally{if(!cancelled)setLoading(false);}})();
- return()=>{cancelled=true;};},[path,create,mine,detail,isLoaded,isSignedIn,getToken,offset]);
+ return()=>{cancelled=true;};},[path,create,mine,detail,isLoaded,isSignedIn,getToken,offset,query,category]);
  async function submit(e:React.FormEvent){e.preventDefault();if(busy)return;setBusy(true);setError("");
  try{const token=await getToken();if(!token)throw Error("Sign in to continue.");
  if(!/^\d+(\.\d{1,2})?$/.test(draft.value))throw Error("Enter a valid GBP value.");
  const r=await fetch("/api/swaps",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({...draft,valueMinor:Math.round(Number(draft.value)*100)})});
  const data=await r.json();if(!r.ok)throw Error(data.error||"Unable to create listing");setDraft(initial);navigate("/dashboard/swaps");
  }catch(e){setError(e instanceof Error?e.message:"Unable to create listing");}finally{setBusy(false);}}
- const visible=items.filter(i=>!search||[i.title,i.category,i.wanted].join(" ").toLowerCase().includes(search.toLowerCase()));
+ const visible=items.filter(i=>!mine||!search||[i.title,i.category,i.wanted].join(" ").toLowerCase().includes(search.toLowerCase()));
  return <><Navbar/><main className="mx-auto max-w-6xl space-y-5 px-4 py-8 pb-24 text-slate-900">
  <section className="rounded-2xl bg-[#123568] p-6 text-white"><ArrowLeftRight size={36}/><h1 className="mt-2 text-3xl font-black">Bazunk Swap</h1><p>Swap what you have. Get what you want.</p><p className="mt-2 text-sm">Preview: negotiate exchanges. Test-mode cash checkout only. Do not dispatch items; live exchange protection is not yet available.</p></section>
  <nav className="flex flex-wrap gap-3"><Link href="/swap" className="rounded-xl border p-3 font-bold">Browse swaps</Link><Link href="/swap/create" className={button}>Create swap</Link><Link href="/dashboard/swaps" className="rounded-xl border p-3 font-bold">My swaps</Link></nav>
@@ -39,9 +39,12 @@ export default function SwapPage(){
  <label className="block font-semibold">Estimated value (GBP)<input className={field} type="number" min="0" max="100000" step=".01" required value={draft.value} onChange={e=>setDraft(d=>({...d,value:e.target.value}))}/></label>
  <button className={button} disabled={busy}>{busy?"Publishing…":"Publish swap listing"}</button></form>:<>
  <h2 className="text-xl font-bold">{mine?"My swap listings":detail?"Swap details":"Discover swaps"}</h2>
- {!detail&&<input aria-label="Filter loaded listings" placeholder="Filter loaded listings…" className={field} value={search} onChange={e=>setSearch(e.target.value)}/>}
+ {mine&&<input aria-label="Filter loaded listings" placeholder="Filter loaded listings…" className={field} value={search} onChange={e=>setSearch(e.target.value)}/>}
+ {!mine&&!detail&&<form className="flex flex-wrap gap-2" onSubmit={e=>{e.preventDefault();setOffset(0);setQuery(search.trim());setCategory(String(new FormData(e.currentTarget).get("category")||"").trim());}}><input className={field} aria-label="Search swaps" placeholder="Search items or wanted products" value={search} onChange={e=>setSearch(e.target.value)}/><input className={field} name="category" aria-label="Category" placeholder="Category (optional)"/><button className={button}>Search marketplace</button></form>}
  {loading?<p>Loading swaps…</p>:!error&&visible.length===0?<p>No matching swap listings.</p>:<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{visible.map(i=><article key={i.id} className="rounded-2xl border bg-white p-5 shadow-sm"><Package className="mb-3 text-blue-600" size={36}/><p className="text-sm text-slate-600">{i.category} · {i.condition}</p><h3 className="break-words text-xl font-bold">{i.title}</h3><p className="mt-2 break-words">{i.description}</p><p className="mt-3 font-bold text-blue-800">Wants: {i.wanted}</p><p>Estimated value: £{(i.value_minor/100).toFixed(2)}</p>{i.status&&<p>Status: {i.status}</p>}{!detail&&<Link className="mt-3 inline-block font-bold text-orange-700" href={"/swap/"+i.id}>View details</Link>}</article>)}</div>}
  {!mine&&!detail&&<div className="flex gap-3"><button disabled={offset===0||loading} onClick={()=>setOffset(n=>Math.max(0,n-50))}>Previous</button><button disabled={items.length<50||loading||offset>=10000} onClick={()=>setOffset(n=>n+50)}>Next</button></div>}</>}
+ {isSignedIn&&!create&&!detail&&<SwapDiscovery/>}
+ {isSignedIn&&detail&&items.length>0&&<SwapSave id={detail}/>}
  {mine&&isSignedIn&&<SwapActivity/>}
  {(mine||detail)&&!create&&<Negotiation key={path} target={detail} mine={mine}/>}
  </main><Footer/></>;
@@ -153,4 +156,16 @@ function SwapCase({offer,onChange}:{offer:Offer;onChange:()=>Promise<void>}){
  useEffect(()=>{if(open||offer.status==="disputed")void refresh().catch(e=>setError(e.message));},[open,offer.status,offer.id]);
  async function submit(e:React.FormEvent){e.preventDefault();if(busy)return;setBusy(true);setError("");try{await api(path,{kind,reason});setReason("");await refresh();await onChange();}catch(e){setError(e instanceof Error?e.message:"Case failed");}finally{setBusy(false);}}
  return <section className="space-y-2 rounded-xl border p-3"><button className="font-bold text-blue-700" onClick={()=>setOpen(v=>!v)}>{open?"Hide support cases":"Exchange support and cases"}</button>{error&&<p role="alert" className="text-red-700">{error}</p>}{(open||offer.status==="disputed")&&<>{items.map(c=><article key={c.id} className="rounded-lg border p-2"><b>{c.kind} · {c.status}</b><p className="break-words">{c.reason}</p>{c.resolution&&<p className="break-words">Resolution: {c.resolution}</p>}</article>)}{offer.status==="accepted"&&<form className="space-y-2" onSubmit={submit}><p>Opening a case pauses the exchange. It does not automatically refund payments.</p><select aria-label="Case type" className={field} value={kind} onChange={e=>setKind(e.target.value)}><option value="dispute">Report a problem</option><option value="cancellation">Request cancellation</option></select><textarea aria-label="Reason" className={field} minLength={10} maxLength={2000} required value={reason} onChange={e=>setReason(e.target.value)}/><button className={button} disabled={busy}>Submit support case</button></form>}</>}</section>;
+}
+
+function SwapSave({id}:{id:string}){
+ const api=useSwapPrivateApi();const [saved,setSaved]=useState<boolean|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
+ useEffect(()=>{setSaved(null);void api("/saved").then(d=>setSaved(d.items.some((i:Item)=>i.id===id))).catch(e=>setError(e.message));},[id]);
+ return <div>{error&&<p role="alert">{error}</p>}<button className={button} disabled={busy||saved===null} onClick={async()=>{setBusy(true);setError("");try{const d=await api("/saved/"+id,{saved:!saved});setSaved(d.saved);}catch(e){setError(e instanceof Error?e.message:"Save failed");}finally{setBusy(false);}}}>{saved?"Remove from watchlist":"Save to watchlist"}</button></div>;
+}
+type Match=Item&{my_title:string;wanted_score:number;reciprocal_score:number;category_match:number;value_gap:number};
+function SwapDiscovery(){
+ const api=useSwapPrivateApi();const [tab,setTab]=useState<"matches"|"saved">("matches"),[items,setItems]=useState<Match[]>([]),[error,setError]=useState(""),[loading,setLoading]=useState(true);
+ useEffect(()=>{let active=true;setLoading(true);setError("");setItems([]);void api("/"+tab).then(d=>{if(active)setItems(d.items);}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[tab]);
+ return <section className="space-y-3 rounded-2xl border bg-white p-5"><h2 className="text-xl font-bold">Your swap discovery</h2><div className="flex gap-3">{(["matches","saved"] as const).map(t=><button key={t} className={"rounded-xl border p-3 "+(tab===t?"bg-blue-100":"")} onClick={()=>setTab(t)}>{t==="matches"?"Recommended for you":"Watchlist"}</button>)}</div>{error&&<p role="alert">{error}</p>}{loading?<p>Loading…</p>:!items.length?<p>{tab==="matches"?"Create an active swap listing with a wanted item to discover matches.":"No saved swaps yet."}</p>:<div className="grid gap-3 sm:grid-cols-2">{items.map(i=><article key={i.id} className="rounded-xl border p-3"><h3 className="font-bold">{i.title}</h3><p>Wants: {i.wanted}</p><p>Estimated value: £{(i.value_minor/100).toFixed(2)}</p>{tab==="matches"&&<><p className="font-bold text-blue-700">{Number(i.wanted_score)>0&&Number(i.reciprocal_score)>0?"Mutual wanted-item match":Number(i.wanted_score)>0?"Matches your wanted item":Number(i.reciprocal_score)>0?"They may want your item":"Similar category"}</p><p>Suggested exchange: {i.my_title}</p></>}{(!i.status||i.status==="active")?<Link href={"/swap/"+i.id}>View swap</Link>:<p>Status: {i.status}</p>}{tab==="saved"&&<button className="ml-3 text-blue-700" onClick={async()=>{try{await api("/saved/"+i.id,{saved:false});setItems(old=>old.filter(x=>x.id!==i.id));}catch(e){setError(e instanceof Error?e.message:"Remove failed");}}}>Remove</button>}</article>)}</div>}</section>;
 }
