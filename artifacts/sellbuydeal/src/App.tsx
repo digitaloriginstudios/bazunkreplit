@@ -1,3 +1,4 @@
+import {AdminInternationalPage} from "@/pages/admin/AdminInternationalPage";
 import {RegionalMarketplacePage,regionalMarkets} from "@/pages/RegionalMarketplacePage";
 import SwapPage from "@/pages/SwapPage";
 import AffiliatesPage,{AffiliateTracking} from "@/pages/AffiliatesPage";
@@ -502,6 +503,7 @@ function Router() {
       <Route path="/admin/settings-overview" component={AdminSettingsOverviewPage} />
       <Route path="/admin/content" component={AdminContentPage} />
       <Route path="/admin/analytics" component={AdminAnalyticsPage} />
+      <Route path="/admin/international-marketplace" component={AdminInternationalPage} />
       <Route path="/admin/users" component={AdminUsersPage} />
       <Route path="/admin/seller-compliance" component={AdminSellerCompliancePage} />
       <Route path="/seller-compliance" component={SellerCompliancePage} />
