@@ -509,8 +509,8 @@ export function DirectSalePage({ embedded = false, sellMode }: { embedded?: bool
         <form onSubmit={handlePublish} noValidate className={`bz-seller-form direct-sale-form ${quickMode?"bazunk-quick-sell":""} grid grid-cols-1 lg:grid-cols-[minmax(0,1.65fr)_minmax(300px,1fr)] gap-4 lg:gap-5 items-start min-w-0 pb-32 lg:pb-0`}>
 
           {/* Header card */}
-          <div className="lg:col-span-2 min-w-0 rounded-2xl bg-gradient-to-r from-[#0c3767] via-[#15588e] to-[#1e6fe8] px-5 py-5 sm:px-7 sm:py-7 mb-0 shadow-lg">
-            <h1 className="text-3xl font-black text-white">{quickMode ? "⚡ Quick Sell — Create Listing" : "Direct Sale"}</h1>
+          <div className="direct-sale-header lg:col-span-2 min-w-0 rounded-2xl bg-gradient-to-r from-[#0c3767] via-[#15588e] to-[#1e6fe8] px-5 py-5 sm:px-7 sm:py-7 mb-0 shadow-lg">
+            <h1 className="text-3xl font-black text-white"><span className="seller-heading-icon">{quickMode ? <Zap size={26}/> : <Tag size={26}/>}</span>{quickMode ? "Quick Sell — Create Listing" : "Direct Sale"}</h1>
             <a href="/sell/snap" className="mt-3 inline-flex items-center rounded-xl border border-white/50 bg-white/20 px-4 py-2 text-sm font-bold text-white hover:bg-white/30">📸 Snap & Sell — photo & barcode assistant</a>
             <p className="text-white text-sm mt-1">{quickMode ? "List your item in minutes. Fast, simple and free." : "Create a detailed listing in six easy steps. No listing fees for private sellers."}</p><div className="mt-4 flex flex-wrap gap-2 text-xs font-bold text-white"><span className="rounded-lg bg-black/25 px-3 py-2">✓ Free to list</span><span className="rounded-lg bg-black/25 px-3 py-2">⚡ Fast & simple</span><span className="rounded-lg bg-black/25 px-3 py-2">🛡 Buyer Protection</span></div>
           </div>
@@ -565,7 +565,7 @@ export function DirectSalePage({ embedded = false, sellMode }: { embedded?: bool
           </section>}
                     {/* Basic Information */}
           <section style={{ display: quickMode ? "block" : step === 1 ? "block" : "none" }} className="bz-quick-item-details min-w-0 rounded-2xl bg-[#102541] text-white px-5 sm:px-7 py-6 border border-sky-400/15">
-            <h2 className="text-base font-bold text-white mb-5">{quickMode?"① Item Details":"Basic Information"}</h2>
+            <h2 className="text-base font-bold text-white mb-5"><Tag size={18}/>{quickMode?"Item Details":"Basic Information"}</h2>
 
             {/* Title */}
             <div className="mb-4">
@@ -736,7 +736,7 @@ export function DirectSalePage({ embedded = false, sellMode }: { embedded?: bool
           </section>
 
           {/* Eco-Friendly */}
-          <section data-quick-panel="eco" className={`min-w-0 rounded-2xl bg-[#102541] text-white px-5 sm:px-7 py-5 border border-sky-400/15 ${quickMode || step===1 ? "" : "hidden lg:block"}`}>
+          <section data-quick-panel="eco" className={`min-w-0 rounded-2xl bg-[#102541] text-white px-5 sm:px-7 py-5 border border-sky-400/15 ${quickMode || step===1 ? "" : "hidden"}`}>
             <label
               className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${
                 ecoFriendly ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-green-300"
@@ -765,7 +765,7 @@ export function DirectSalePage({ embedded = false, sellMode }: { embedded?: bool
           {/* Product Variants */}
           <section style={{ display: quickMode ? "none" : step === 3 ? "block" : "none" }} className="min-w-0 rounded-2xl bg-[#102541] text-white px-5 sm:px-7 py-6 border border-sky-400/15">
             <div className="flex items-center justify-between mb-1">
-              <h2 className="text-base font-bold text-white">Product Variants</h2>
+              <h2 className="text-base font-bold text-white"><Package size={18}/>Product Variants</h2>
               <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">OPTIONAL</span>
             </div>
             <p className="text-xs text-slate-300 mb-5">Add size, colour, or storage options so buyers can choose the exact variant they want.</p>
@@ -931,7 +931,7 @@ export function DirectSalePage({ embedded = false, sellMode }: { embedded?: bool
 
           {/* Item Condition */}
           <section data-quick-panel="condition" style={{ display: quickMode ? "block" : step === 1 ? "block" : "none" }} className="min-w-0 rounded-2xl bg-[#102541] text-white px-5 sm:px-7 py-6 border border-sky-400/15">
-            <h2 className="text-base font-bold text-white mb-4">{quickMode?"③ Item Condition":"Item Condition"}</h2>
+            <h2 className="text-base font-bold text-white mb-4"><CheckCircle2 size={18}/>Item Condition</h2>
             <div className={quickMode?"bz-quick-conditions":"space-y-2"}>
               {CONDITIONS.map((c) => {
                 const Icon = c.icon;
@@ -1061,7 +1061,7 @@ export function DirectSalePage({ embedded = false, sellMode }: { embedded?: bool
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#F26B21] to-[#D97706] flex items-center justify-center flex-shrink-0">
                 <Tag className="w-3.5 h-3.5 text-white" />
               </div>
-              <h2 className="text-base font-bold text-white">Specifications <span className="text-xs font-normal text-slate-400">(optional)</span></h2>
+              <h2 className="text-base font-bold text-white"><Ruler size={18}/>Specifications <span className="text-xs font-normal text-slate-400">(optional)</span></h2>
             </div>
             <p className="text-xs text-slate-400 mb-5">Add key product details like brand, model, colour etc. to help buyers find and compare your item.</p>
 
@@ -1157,7 +1157,7 @@ export function DirectSalePage({ embedded = false, sellMode }: { embedded?: bool
 
           {/* Shipping & Details */}
           <section style={{ display: quickMode ? "none" : step === 4 ? "block" : "none" }} className="min-w-0 rounded-2xl bg-[#102541] text-white px-5 sm:px-7 py-6 border border-sky-400/15">
-            <h2 className="text-base font-bold text-white mb-5">Shipping & Details</h2>
+            <h2 className="text-base font-bold text-white mb-5"><Truck size={18}/>Shipping & Details</h2>
 
             {/* Quantity + SKU */}
             {(() => {
@@ -1390,7 +1390,7 @@ export function DirectSalePage({ embedded = false, sellMode }: { embedded?: bool
           </section>
 
           <section data-quick-panel="publish" style={{ display: quickMode || step === 6 ? "block" : "none" }} className="min-w-0 rounded-2xl bg-[#102541] px-5 sm:px-7 py-6 border border-sky-400/15">
-            <h2 className="text-lg font-bold text-white mb-1">Ready to List?</h2>
+            <h2 className="text-lg font-bold text-white mb-1"><Bell size={18}/>Ready to List?</h2>
             <p className="text-sm text-slate-300 mb-4">Review your listing and publish when ready</p>
 
             {/* Validation errors */}
