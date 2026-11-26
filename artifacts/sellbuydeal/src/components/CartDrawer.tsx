@@ -31,7 +31,7 @@ export function CartDrawer() {
   const [quote, setQuote] = useState<{ buyerProtectionFee: number; delivery: number; total: number } | null>(null);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [quoteError, setQuoteError] = useState(false);
-  const cartKey = JSON.stringify(items.map(item => ({ id: item.product.id, quantity: item.quantity })));
+  const cartKey = JSON.stringify(items.map(item => ({ id: item.product.id, quantity: item.quantity, variantSku: item.product.variantSku })));
   useEffect(() => {
     if (!isOpen || !items.length) { setQuote(null); return; }
     const controller = new AbortController();
@@ -169,7 +169,7 @@ export function CartDrawer() {
                 <AnimatePresence initial={false}>
                   {items.map((item) => (
                     <motion.div
-                      key={item.product.id}
+                      key={item.product.id + ":" + (item.product.variantSku ?? "")}
                       layout
                       initial={{ opacity: 0, x: 40 }}
                       animate={{ opacity: 1, x: 0 }}
@@ -212,7 +212,7 @@ export function CartDrawer() {
                           {/* Quantity stepper */}
                           <div className="flex items-center gap-1 bg-white rounded-lg border border-gray-200 p-0.5">
                             <button
-                              onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                              onClick={() => updateQuantity(item.product.id, item.quantity - 1, item.product.variantSku)}
                               disabled={item.quantity <= 1}
                               className="w-6 h-6 rounded-md flex items-center justify-center text-gray-500 hover:bg-gray-100 disabled:opacity-30 transition-colors"
                               data-testid={`button-qty-minus-${item.product.id}`}
@@ -223,7 +223,7 @@ export function CartDrawer() {
                               {item.quantity}
                             </span>
                             <button
-                              onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
+                              onClick={() => updateQuantity(item.product.id, item.quantity + 1, item.product.variantSku)}
                               className="w-6 h-6 rounded-md flex items-center justify-center text-gray-500 hover:bg-gray-100 transition-colors"
                               data-testid={`button-qty-plus-${item.product.id}`}
                             >
@@ -235,7 +235,7 @@ export function CartDrawer() {
 
                       {/* Remove */}
                       <button
-                        onClick={() => removeFromCart(item.product.id)}
+                        onClick={() => removeFromCart(item.product.id, item.product.variantSku)}
                         className="flex-shrink-0 self-start w-6 h-6 rounded-full text-gray-300 hover:text-red-400 hover:bg-red-50 flex items-center justify-center transition-colors"
                         data-testid={`button-remove-${item.product.id}`}
                       >

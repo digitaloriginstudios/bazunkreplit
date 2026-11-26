@@ -108,14 +108,37 @@ export async function fulfillCartSession(sessionId: string, expectedEmail?: stri
         const unitPrice = frozen ? frozen.priceMinor/100 : price;
         const net = frozen ? frozen.sellerNetMinor/100 : unitPrice-sellerFee;
         const buyerTotal = frozen ? frozen.buyerTotalMinor/100 : unitPrice+protectionShare;
-        await db.execute(sql`
+        await db.transaction(async tx => {
+          const inserted = await tx.execute(sql`
           INSERT INTO orders (id, buyer_email, seller_email, item_title, item_image, price, status,
                               stripe_session_id, line_no, buyer_protection_fee, seller_fee, seller_type, seller_fee_rate, seller_net, delivery_fee, buyer_total, fee_policy, address, created_at, updated_at)
-          VALUES (${orderId}, ${buyerEmail}, ${seller}, ${row.title as string}, ${(row.image as string | null) ?? null},
+          VALUES (${orderId}, ${buyerEmail}, ${seller}, ${frozen?.title ?? String(row.title)}, ${frozen?.image ?? (row.image as string | null) ?? null},
                   ${unitPrice}, 'confirmed', ${sessionId}, ${lineNo}, ${protectionShare}, ${sellerFee}, ${sellerType}, ${businessRate}, ${net}, ${deliveryShare}, ${buyerTotal}, ${feeSnapshot?.policy ?? "legacy"}, ${deliveryAddress}, NOW(), NOW())
-          ON CONFLICT (stripe_session_id, line_no) DO NOTHING
-        `);
+          ON CONFLICT (stripe_session_id, line_no) DO NOTHING RETURNING id
+          `);
+          if (inserted.rows.length && frozen?.variantSku) {
+            await tx.execute(sql`
+              UPDATE listings SET quantity = GREATEST(0, quantity - 1),
+                specifications = jsonb_set(specifications::jsonb, '{aliexpress_options}',
+                  (SELECT jsonb_agg(CASE WHEN option->>'sku' = ${frozen.variantSku}
+                    THEN jsonb_set(option, '{quantity}', to_jsonb(GREATEST(0,(option->>'quantity')::integer-1)))
+                    ELSE option END ORDER BY ord)
+                    FROM jsonb_array_elements(specifications::jsonb->'aliexpress_options') WITH ORDINALITY AS variants(option,ord)))::text
+              WHERE id = ${l.id} AND specifications::jsonb->'aliexpress_options' @> ${JSON.stringify([{sku:frozen.variantSku}])}::jsonb
+            `);
+          }
+        });
+        if (frozen) {
+          const item = { title:frozen.title, price:unitPrice, quantity:1 };
+          emailItems.push(item);
+          if (seller) {
+            sellers.add(seller);
+            sellerItems.set(seller, [...(sellerItems.get(seller) ?? []), item.title]);
+            sellerEmailItems.set(seller, [...(sellerEmailItems.get(seller) ?? []), item]);
+          }
+        }
       }
+      if (feeSnapshot) continue;
       if (seller) {
         sellers.add(seller);
         sellerItems.set(seller, [...(sellerItems.get(seller) ?? []), `${row.title as string}${l.qty > 1 ? ` x${l.qty}` : ""}`]);

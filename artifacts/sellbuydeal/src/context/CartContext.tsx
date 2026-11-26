@@ -13,8 +13,8 @@ interface CartContextValue {
   openCart: () => void;
   closeCart: () => void;
   addToCart: (product: Product, qty?: number) => void;
-  removeFromCart: (id: number) => void;
-  updateQuantity: (id: number, qty: number) => void;
+  removeFromCart: (id: number, sku?: string) => void;
+  updateQuantity: (id: number, qty: number, sku?: string) => void;
   clearCart: () => void;
   itemCount: number;
   subtotal: number;
@@ -56,10 +56,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const addToCart = useCallback((product: Product, qty = 1) => {
     setItems((prev) => {
-      const existing = prev.find((i) => i.product.id === product.id);
+      const existing = prev.find((i) => i.product.id === product.id && i.product.variantSku === product.variantSku);
       if (existing) {
         return prev.map((i) =>
-          i.product.id === product.id
+          i.product.id === product.id && i.product.variantSku === product.variantSku
             ? { ...i, quantity: i.quantity + qty }
             : i
         );
@@ -69,14 +69,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setIsOpen(true);
   }, []);
 
-  const removeFromCart = useCallback((id: number) => {
-    setItems((prev) => prev.filter((i) => i.product.id !== id));
+  const removeFromCart = useCallback((id: number, sku?: string) => {
+    setItems((prev) => prev.filter((i) => i.product.id !== id || i.product.variantSku !== sku));
   }, []);
 
-  const updateQuantity = useCallback((id: number, qty: number) => {
+  const updateQuantity = useCallback((id: number, qty: number, sku?: string) => {
     if (qty < 1) return;
     setItems((prev) =>
-      prev.map((i) => (i.product.id === id ? { ...i, quantity: qty } : i))
+      prev.map((i) => (i.product.id === id && i.product.variantSku === sku ? { ...i, quantity: qty } : i))
     );
   }, []);
 

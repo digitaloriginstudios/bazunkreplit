@@ -14,6 +14,7 @@ export interface ProductVariant {
 
 export interface Product {
   id: number;
+  variantSku?: string;
   title: string;
   price: number;
   currency?: string;

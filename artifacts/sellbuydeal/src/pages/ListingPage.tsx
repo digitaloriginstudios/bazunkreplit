@@ -74,7 +74,8 @@ function normaliseCondition(raw: unknown): string {
 }
 
 type SpecRow = { key: string; value: string };
-type ApiListingExtra = { _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string; isAliExpress?: boolean; aliExpressOptions?: { token: string; label: string; quantity: number | null }[]; dispatchTime?: string; deliveryEstimate?: string };
+type SupplierOption = { sku: string; label: string; quantity: number; price: number; priceGbp: number | null; image?: string | null };
+type ApiListingExtra = { supplierOptions?: SupplierOption[]; _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string; isAliExpress?: boolean; aliExpressOptions?: { token: string; label: string; quantity: number | null }[]; dispatchTime?: string; deliveryEstimate?: string };
 
 const TAG_COLORS = [
   "bg-[#4A5CE8]/10 text-[#4A5CE8]",
@@ -90,11 +91,13 @@ function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & A
   let parsedSpecs: SpecRow[] | undefined;
   let gallery: string[] = [];
   let isAliExpress = false;
+  let supplierOptions: SupplierOption[] = [];
   let dispatchTime: string | undefined;
   let deliveryEstimate: string | undefined;
   try {
     const parsed = typeof l.specifications === "string" ? JSON.parse(l.specifications) : l.specifications;
     isAliExpress = typeof parsed?.source === "string" && parsed.source.toLowerCase() === "aliexpress";
+    supplierOptions = Array.isArray(parsed?.aliexpress_options) ? parsed.aliexpress_options : [];
     dispatchTime = typeof parsed?.dispatch_time === "string" ? parsed.dispatch_time : undefined;
     deliveryEstimate = typeof parsed?.delivery_estimate === "string" ? parsed.delivery_estimate : undefined;
     parsedSpecs = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.details) ? parsed.details : [];
@@ -125,7 +128,7 @@ function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & A
     _tags: tagsRaw,
     _specifications: parsedSpecs,
     _gallery: gallery,
-    isAliExpress, dispatchTime, deliveryEstimate,
+    supplierOptions, isAliExpress, dispatchTime, deliveryEstimate,
     aliExpressOptions: Array.isArray(l.aliExpressOptions) ? l.aliExpressOptions : [],
     shipOrigin: (l.shipOrigin as string) ?? undefined,
     shipOriginOther: (l.shipOriginOther as string) ?? undefined,
@@ -248,6 +251,8 @@ export function ListingPage() {
       { style: "currency", currency: apiProduct.listingCurrency }).format(amount)
     : formatPrice(amount);
   const { t } = useLanguage();
+  const [supplierSku, setSupplierSku] = useState("");
+  useEffect(() => setSupplierSku(""), [id]);
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   const [activeImg, setActiveImg] = useState(0);
   const [offerOpen, setOfferOpen] = useState(false);
@@ -301,6 +306,10 @@ export function ListingPage() {
     );
   }
 
+  const availableOptions = apiProduct?.supplierOptions ?? [];
+  const option = availableOptions.find(entry => entry.sku === supplierSku);
+  const needsOption = availableOptions.length > 0 && !option;
+  const shownQuantity = option?.quantity ?? apiProduct?.quantity;
   const isDemoListing = ((product as typeof product & ApiListingExtra)._specifications as unknown as { demo_creator?: boolean } | undefined)?.demo_creator === true;
   const images = getProductImages(product.image, (product as typeof product & ApiListingExtra)._gallery);
   // Resolve top-level category and optional subcategory label.
@@ -326,7 +335,11 @@ export function ListingPage() {
   function handleNextImg() { setActiveImg((i) => (i === images.length - 1 ? 0 : i + 1)); }
 
   function handleBuyNow() {
-    if (product && !isDemoListing) { addToCart(product); openCart(); }
+    if (isDemoListing || needsOption || shownQuantity === 0) return;
+    addToCart(option ? { ...product, variantSku:option.sku, title:product.title + " · " + option.label,
+      price:option.price, priceGbp:option.priceGbp ?? undefined, currency:apiProduct?.listingCurrency,
+      image:option.image || product.image } : product);
+    openCart();
   }
 
   const listingUrl = typeof window!=="undefined" ? window.location.origin+"/listing/"+(apiProduct?._publicUrlToken || id) : "";
@@ -542,13 +555,13 @@ export function ListingPage() {
             <section className="bz-mockup-product-summary" aria-label="Product overview">
               <h1 className="bz-mockup-product-title">{product.title}</h1>
               <div className="bz-mockup-product-seller"><span className="bz-mockup-condition">{product.condition}</span><span>Sold by {(product as typeof product & ApiListingExtra)._sellerName || (product as typeof product & ApiListingExtra)._sellerUsername || "Marketplace seller"}</span>{product.verified&&<CheckCircle2 size={18} className="text-emerald-500" aria-label="Identity verified"/>}</div>
-              <div className="bz-mockup-product-price">{listingPrice(product.price + (product.variants?.reduce((sum,v)=>sum+(v.options.find(o=>o.value===selectedVariants[v.type])?.priceDelta??0),0)??0))}</div>
-              <div className="bz-mockup-product-stock"><CheckCircle2 size={20}/> {isDemoListing?"Currently unavailable":(product as typeof product & ApiListingExtra).quantity!=null?((product as typeof product & ApiListingExtra).quantity!>0?"In stock ("+(product as typeof product & ApiListingExtra).quantity+" available)":"Out of stock"):"Check availability with seller"}</div>
+              <div className="bz-mockup-product-price">{listingPrice((option?.price ?? product.price) + (product.variants?.reduce((sum,v)=>sum+(v.options.find(o=>o.value===selectedVariants[v.type])?.priceDelta??0),0)??0))}</div>
+              <div className="bz-mockup-product-stock"><CheckCircle2 size={20}/> {isDemoListing?"Currently unavailable":shownQuantity!=null?(shownQuantity!>0?"In stock ("+shownQuantity+" available)":"Out of stock"):"Check availability with seller"}</div>
 
               <div className="bz-visual-feature-grid" aria-label="Listing highlights">
                 <div className="bz-feature-blue"><Zap size={24}/><span><strong>Quick facts</strong><small>{category?.name || product.category}</small></span></div>
                 <div className="bz-feature-cyan"><CheckCircle2 size={24}/><span><strong>Condition</strong><small>{product.condition}</small></span></div>
-                <div className="bz-feature-purple"><Package size={24}/><span><strong>Availability</strong><small>{isDemoListing?"Unavailable":(product as typeof product & ApiListingExtra).quantity!=null?((product as typeof product & ApiListingExtra).quantity!>0?"In stock":"Out of stock"):"Ask seller"}</small></span></div>
+                <div className="bz-feature-purple"><Package size={24}/><span><strong>Availability</strong><small>{isDemoListing?"Unavailable":shownQuantity!=null?(shownQuantity!>0?"In stock":"Out of stock"):"Ask seller"}</small></span></div>
                 <div className="bz-feature-orange"><Truck size={24}/><span><strong>Postage</strong><small>{(product as typeof product & ApiListingExtra).shippingPrice==null?"At checkout":(product as typeof product & ApiListingExtra).shippingPrice===0?"Free":listingPrice((product as typeof product & ApiListingExtra).shippingPrice!)}</small></span></div>
               </div>
               <div className="bz-visual-facts">
@@ -713,7 +726,7 @@ export function ListingPage() {
               return (
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                   <div className="rounded-2xl bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100 p-4"><BadgeCheck className="w-5 h-5 text-orange-500 mb-2" /><p className="text-xs text-gray-500">{t("condition")}</p><p className="font-black text-gray-900 capitalize">{product.condition}</p></div>
-                  <div className="rounded-2xl bg-gradient-to-br from-violet-50 to-fuchsia-50 border border-violet-100 p-4"><Package className="w-5 h-5 text-violet-500 mb-2" /><p className="text-xs text-gray-500">{t("available")}</p><p className="font-black text-gray-900">{isDemoListing ? 0 : (x.quantity ?? 1)}</p></div>
+                  <div className="rounded-2xl bg-gradient-to-br from-violet-50 to-fuchsia-50 border border-violet-100 p-4"><Package className="w-5 h-5 text-violet-500 mb-2" /><p className="text-xs text-gray-500">{t("available")}</p><p className="font-black text-gray-900">{isDemoListing ? 0 : (shownQuantity ?? 1)}</p></div>
                   <div className="rounded-2xl bg-gradient-to-br from-blue-50 to-cyan-50 border border-blue-100 p-4"><Box className="w-5 h-5 text-blue-500 mb-2" /><p className="text-xs text-gray-500">SKU</p><p className="font-bold text-gray-900 truncate">{x.sku || "Not specified"}</p></div>
                   <div className="rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 p-4"><Plane className="w-5 h-5 text-emerald-500 mb-2" /><p className="text-xs text-gray-500">{t("listingCurrency")}</p><p className="font-black text-gray-900">{x.listingCurrency || "GBP"}</p></div>
                 </div>
@@ -742,7 +755,7 @@ export function ListingPage() {
               <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-900 space-y-2.5 bazunk-listing-essentials">
                 <div className="flex justify-between gap-3">
                   <span className="font-semibold text-slate-600 inline-flex items-center gap-2"><Package size={17} className="text-indigo-600"/>Availability</span>
-                  <span className="font-bold">{isDemoListing ? "Unavailable" : (product as typeof product & ApiListingExtra).quantity != null ? (product as typeof product & ApiListingExtra).quantity! > 0 ? `${(product as typeof product & ApiListingExtra).quantity} available` : "Out of stock" : "Check with seller"}</span>
+                  <span className="font-bold">{isDemoListing ? "Unavailable" : shownQuantity != null ? shownQuantity! > 0 ? `${shownQuantity} available` : "Out of stock" : "Check with seller"}</span>
                 </div>
                 <div className="flex justify-between gap-3">
                   <span className="font-semibold text-slate-600 inline-flex items-center gap-2"><BadgeCheck size={17} className="text-indigo-600"/>Condition</span>
@@ -774,6 +787,15 @@ export function ListingPage() {
                 </div>
               )}
 
+              {availableOptions.length > 0 && <fieldset className="mb-5 space-y-2">
+                <legend className="text-sm font-bold">Product options</legend>
+                {availableOptions.map(entry => <label key={entry.sku} className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm">
+                  <input type="radio" name="supplier-option" checked={supplierSku === entry.sku}
+                    disabled={entry.quantity === 0} onChange={() => setSupplierSku(entry.sku)} />
+                  {entry.label} · {listingPrice(entry.price)} · {entry.quantity ? `${entry.quantity} available` : "Out of stock"}
+                </label>)}
+              </fieldset>}
+
               {/* Variants */}
               {product.variants && product.variants.length > 0 && (
                 <div className="mb-5 pb-5 border-b border-gray-100">
@@ -793,12 +815,12 @@ export function ListingPage() {
               {/* Buy Now */}
               <button
                 onClick={handleBuyNow}
-                disabled={isDemoListing || apiProduct?.quantity === 0}
+                disabled={isDemoListing || needsOption || shownQuantity === 0}
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all mb-2.5 shadow-sm bg-gradient-to-r from-[#F26B21] to-[#D97706] text-white hover:opacity-90"
                 data-testid="button-buy-now"
               >
                 <ShoppingCart className="w-4 h-4" />
-                {isDemoListing || ((product as typeof product & ApiListingExtra).quantity != null && (product as typeof product & ApiListingExtra).quantity! <= 0) ? "Currently unavailable" : t("buyNow")}
+                {needsOption ? "Choose a product option" : isDemoListing || shownQuantity === 0 ? "Currently unavailable" : t("buyNow")}
               </button>
 
               {/* Make an Offer */}

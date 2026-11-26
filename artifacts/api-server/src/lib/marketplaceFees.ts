@@ -1,5 +1,5 @@
 /** All amounts are integer GBP pence. Protection's fixed fee applies once per checkout. */
-export type FeeItem = { id: number; quantity: number; priceMinor: number; sellerType: string; businessRate: number; title: string; image: string | null; sellerEmail: string; category: string };
+export type FeeItem = { id: number; quantity: number; variantSku?: string; priceMinor: number; sellerType: string; businessRate: number; title: string; image: string | null; sellerEmail: string; category: string };
 export type FeeUnit = Omit<FeeItem, "quantity"> & { sellerFeeMinor: number; sellerNetMinor: number; protectionMinor: number; deliveryMinor: number; buyerTotalMinor: number };
 export const FEE_POLICY = "universal-buyer-business-five-v2";
 export function percentage(value: unknown, fallback: number): number {

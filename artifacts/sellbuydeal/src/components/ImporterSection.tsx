@@ -1,4 +1,4 @@
-import { shippingCountries, shippingCountryLabel } from "@/lib/listingShipping";
+import { AliExpressShippingDefaults, aliExpressShipZone, defaultAliExpressDestinations } from "./AliExpressShippingDefaults";
 import { useState, useEffect, useCallback, useLayoutEffect, useRef, useId } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -85,11 +85,14 @@ interface ImportModalProps {
   initialMarkup?: string;
   initialMarket?: "uk" | "us";
   initialQuantity?: string;
+  initialOrigin?: string;
+  initialDestinations?: string[];
+  initialPostage?: string;
 }
 
 const CONDITIONS = ["new", "like new", "good", "fair", "poor"];
 
-export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUrl = "", initialMarkup = "30", initialMarket = "uk", initialQuantity = "1" }: ImportModalProps) {
+export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUrl = "", initialMarkup = "30", initialMarket = "uk", initialQuantity = "1", initialOrigin = "CN", initialDestinations = defaultAliExpressDestinations, initialPostage = "" }: ImportModalProps) {
   const { authFetch } = useAdmin();
   const [url, setUrl] = useState(initialUrl);
   const [market, setMarket] = useState(initialMarket);
@@ -138,17 +141,16 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
   const [variantEdits, setVariantEdits] = useState<Record<string, { enabled: boolean; usd: string; quantity: string }>>({});
   const [savedCount, setSavedCount] = useState(0);
   const [sku, setSku] = useState("");
-  const [shipOrigin, setShipOrigin] = useState("");
-  const [deliversToMarket, setDeliversToMarket] = useState(false);
-  const [shippingPrice, setShippingPrice] = useState("");
+  const [shipOrigin, setShipOrigin] = useState(initialOrigin);
+  const [destinations, setDestinations] = useState(initialDestinations);
+  const [shippingPrice, setShippingPrice] = useState(initialPostage);
+  const shipZone = aliExpressShipZone(destinations);
   const [deliveryEstimate, setDeliveryEstimate] = useState("");
   const [gallery, setGallery] = useState<string[]>([]);
   const [attributes, setAttributes] = useState<{ key: string; value: string }[]>([]);
   const previewSequence = useRef(0);
   function clearShipping() {
-    setShipOrigin("");
-    setDeliversToMarket(false);
-    setShippingPrice("");
+
     setDeliveryEstimate("");
   }
   const fetchPreview = useCallback(async (productUrl: string, targetMarket: "uk" | "us", selectedSku = "") => {
@@ -193,14 +195,9 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
       if (typeof fetchedPrice === "number" && Number.isFinite(fetchedPrice) && fetchedPrice > 0)
         setSupplierPriceUsd(previous => previous || String(fetchedPrice));
       if (selected?.quantity != null) setQuantity(String(selected.quantity));
-      setShipOrigin(data.shipping?.origin ?? data.origin ?? "");
-      if (data.shipping) {
-        setDeliversToMarket(true);
-        setShippingPrice(String(data.shipping.amount));
-        setDeliveryEstimate(data.shipping.estimate);
-      }
-      setPreviewNotice(data.shipping ? "AliExpress supplied an estimated delivery cost for one item. Review it before importing."
-        : "Product details retrieved. Review the product and confirm any missing shipping details before importing.");
+      setPreviewNotice(data.shipping
+        ? `AliExpress quoted ${data.shipping.amount.toFixed(2)} ${targetMarket === "uk" ? "GBP" : "USD"} for one item to the selected marketplace. Set your own general postage rule below.`
+        : "Product details retrieved. Review the general shipping settings before importing.");
     } catch (error) {
       if (sequence === previewSequence.current)
         setPreviewNotice((error instanceof Error ? error.message : "Preview unavailable") + " Enter missing fields manually.");
@@ -253,10 +250,9 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           market,
           quantity: multi ? 1 : stock,
           variants: multi ? variants : undefined,
-          shippingSku: sku,
-          shipOrigin: shipOrigin || null,
-          deliversToMarket,
-          shippingPrice: deliversToMarket ? shippingPrice : null,
+          shipOrigin,
+          shipZone,
+          shippingPrice: shipZone ? shippingPrice : null,
           deliveryEstimate,
           images: gallery,
           attributes,
@@ -435,7 +431,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
 
           {multi && <section className="space-y-2 rounded-xl border border-gray-200 p-3" aria-label="Product options to import">
             <h3 className="text-sm font-bold">Product options to import</h3>
-            <p className="text-xs text-gray-600">Each selected option gets its own listing, price and stock. Buyers can switch between options. Confirm any missing USD price or stock before importing.</p>
+            <p className="text-xs text-gray-600">Selected options share one listing and have their own prices and stock. Confirm any missing USD price or stock before importing.</p>
             {choices.map(choice => {
               const edit = variantEdits[choice.id];
               if (!edit) return null;
@@ -459,34 +455,14 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
 
           <section className="space-y-2 rounded-xl border border-gray-200 p-3" aria-label="Shipping details">
             <h3 className="text-sm font-bold">Shipping</h3>
-            {choices.length > 1 && <label className="block text-xs font-semibold">
-              Supplier option for delivery quote
-              <select value={sku} onChange={e => { setSupplierPriceUsd(""); void fetchPreview(url, market, e.target.value); }} className={inputCls} disabled={previewLoading}>
-                <option value="">Select an option</option>
-                {choices.map(choice => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
-              </select>
-            </label>}
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block text-xs font-semibold">Ships from
-                <select value={shipOrigin} onChange={e => setShipOrigin(e.target.value)} className={inputCls}>
-                  <option value="">Unconfirmed</option>
-                  {shipOrigin && !shippingCountries.some(country => country.code === shipOrigin) &&
-                    <option value={shipOrigin}>{shippingCountryLabel(shipOrigin)}</option>}
-                  {shippingCountries.map(country => <option key={country.code} value={country.code}>{country.name}</option>)}
-                </select>
-              </label>
-              <label className="block text-xs font-semibold">Delivery cost ({market === "uk" ? "GBP" : "USD"})
-                <input type="number" min="0" step="0.01" value={shippingPrice} onChange={e => setShippingPrice(e.target.value)}
-                  disabled={!deliversToMarket} placeholder="Unconfirmed" className={inputCls} />
-              </label>
-            </div>
-            <label className="flex items-center gap-2 text-xs font-semibold">
-              <input type="checkbox" checked={deliversToMarket} onChange={e => setDeliversToMarket(e.target.checked)} />
-              Delivery confirmed to {market === "uk" ? "the United Kingdom" : "the United States"}
+            <AliExpressShippingDefaults origin={shipOrigin} destinations={destinations} setOrigin={setShipOrigin} setDestinations={setDestinations} />
+            <label className="block text-xs font-semibold">General postage ({market === "uk" ? "GBP" : "USD"})
+              <input type="number" min="0" step="0.01" value={shippingPrice} onChange={e => setShippingPrice(e.target.value)}
+                disabled={!shipZone} placeholder="Unconfirmed" className={inputCls} />
             </label>
             <label className="block text-xs font-semibold">Estimated delivery (optional)
               <input value={deliveryEstimate} onChange={e => setDeliveryEstimate(e.target.value)}
-                disabled={!deliversToMarket} placeholder="e.g. 5–8 days" className={inputCls} />
+                disabled={!shipZone} placeholder="e.g. 5–8 days" className={inputCls} />
             </label>
             {(gallery.length > 1 || attributes.length > 0) && <p className="text-xs text-gray-600">
               Additional supplier photos and product specifications will be saved with the listing.
@@ -543,7 +519,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
             className="w-full py-2.5 rounded-xl bg-[#F26B21] text-white font-bold text-sm hover:bg-[#e0601d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-            {loading ? "Importing…" : multi ? `Create listings (${variants.length})` : "Create Listing"}
+            {loading ? "Importing…" : multi ? `Create listing with ${variants.length} options` : "Create Listing"}
           </button>
         </div>
       )}
