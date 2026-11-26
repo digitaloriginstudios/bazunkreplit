@@ -381,4 +381,46 @@ router.post("/admin/swaps/cases/:id/resolve",async(req,res)=>{
  }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Resolution failed"});}
 });
 
+
+export async function handleSwapWebhook(req:import("express").Request,res:import("express").Response):Promise<void>{
+ const secret=process.env.SWAP_STRIPE_WEBHOOK_SECRET,signature=req.headers["stripe-signature"];
+ if(!secret||typeof signature!=="string"){res.status(400).json({error:"Webhook not configured"});return;}
+ try{
+ const stripe=await getUncachableStripeClient();
+ const event=stripe.webhooks.constructEvent(req.body,signature,secret);
+ if(event.livemode){res.status(400).json({error:"Test events only"});return;}
+ if(event.type==="checkout.session.completed"||event.type==="checkout.session.async_payment_succeeded"){
+ const s=event.data.object;
+ if(s.metadata?.kind==="bazunk_swap"&&uuid(s.metadata.payment_id)&&uuid(s.metadata.offer_id)&&s.payment_status==="paid"&&s.status==="complete"&&s.currency==="gbp"&&typeof s.payment_intent==="string"){
+ await ensureTables();
+ await db.execute(sql`UPDATE swap_payments SET status='paid',intent_id=${s.payment_intent},session_id=${s.id},updated_at=NOW() WHERE id=${s.metadata.payment_id} AND offer_id=${s.metadata.offer_id} AND status='pending' AND (session_id IS NULL OR session_id=${s.id}) AND amount_minor+fee_minor=${s.amount_total}`);
+ }
+ }else if(event.type==="refund.updated"||event.type==="refund.created"){
+ const refund=event.data.object;
+ if(refund.metadata?.kind==="bazunk_swap"&&uuid(refund.metadata.payment_id)&&typeof refund.payment_intent==="string"&&refund.currency==="gbp"){
+ await ensureTables();
+ if(refund.status==="succeeded")await db.execute(sql`UPDATE swap_payments SET status='refunded',updated_at=NOW() WHERE id=${refund.metadata.payment_id} AND intent_id=${refund.payment_intent} AND amount_minor+fee_minor=${refund.amount} AND status='refund_pending'`);
+ }
+ }
+ res.json({received:true});
+ }catch{res.status(400).json({error:"Swap webhook verification or processing failed"});}
+}
+router.post("/admin/swaps/payments/:id/refund",async(req,res)=>{
+ try{
+ const id=req.params.id,reason=req.body?.reason;
+ if(!uuid(id)||typeof reason!=="string"||reason.trim().length<10||reason.length>2000){res.status(400).json({error:"Refund reason required"});return;}
+ if(process.env.SWAP_TEST_PAYMENTS_ENABLED!=="true"){res.status(503).json({error:"Test payments disabled"});return;}
+ const stripe=await getUncachableStripeClient();if((await stripe.balance.retrieve()).livemode){res.status(409).json({error:"Test Stripe account required"});return;}
+ const p=await db.transaction(async tx=>{
+ const row=(await tx.execute(sql`SELECT p.* FROM swap_payments p JOIN swap_offers o ON o.id=p.offer_id WHERE p.id=${id} AND o.status='disputed' AND p.status IN ('paid','refund_pending') FOR UPDATE OF p,o`)).rows[0];
+ if(!row||!row.intent_id)throw new SwapConflict("Disputed paid exchange required.");
+ if(row.status==="paid"){await tx.execute(sql`UPDATE swap_payments SET status='refund_pending',updated_at=NOW() WHERE id=${id}`);await tx.execute(sql`INSERT INTO swap_admin_audit(subject_id,action,reason) VALUES(${id},'test_refund_requested',${reason.trim()})`);}
+ return row;
+ });
+ const refund=await stripe.refunds.create({payment_intent:String(p.intent_id),amount:Number(p.amount_minor)+Number(p.fee_minor),metadata:{kind:"bazunk_swap",payment_id:id}},{idempotencyKey:"swap-test-refund-"+id});
+ if(refund.status==="succeeded")await db.execute(sql`UPDATE swap_payments SET status='refunded',updated_at=NOW() WHERE id=${id} AND status='refund_pending'`);
+ res.json({status:refund.status,preview:true});
+ }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Test refund unavailable; reconcile before retrying"});}
+});
+
 export default router;
