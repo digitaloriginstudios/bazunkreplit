@@ -195,7 +195,6 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
   const [aliQueued, setAliQueued] = useState<string[]>([]);
   const [aliSelected, setAliSelected] = useState<Set<string>>(new Set());
   const [aliActiveUrl, setAliActiveUrl] = useState("");
-  const [aliMarket, setAliMarket] = useState<"uk" | "us">("uk");
   const [aliQuantity, setAliQuantity] = useState("1");
   const [aliMarkup, setAliMarkup] = useState("30");
   const [aliShipping, setAliShipping] = useState("");
@@ -626,7 +625,7 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
         try {
           const res = await authFetch("/api/admin/import-selected-aliexpress", {
             method: "POST", body: JSON.stringify({ ids:[id], requireVariantDetails:true, markup:Number(aliMarkup), sellerEmail:aliSeller,
-              market:aliMarket, quantity:Number(aliQuantity), shipOrigin:aliOrigin, shipZone:aliExpressShipZone(aliDestinations), postage:aliShipping }),
+              quantity:Number(aliQuantity), shipOrigin:aliOrigin, shipZone:aliExpressShipZone(aliDestinations), postage:aliShipping }),
           });
           const data = await res.json();
           if ([400, 401, 403, 503].includes(res.status)) {
@@ -1491,31 +1490,22 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
               <h3 className="font-black text-gray-900">Import settings</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label className="block text-sm font-bold text-gray-700 mb-2">Destination seller</label><select value={aliSeller} onChange={e=>setAliSeller(e.target.value)} className={inputCls+" w-full"}>{users.length===0?<option value={aliSeller}>{aliSeller}</option>:users.map(u=><option key={u.email} value={u.email}>{u.name?`${u.name} (${u.email})`:u.email}</option>)}</select></div>
               <div><label className="block text-sm font-bold text-gray-700 mb-2">Default markup (%)</label><input type="number" min="0" max="1000" step="1" value={aliMarkup} onChange={e=>setAliMarkup(e.target.value)} className={inputCls+" w-full"}/></div></div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="block text-sm font-bold text-gray-700">
-                  Marketplace
-                  <select value={aliMarket} onChange={e => setAliMarket(e.target.value === "us" ? "us" : "uk")} className={inputCls + " mt-2 w-full"}>
-                    <option value="uk">UK · GBP</option>
-                    <option value="us">USA · USD</option>
-                  </select>
-                </label>
-                <label className="block text-sm font-bold text-gray-700">
-                  Quantity per product
-                  <input type="number" min="1" max="2147483647" step="1" value={aliQuantity} onChange={e => setAliQuantity(e.target.value)} className={inputCls + " mt-2 w-full"} />
-                </label>
-              </div>
+              <label className="block max-w-xs text-sm font-bold text-gray-700">
+                Quantity per product
+                <input type="number" min="1" max="2147483647" step="1" value={aliQuantity} onChange={e => setAliQuantity(e.target.value)} className={inputCls + " mt-2 w-full"} />
+              </label>
               <AliExpressShippingDefaults origin={aliOrigin} destinations={aliDestinations} setOrigin={setAliOrigin} setDestinations={setAliDestinations} />
-              <label className="block text-sm font-semibold">General postage ({aliMarket === "uk" ? "GBP" : "USD"})
+              <label className="block text-sm font-semibold">General postage (GBP)
                 <input type="number" min="0" step="0.01" value={aliShipping} onChange={e => setAliShipping(e.target.value)}
                   className={inputCls + " mt-1 block w-full"} placeholder="Use AliExpress quote when available" />
               </label>
-              <p className="text-xs text-gray-500">Leave postage blank to use a one-item AliExpress quote to the selected marketplace when available. Enter a rate to apply it to the whole batch.</p>
+              <p className="text-xs text-gray-500">Leave postage blank to use a one-item AliExpress quote to the UK when available and UK delivery is enabled. Enter a rate to apply it to the whole batch.</p>
               {aliBatchActions}
               {aliQueued.length > 0 && aliNotice && <p role="status" className="whitespace-pre-line text-sm text-gray-600">{aliNotice}</p>}
               {!aliQueued.length && <button disabled={aliBulkImporting} onClick={()=>{setAliActiveUrl(aliQueued.find(u=>aliSelected.has(u))??"");setAliModalOpen(true)}} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-white font-bold text-sm hover:bg-orange-600"><Plus className="w-4 h-4"/>Import a product</button>}
               {aliDone>0&&<p className="text-sm text-green-700">{aliDone} product(s) imported this session.</p>}
             </div>
-            {aliModalOpen&&<ImportModal key={aliActiveUrl} initialUrl={aliActiveUrl} initialMarkup={aliMarkup} initialMarket={aliMarket} initialQuantity={aliQuantity} initialOrigin={aliOrigin} initialDestinations={aliDestinations} initialPostage={aliShipping} onClose={()=>setAliModalOpen(false)} onSuccess={()=>{setAliDone(n=>n+1);setAliSelected(prev=>{const next=new Set(prev);next.delete(aliActiveUrl);return next});setAliQueued(prev=>prev.filter(url=>url!==aliActiveUrl))}} userEmail={aliSeller} userName={users.find(u=>u.email===aliSeller)?.name??""}/>}
+            {aliModalOpen&&<ImportModal key={aliActiveUrl} initialUrl={aliActiveUrl} initialMarkup={aliMarkup} initialQuantity={aliQuantity} initialOrigin={aliOrigin} initialDestinations={aliDestinations} initialPostage={aliShipping} onClose={()=>setAliModalOpen(false)} onSuccess={()=>{setAliDone(n=>n+1);setAliSelected(prev=>{const next=new Set(prev);next.delete(aliActiveUrl);return next});setAliQueued(prev=>prev.filter(url=>url!==aliActiveUrl))}} userEmail={aliSeller} userName={users.find(u=>u.email===aliSeller)?.name??""}/>}
           </motion.div>
         )}
 

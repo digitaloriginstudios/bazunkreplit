@@ -83,7 +83,6 @@ interface ImportModalProps {
   userName: string;
   initialUrl?: string;
   initialMarkup?: string;
-  initialMarket?: "uk" | "us";
   initialQuantity?: string;
   initialOrigin?: string;
   initialDestinations?: string[];
@@ -92,12 +91,10 @@ interface ImportModalProps {
 
 const CONDITIONS = ["new", "like new", "good", "fair", "poor"];
 
-export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUrl = "", initialMarkup = "30", initialMarket = "uk", initialQuantity = "1", initialOrigin = "CN", initialDestinations = defaultAliExpressDestinations, initialPostage = "" }: ImportModalProps) {
+export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUrl = "", initialMarkup = "30", initialQuantity = "1", initialOrigin = "CN", initialDestinations = defaultAliExpressDestinations, initialPostage = "" }: ImportModalProps) {
   const { authFetch } = useAdmin();
   const [url, setUrl] = useState(initialUrl);
-  const [market, setMarket] = useState(initialMarket);
   const [quantity, setQuantity] = useState(initialQuantity);
-  const currencySymbol = market === "uk" ? "£" : "$";
   const [title, setTitle] = useState("");
   const [supplierPriceUsd, setSupplierPriceUsd] = useState("");
   const [supplierQuote, setSupplierQuote] = useState<{ amount: number; currency: string } | null>(null);
@@ -124,7 +121,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
       setRateLoading(false);
     }
   }, []);
-  useEffect(() => { if (market === "uk") void loadRate(); }, [market, loadRate]);
+  useEffect(() => { void loadRate(); }, [loadRate]);
   const [imageUrl, setImageUrl] = useState("");
   const [category, setCategory] = useState("");
   const [subcategory, setSubcategory] = useState("");
@@ -148,21 +145,20 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
   const [postageOverride, setPostageOverride] = useState<string | null>(initialPostage || null);
   const [estimateOverride, setEstimateOverride] = useState<string | null>(null);
   const shipZone = aliExpressShipZone(destinations);
-  const marketCountry = market === "uk" ? "GB" : "US";
-  const applicableQuote = freightQuote?.destination === marketCountry &&
+  const applicableQuote = freightQuote?.destination === "GB" &&
     (!freightQuote.origin || freightQuote.origin === shipOrigin) &&
-    (destinations.includes("worldwide") || destinations.includes(marketCountry)) ? freightQuote : null;
+    (destinations.includes("worldwide") || destinations.includes("GB")) ? freightQuote : null;
   const shippingPrice = postageOverride ?? applicableQuote?.amount.toFixed(2) ?? "";
   const deliveryEstimate = estimateOverride ?? (postageOverride === null ? applicableQuote?.estimate : undefined) ?? "";
   const [gallery, setGallery] = useState<string[]>([]);
   const [attributes, setAttributes] = useState<{ key: string; value: string }[]>([]);
   const previewSequence = useRef(0);
-  function resetShipping(targetMarket: "uk" | "us") {
+  function resetShipping() {
     setFreightQuote(null);
     setEstimateOverride(null);
-    setPostageOverride(targetMarket === initialMarket ? initialPostage || null : null);
+    setPostageOverride(initialPostage || null);
   }
-  const fetchPreview = useCallback(async (productUrl: string, targetMarket: "uk" | "us", selectedSku = "") => {
+  const fetchPreview = useCallback(async (productUrl: string, selectedSku = "") => {
     if (!productUrl.trim()) return;
     const sequence = ++previewSequence.current;
     setPreviewLoading(true);
@@ -170,7 +166,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
     setSupplierQuote(null);
     setFreightQuote(null);
     try {
-      const query = new URLSearchParams({ url: productUrl.trim(), market: targetMarket, sku: selectedSku });
+      const query = new URLSearchParams({ url: productUrl.trim(), sku: selectedSku });
       const response = await fetchRef.current("/api/admin/aliexpress-product-preview?" + query);
       const data = await response.json() as {
         error?: string; title?: string; description?: string; imageUrl?: string; supplierPrice?: number; currency?: string;
@@ -214,7 +210,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
       if (sequence === previewSequence.current) setPreviewLoading(false);
     }
   }, []);
-  useEffect(() => { if (initialUrl) void fetchPreview(initialUrl, initialMarket); }, [initialUrl, initialMarket, fetchPreview]);
+  useEffect(() => { if (initialUrl) void fetchPreview(initialUrl); }, [initialUrl, fetchPreview]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -222,11 +218,10 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
 
   const usd = Number(supplierPriceUsd);
   const mv = Number(markupValue);
-  const listingRate = market === "uk" ? usdToGbp : 1;
   const stock = Number(quantity);
-  const bazunkPreview = listingRate !== null && Number.isFinite(usd) && usd > 0 &&
+  const bazunkPreview = usdToGbp !== null && Number.isFinite(usd) && usd > 0 &&
     Number.isFinite(mv) && mv >= 0 && mv <= 1000
-    ? calcBazunkPrice(usd, markupType, mv, listingRate)
+    ? calcBazunkPrice(usd, markupType, mv, usdToGbp)
     : null;
 
   const subcategories = SITE_CATEGORIES.find(c => c.slug === category)?.subcategories ?? [];
@@ -236,10 +231,10 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
     const priceUsd = Number(edit.usd);
     const quantity = edit.quantity === "" ? NaN : Number(edit.quantity);
     return { sku: choice.id, label: choice.label, origin: choice.origin, image: choice.image, priceUsd, quantity,
-      expectedSellingPrice: listingRate === null ? 0 : calcBazunkPrice(priceUsd, markupType, mv, listingRate) };
+      expectedSellingPrice: usdToGbp === null ? 0 : calcBazunkPrice(priceUsd, markupType, mv, usdToGbp) };
   });
   const canSubmit = url.trim() && title.trim() && !!category && !loading && !previewLoading &&
-    listingRate !== null && (market === "us" || !rateLoading) && Number.isFinite(mv) && mv >= 0 && mv <= 1000 &&
+    usdToGbp !== null && !rateLoading && Number.isFinite(mv) && mv >= 0 && mv <= 1000 &&
     (multi ? variants.length > 0 && variants.length <= 200 && variants.every(row => Number.isFinite(row.priceUsd) && row.priceUsd > 0 &&
       Number.isInteger(row.quantity) && row.quantity >= 0 && row.quantity <= 2147483647 && row.expectedSellingPrice > 0)
     : bazunkPreview !== null && bazunkPreview > 0 && Number.isInteger(stock) && stock > 0 && stock <= 2147483647);
@@ -256,7 +251,6 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           sellerEmail: userEmail,
           title: title.trim(),
           supplierPriceUsd: usd,
-          market,
           quantity: multi ? 1 : stock,
           variants: multi ? variants : undefined,
           shipOrigin,
@@ -333,10 +327,10 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-7 h-7 text-emerald-600" />
           </div>
-          <p className="font-bold text-gray-900 text-lg">{savedCount > 1 ? `${savedCount} options imported` : savedPrice === null ? "Imported!" : `Imported at ${currencySymbol}${savedPrice.toFixed(2)}`}</p>
+          <p className="font-bold text-gray-900 text-lg">{savedCount > 1 ? `${savedCount} options imported` : savedPrice === null ? "Imported!" : `Imported at £${savedPrice.toFixed(2)}`}</p>
           <p className="text-sm text-gray-400 mt-1 mb-6 truncate px-4">{importedTitle}</p>
           <div className="flex gap-3">
-            <button onClick={() => { setSuccess(false); resetShipping(market); setChoices([]); setVariantEdits({}); setSku(""); setGallery([]); setAttributes([]); setUrl(""); setTitle(""); setSupplierPriceUsd(""); setSupplierQuote(null); setImageUrl(""); setDescription(""); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+            <button onClick={() => { setSuccess(false); resetShipping(); setChoices([]); setVariantEdits({}); setSku(""); setGallery([]); setAttributes([]); setUrl(""); setTitle(""); setSupplierPriceUsd(""); setSupplierQuote(null); setImageUrl(""); setDescription(""); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
               Import Another
             </button>
             <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-gray-800 transition-colors">
@@ -357,9 +351,9 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">AliExpress Product URL <span className="text-red-400">*</span></label>
             <input value={url} onChange={e => { previewSequence.current++;
               setPreviewLoading(false); setPreviewNotice(""); setLastPreviewUrl(""); setUrl(e.target.value);
-              setSupplierPriceUsd(""); setSupplierQuote(null); resetShipping(market); setChoices([]); setVariantEdits({}); setSku("");
+              setSupplierPriceUsd(""); setSupplierQuote(null); resetShipping(); setChoices([]); setVariantEdits({}); setSku("");
               setTitle(""); setDescription(""); setImageUrl(""); setGallery([]); setAttributes([]); }} placeholder="https://www.aliexpress.com/item/1005007123456789.html" className={inputCls} />
-            <button type="button" disabled={previewLoading || !url.trim()} onClick={() => void fetchPreview(url, market, sku)} className="mt-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{previewLoading ? "Fetching product details…" : lastPreviewUrl === url ? "Refresh product details" : "Fetch product details"}</button>
+            <button type="button" disabled={previewLoading || !url.trim()} onClick={() => void fetchPreview(url, sku)} className="mt-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{previewLoading ? "Fetching product details…" : lastPreviewUrl === url ? "Refresh product details" : "Fetch product details"}</button>
             {previewNotice && <p role="status" className="mt-2 text-xs text-gray-600">{previewNotice}</p>}
             {imageUrl && <img src={imageUrl} alt="Supplier product preview" className="mt-2 h-28 w-28 rounded-lg border object-contain" />}
 
@@ -417,26 +411,10 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block text-xs font-semibold text-gray-600">
-              Marketplace
-              <select value={market} onChange={e => {
-                const next = e.target.value === "us" ? "us" : "uk";
-                setMarket(next);
-                setVariantEdits({});
-                setSupplierPriceUsd("");
-                void fetchPreview(url, next, sku);
-                resetShipping(next);
-              }} className={`${inputCls} mt-1.5 bg-white`} disabled={loading || success}>
-                <option value="uk">UK · GBP</option>
-                <option value="us">USA · USD</option>
-              </select>
-            </label>
-            {!multi && <label className="block text-xs font-semibold text-gray-600">
-              Quantity
-              <input type="number" min="1" max="2147483647" step="1" value={quantity} onChange={e => setQuantity(e.target.value)} className={`${inputCls} mt-1.5`} />
-            </label>}
-          </div>
+          {!multi && <label className="block max-w-xs text-xs font-semibold text-gray-600">
+            Quantity
+            <input type="number" min="1" max="2147483647" step="1" value={quantity} onChange={e => setQuantity(e.target.value)} className={`${inputCls} mt-1.5`} />
+          </label>}
 
           {multi && <section className="space-y-2 rounded-xl border border-gray-200 p-3" aria-label="Product options to import">
             <h3 className="text-sm font-bold">Product options to import</h3>
@@ -457,7 +435,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
                 <label>Quantity<input type="number" min="0" step="1" value={edit.quantity} disabled={!edit.enabled}
                   onChange={e => update({ quantity:e.target.value })} className={inputCls} /></label>
                 {price != null && Number.isFinite(price) && Number(edit.usd) > 0 &&
-                  <p className="col-span-2">Listing price {currencySymbol}{price.toFixed(2)}</p>}
+                  <p className="col-span-2">Listing price £{price.toFixed(2)}</p>}
               </div>;
             })}
           </section>}
@@ -465,12 +443,12 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           <section className="space-y-2 rounded-xl border border-gray-200 p-3" aria-label="Shipping details">
             <h3 className="text-sm font-bold">Shipping</h3>
             <AliExpressShippingDefaults origin={shipOrigin} destinations={destinations} setOrigin={setShipOrigin} setDestinations={setDestinations} />
-            <label className="block text-xs font-semibold">General postage ({market === "uk" ? "GBP" : "USD"})
+            <label className="block text-xs font-semibold">General postage (GBP)
               <input type="number" min="0" step="0.01" value={shippingPrice} onChange={e => setPostageOverride(e.target.value)}
                 disabled={!shipZone} placeholder="Unconfirmed" className={inputCls} />
             </label>
             {postageOverride === null && (applicableQuote
-              ? <p className="text-xs text-gray-600">Based on AliExpress’s one-item quote to the {market === "uk" ? "UK" : "USA"}. Check the rate for other destinations or variations.</p>
+              ? <p className="text-xs text-gray-600">Based on AliExpress’s one-item quote to the UK. Check the rate for other destinations or variations.</p>
               : <p className="text-xs text-gray-600">Enter a general rate if AliExpress has no matching quote.</p>)}
             <label className="block text-xs font-semibold">Estimated delivery (optional)
               <input value={deliveryEstimate} onChange={e => setEstimateOverride(e.target.value)}
@@ -493,17 +471,17 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Markup Type</label>
               <select value={markupType} onChange={e => setMarkupType(e.target.value as "percentage" | "fixed")} className={`${inputCls} bg-white`}>
                 <option value="percentage">Percentage (%)</option>
-                <option value="fixed">Fixed amount ({currencySymbol})</option>
+                <option value="fixed">Fixed amount (£)</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">{markupType === "percentage" ? "Markup %" : `Add ${currencySymbol}`}</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">{markupType === "percentage" ? "Markup %" : "Add £"}</label>
               <input type="number" min="0" step={markupType === "percentage" ? "1" : "0.01"} value={markupValue} onChange={e => setMarkupValue(e.target.value)} className={inputCls} />
             </div>
           </div>
 
-          {market === "uk" && rateLoading && <p role="status" className="text-xs text-gray-600">Checking the USD/GBP rate…</p>}
-          {market === "uk" && rateError && <p role="alert" className="text-sm text-red-700">{rateError}{" "}
+          {rateLoading && <p role="status" className="text-xs text-gray-600">Checking the USD/GBP rate…</p>}
+          {rateError && <p role="alert" className="text-sm text-red-700">{rateError}{" "}
             <button type="button" onClick={loadRate} className="font-semibold underline">Retry rate check</button>
           </p>}
 
@@ -511,10 +489,10 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           {!multi && bazunkPreview !== null && (
             <div className="bg-[#F26B21]/8 rounded-xl px-4 py-3 flex items-center justify-between text-sm">
               <span className="text-gray-500 text-xs">
-                ${usd.toFixed(2)} USD {market === "uk" && `→ £${(usd * (usdToGbp ?? 0)).toFixed(2)} GBP`}
-                {markupType === "percentage" ? ` +${mv}%` : ` +${currencySymbol}${mv.toFixed(2)}`}
+                ${usd.toFixed(2)} USD → £{(usd * (usdToGbp ?? 0)).toFixed(2)} GBP
+                {markupType === "percentage" ? ` +${mv}%` : ` +£${mv.toFixed(2)}`}
               </span>
-              <span className="font-black text-[#F26B21] text-base">{currencySymbol}{bazunkPreview.toFixed(2)}</span>
+              <span className="font-black text-[#F26B21] text-base">£{bazunkPreview.toFixed(2)}</span>
             </div>
           )}
 
