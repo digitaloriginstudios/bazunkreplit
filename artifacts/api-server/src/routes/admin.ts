@@ -939,6 +939,22 @@ router.post("/admin/rapidapi/test", async (_req, res) => {
 
 // Site settings
 
+
+// Shared promotional templates, protected by the admin router.
+async function ensurePromoTemplates(){
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS admin_promo_templates (name TEXT PRIMARY KEY, config JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+}
+router.get("/admin/promo-templates",requireAdmin,async (_req,res)=>{
+ try{await ensurePromoTemplates();const r=await db.execute(sql`SELECT name,config FROM admin_promo_templates ORDER BY name`);res.json(Object.fromEntries(r.rows.map((x:any)=>[x.name,x.config])));}catch{res.status(500).json({error:"Unable to load templates"});}
+});
+router.put("/admin/promo-templates/:name",requireAdmin,async(req,res)=>{
+ const name=String(req.params.name).trim(), c=req.body;
+ if(!name||name.length>100||!c||!Number.isInteger(c.format)||c.format<0||c.format>6||typeof c.template!=="string"||c.template.length>80||typeof c.headline!=="string"||c.headline.length>500||!/^#[0-9a-f]{6}$/i.test(c.color)||!/^#[0-9a-f]{6}$/i.test(c.accent)){res.status(400).json({error:"Invalid template"});return;}
+ try{await ensurePromoTemplates();await db.execute(sql`INSERT INTO admin_promo_templates(name,config) VALUES(${name},${JSON.stringify({format:c.format,template:c.template,headline:c.headline,color:c.color,accent:c.accent})}::jsonb) ON CONFLICT(name) DO UPDATE SET config=EXCLUDED.config,updated_at=NOW()`);res.json({ok:true});}catch{res.status(500).json({error:"Unable to save template"});}
+});
+router.delete("/admin/promo-templates/:name",requireAdmin,async(req,res)=>{
+ try{await ensurePromoTemplates();await db.execute(sql`DELETE FROM admin_promo_templates WHERE name=${req.params.name}`);res.json({ok:true});}catch{res.status(500).json({error:"Unable to delete template"});}
+});
 router.get("/admin/settings", async (_req, res) => {
   try {
     const rows = await db.execute(sql`SELECT key, value FROM site_settings ORDER BY key`).then(r => r.rows as any[]);
