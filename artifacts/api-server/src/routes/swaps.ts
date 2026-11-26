@@ -1,3 +1,4 @@
+import { randomBytes,createHash } from "node:crypto";
 import { getUncachableStripeClient } from "../stripeClient.js";
 import { Router } from "express";
 import { db } from "@workspace/db";
@@ -31,6 +32,7 @@ function ensureTables(){
  await db.execute(sql`ALTER TABLE swap_offers ALTER COLUMN last_actor_email SET NOT NULL`);
  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS swap_pending_pair ON swap_offers(target_id,offered_id) WHERE status='pending'`);
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_payments(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),offer_id UUID NOT NULL REFERENCES swap_offers(id),payer_email TEXT NOT NULL,amount_minor INTEGER NOT NULL CHECK(amount_minor>0),fee_minor INTEGER NOT NULL DEFAULT 0 CHECK(fee_minor>=0),session_id TEXT UNIQUE,intent_id TEXT UNIQUE,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','paid','refund_pending','refunded')),created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(offer_id,payer_email))`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_deliveries(offer_id UUID NOT NULL REFERENCES swap_offers(id),sender_email TEXT NOT NULL,method TEXT NOT NULL CHECK(method IN ('shipping','local')),carrier TEXT,tracking TEXT,dispatched_at TIMESTAMPTZ,received_at TIMESTAMPTZ,code_hash TEXT,code_expires TIMESTAMPTZ,PRIMARY KEY(offer_id,sender_email))`);
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_events (
  id BIGSERIAL PRIMARY KEY, offer_id UUID NOT NULL REFERENCES swap_offers(id),
  actor_email TEXT NOT NULL, event TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
@@ -189,6 +191,51 @@ router.post("/swaps/offers/:id/payment/verify",async(req,res)=>{
  }
  const latest=await paymentRecord(id,email);res.json({status:latest?.status});
  }catch{res.status(503).json({error:"Payment verification unavailable"});}
+});
+
+
+router.get("/swaps/offers/:id/delivery",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id;
+ if(!uuid(id)){res.status(400).json({error:"Invalid offer ID"});return;}
+ const o=await paymentOffer(id,email);if(!o){res.status(404).json({error:"Offer unavailable"});return;}
+ const rows=(await db.execute(sql`SELECT (sender_email=${email}) AS is_mine,carrier,tracking,dispatched_at,received_at,method FROM swap_deliveries WHERE offer_id=${id}`)).rows;
+ res.setHeader("Cache-Control","private, no-store");res.json({items:rows,status:o.status,preview:true});
+ }catch{res.status(503).json({error:"Delivery status unavailable"});}
+});
+router.post("/swaps/offers/:id/delivery",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id;
+ if(!uuid(id)){res.status(400).json({error:"Invalid offer ID"});return;}
+ // No actual fulfilment until live protection, refunds and payout controls are ready.
+ if(process.env.SWAP_TEST_FULFILMENT_ENABLED!=="true"){res.status(503).json({error:"Test fulfilment disabled"});return;}
+ const {action,carrier,tracking,code}=req.body??{};
+ if(!["dispatch","receive","local_code","local_confirm"].includes(action)){res.status(400).json({error:"Invalid delivery action"});return;}
+ if(action==="dispatch"&&(typeof carrier!=="string"||carrier.trim().length<1||carrier.length>80||typeof tracking!=="string"||tracking.trim().length<3||tracking.length>120)){res.status(400).json({error:"Enter carrier and tracking reference"});return;}
+ const result=await db.transaction(async tx=>{
+ const o=(await tx.execute(sql`SELECT o.*,t.owner_email AS target_email FROM swap_offers o JOIN swap_listings t ON t.id=o.target_id WHERE o.id=${id} FOR UPDATE OF o`)).rows[0];
+ if(!o||o.status!=="accepted"||(email!==o.proposer_email&&email!==o.target_email))throw new SwapConflict("Accepted exchange required.");
+ const other=String(email===o.proposer_email?o.target_email:o.proposer_email);
+ if(Number(o.cash_minor)!==0){const paid=(await tx.execute(sql`SELECT id FROM swap_payments WHERE offer_id=${id} AND status='paid' AND amount_minor=${Math.abs(Number(o.cash_minor))} AND payer_email=${Number(o.cash_minor)>0?o.proposer_email:o.target_email}`)).rows[0];if(!paid)throw new SwapConflict("Verify test payment first.");}
+ const method=action.startsWith("local")?"local":"shipping";
+ const existing=(await tx.execute(sql`SELECT method FROM swap_deliveries WHERE offer_id=${id} LIMIT 1`)).rows[0];
+ if(existing&&existing.method!==method)throw new SwapConflict("Exchange method already selected.");
+ let result:{code?:string}={};
+ if(action==="dispatch"){
+ const row=(await tx.execute(sql`INSERT INTO swap_deliveries(offer_id,sender_email,method,carrier,tracking,dispatched_at) VALUES(${id},${email},'shipping',${carrier.trim()},${tracking.trim()},NOW()) ON CONFLICT DO NOTHING RETURNING offer_id`)).rows[0];if(!row)throw new SwapConflict("Dispatch already recorded.");
+ }else if(action==="receive"){
+ const row=(await tx.execute(sql`UPDATE swap_deliveries SET received_at=NOW() WHERE offer_id=${id} AND sender_email=${other} AND method='shipping' AND dispatched_at IS NOT NULL AND received_at IS NULL RETURNING offer_id`)).rows[0];if(!row)throw new SwapConflict("No outstanding delivery to confirm.");
+ }else if(action==="local_code"){
+ const secret=randomBytes(16).toString("hex");
+ const row=(await tx.execute(sql`INSERT INTO swap_deliveries(offer_id,sender_email,method,code_hash,code_expires) VALUES(${id},${email},'local',${createHash("sha256").update(secret).digest("hex")},NOW()+INTERVAL '15 minutes') ON CONFLICT(offer_id,sender_email) DO UPDATE SET code_hash=EXCLUDED.code_hash,code_expires=EXCLUDED.code_expires WHERE swap_deliveries.received_at IS NULL AND swap_deliveries.method='local' RETURNING offer_id`)).rows[0];if(!row)throw new SwapConflict("Exchange already confirmed.");result={code:secret};
+ }else{
+ if(typeof code!=="string"||! /^[a-f0-9]{32}$/.test(code))throw new SwapConflict("Invalid collection code.");
+ const row=(await tx.execute(sql`UPDATE swap_deliveries SET received_at=NOW(),code_hash=NULL,code_expires=NULL WHERE offer_id=${id} AND sender_email=${other} AND method='local' AND received_at IS NULL AND code_expires>NOW() AND code_hash=${createHash("sha256").update(code).digest("hex")} RETURNING offer_id`)).rows[0];if(!row)throw new SwapConflict("Invalid or expired collection code.");
+ }
+ await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},${"test_"+action})`);
+ const done=(await tx.execute(sql`SELECT count(*)::int AS total FROM swap_deliveries WHERE offer_id=${id} AND received_at IS NOT NULL`)).rows[0];
+ if(Number(done?.total)===2)await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},'test_both_receipts_confirmed')`);
+ return {...result,bothConfirmed:Number(done?.total)===2};
+ });res.json(result);
+ }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Delivery update unavailable"});}
 });
 
 export default router;
