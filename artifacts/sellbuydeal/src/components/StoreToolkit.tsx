@@ -15,12 +15,12 @@ const tools: Tool[] = [
   { label: "Sales & orders", description: "Review sales and order progress", group: "Manage", icon: BarChart2, color: "#10b981", section: "sales" },
   { label: "Seller payouts", description: "Manage your payout account", group: "Manage", icon: Banknote, color: "#14b8a6", section: "seller-payouts" },
   { label: "Promote listings", description: "Explore boosts and promotions", group: "Grow", icon: Megaphone, color: "#a855f7", section: "promotions", feature: "promotions" },
-  { label: "Your credits", description: "Check your promotion credit balance", group: "Grow", icon: Coins, color: "#f59e0b", section: "credits" },
+  { label: "Your credits", description: "Check your promotion credit balance", group: "Grow", icon: Coins, color: "#f59e0b", section: "credits", feature: "credits" },
   { label: "Rewards Arcade", description: "Play games and earn free credits", group: "Grow", icon: Gift, color: "#ec4899", href: "/rewards", feature: "games" },
-  { label: "Get verified", description: "Complete seller verification", group: "Support", icon: ShieldCheck, color: "#6366f1", section: "verification" },
+  { label: "Get verified", description: "Complete seller verification", group: "Support", icon: ShieldCheck, color: "#6366f1", section: "verification", feature: "verification" },
   { label: "Buyer messages", description: "Reply to questions and enquiries", group: "Support", icon: MessageSquare, color: "#0ea5e9", href: "/messages", feature: "messaging" },
-  { label: "Returns", description: "Review return requests", group: "Support", icon: RotateCcw, color: "#f59e0b", section: "returns" },
-  { label: "Disputes", description: "Resolve issues with buyers", group: "Support", icon: ShieldCheck, color: "#f43f5e", section: "disputes" },
+  { label: "Returns", description: "Review return requests", group: "Support", icon: RotateCcw, color: "#f59e0b", section: "returns", feature: "disputes_returns" },
+  { label: "Disputes", description: "Resolve issues with buyers", group: "Support", icon: ShieldCheck, color: "#f43f5e", section: "disputes", feature: "disputes_returns" },
   { label: "Support centre", description: "Get help from the support team", group: "Support", icon: LifeBuoy, color: "#8b5cf6", section: "support-tickets" },
 ];
 
