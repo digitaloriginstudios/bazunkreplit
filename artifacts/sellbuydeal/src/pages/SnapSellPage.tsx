@@ -133,7 +133,7 @@ export function SnapSellPage(){
   try{
    const data=await request("/api/snap-sell/analyse",{method:"POST",body:JSON.stringify({photo:image,context:notes})});
    apply(data.suggestion,"AI photo recognition");
-  }catch(e){setError(e instanceof Error?e.message:"Photo recognition unavailable");}
+  }catch(e){setError(e instanceof Error?e.message+" You can still enter item details manually below.":"Photo recognition unavailable. Enter item details manually below.");}
   finally{setBusy("");}
  }
  async function lookup(){
@@ -152,7 +152,7 @@ export function SnapSellPage(){
    const data=await request("/api/snap-sell/write",{method:"POST",
     body:JSON.stringify({title:draft.title,description:draft.description,notes})});
    apply({...data.suggestion,title:draft.title},"AI-assisted writing");
-  }catch(e){setError(e instanceof Error?e.message:"Writing assistant unavailable");}
+  }catch(e){setError(e instanceof Error?e.message+" Your existing draft is unchanged; continue manually.":"Writing assistant unavailable. Continue manually.");}
   finally{setBusy("");}
  }
  function continueToListing(){
@@ -181,7 +181,7 @@ export function SnapSellPage(){
   </header>
   {!isSignedIn&&<p role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 font-bold text-amber-900">Sign in to use Snap & Sell. <button type="button" onClick={()=>go("/sign-in")} className="ml-2 underline">Sign in →</button></p>}
   {caps&&!caps.enabled&&<p role="alert" className="rounded-xl border-2 border-amber-300 bg-amber-50 p-4 font-bold text-amber-900">Snap & Sell is currently disabled by the marketplace administrator. You can still use the regular <button type="button" onClick={()=>go("/sell/direct")} className="underline">Direct Sale form</button>.</p>}
-  {caps?.enabled&&!caps?.aiPhoto&&<p className="rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm font-semibold text-blue-950 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-100"><AlertTriangle className="mr-2 inline h-4 w-4"/>AI photo recognition isn't available until a provider is configured. Barcode/ISBN scanning and manual editing are independent and can still be used.</p>}
+  {caps?.enabled&&!caps?.aiPhoto&&<p className="rounded-xl border border-blue-300 bg-blue-50 p-4 text-sm font-semibold text-blue-950 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-100"><AlertTriangle className="mr-2 inline h-4 w-4"/>AI photo recognition is currently unavailable or disabled. Barcode/ISBN scanning and manual editing are independent and can still be used.</p>}
   {error&&<div role="alert" className="flex items-start gap-2 rounded-xl border-2 border-red-300 bg-red-50 p-4 text-sm font-bold text-red-900 dark:bg-red-950 dark:text-red-100"><AlertTriangle className="h-5 w-5 shrink-0"/>{error}<button type="button" onClick={()=>setError("")} className="ml-auto underline">Dismiss</button></div>}
   <div className="grid items-start gap-5 lg:grid-cols-2">
    <div className="space-y-5">
