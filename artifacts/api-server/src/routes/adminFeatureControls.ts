@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
-import { FEATURE_DEFINITIONS } from "../lib/featureFlags.js";
+import { FEATURE_DEFINITIONS, resolveFeatureValue } from "../lib/featureFlags.js";
 const router=Router();
 const ENV=process.env.RENDER_SERVICE_ID==="srv-db732i2d0e5s73asr0kg" ? "staging":
  process.env.RENDER_SERVICE_ID==="srv-davd6f3bc2fs73ce9ohg" ? "production" :
@@ -24,7 +24,7 @@ router.get("/admin/feature-flags",async (_req,res)=>{
   const rows=await db.execute(sql`SELECT key,value FROM site_settings WHERE key LIKE 'feature_%'`);
   const values=Object.fromEntries((rows.rows as any[]).map(r=>[String(r.key).replace(/^feature_/,""),String(r.value)]));
   res.setHeader("Cache-Control","private,no-store");
-  res.json(FEATURE_DEFINITIONS.map(([key,label,group])=>({key,label,group,enabled:values[key]!=="false"})));
+  res.json(FEATURE_DEFINITIONS.map(([key,label,group])=>({key,label,group,enabled:resolveFeatureValue(key,values[key])})));
  }catch(e){res.status(503).json({error:"Feature toggles unavailable"});}
 });
 router.get("/admin/feature-toggles/meta",async (_req,res)=>{
@@ -80,7 +80,7 @@ async function change(req:any,res:any,isRollback:boolean){
   const result=await db.transaction(async(tx)=>{
    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"feature-toggle:"+ENV+":"+key}))`);
    const row=(await tx.execute(sql`SELECT value FROM site_settings WHERE key=${"feature_"+key} LIMIT 1`)).rows[0] as any;
-   const before=row?.value==null?true:String(row.value)!=="false";
+   const before=resolveFeatureValue(key,row?.value);
    if(before!==body.expectedEnabled)return {conflict:true,current:before};
    let enabled=body.enabled as boolean;
    if(isRollback){
