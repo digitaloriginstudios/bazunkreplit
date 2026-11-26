@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { Cookie, FileText, Mail, ShieldCheck, Globe2 } from "lucide-react";
 import { useSiteSettings, useRawSettings } from "@/context/SiteSettingsContext";
 import { parseIconOverrides, iconForPlacement } from "@/design-system/designCenterFields";
+import { featureForHref, isFeatureEnabled } from "@/components/FeatureGate";
 import { openCookieSettings } from "@/components/CookieConsent";
 
 const API_BASE=(import.meta.env.VITE_API_URL||import.meta.env.VITE_API_BASE_URL||"https://bazunk-api.onrender.com").replace(/\/$/,"");
@@ -43,6 +44,6 @@ export function Footer() {
         </div>
         <div className="bz-compact-footer-wave" aria-hidden="true"><span/></div>
       </div>
-    <div className="py-3 text-center"><a href="/affiliates" className="underline">Affiliate Programme</a><span className="mx-2">·</span><a href="/affiliates/apply" className="underline">Apply to become an affiliate</a><span className="mx-2">·</span><a href="/affiliates/login" className="underline">Affiliate login</a></div><nav aria-label="Discover and save" className="mx-auto max-w-7xl px-4 py-5"><h2 className="font-bold">Discover &amp; Save</h2><div className="mt-2 flex flex-wrap gap-3">{[["deals","Deals"],["under-5","Under £5"],["under-10","Under £10"],["99p-auctions","99p auctions"],["christmas","Christmas"],["trending","Trending"],["new-arrivals","New arrivals"],["price-drops","Price drops"],["ending-soon","Ending soon"],["free-delivery","Free delivery"],["gift-finder","Gift finder"],["local","Local marketplace"]].map(([slug,label])=><a key={slug} href={"/"+slug} className="underline">{label}</a>)}</div></nav></footer>
+    <div className="py-3 text-center"><a href="/affiliates" className="underline">Affiliate Programme</a><span className="mx-2">·</span><a href="/affiliates/apply" className="underline">Apply to become an affiliate</a><span className="mx-2">·</span><a href="/affiliates/login" className="underline">Affiliate login</a></div><nav aria-label="Discover and save" className="mx-auto max-w-7xl px-4 py-5"><h2 className="font-bold">Discover &amp; Save</h2><div className="mt-2 flex flex-wrap gap-3">{[["deals","Deals"],["under-5","Under £5"],["under-10","Under £10"],["99p-auctions","99p auctions"],["christmas","Christmas"],["trending","Trending"],["new-arrivals","New arrivals"],["price-drops","Price drops"],["ending-soon","Ending soon"],["free-delivery","Free delivery"],["gift-finder","Gift finder"],["local","Local marketplace"]].filter(([slug])=>{const feature=featureForHref("/"+slug);return !feature||isFeatureEnabled(raw,feature);}).map(([slug,label])=><a key={slug} href={"/"+slug} className="underline">{label}</a>)}</div></nav></footer>
   );
 }
