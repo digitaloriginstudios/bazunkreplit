@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { dropshipConfigured, searchDropship, getDropshipProduct, aliExpressProductId } from "../lib/aliexpressDropship.js";
+import { dropshipConfigured, dropshipSearchDiagnostic, inspectDropshipSearch, searchDropship, getDropshipProduct, aliExpressProductId } from "../lib/aliexpressDropship.js";
 import { Router } from "express";
 import adminNavigationRouter from "./adminNavigation.js";
 import {publicThemeStudioRouter,adminThemeStudioRouter} from "./themeStudio.js";
@@ -1577,7 +1577,17 @@ router.get("/admin/search-aliexpress", async (req, res) => {
   if (await dropshipConfigured()) {
     const q=String(req.query.q??"").trim().slice(0,120), page=Math.min(100,Math.max(1,Number(req.query.page??1)||1));
     if(!q){res.status(400).json({error:"Search keywords are required"});return;}
-    try {const items=await searchDropship(q,page);res.setHeader("Cache-Control","no-store");res.json({products:items.map(p=>({id:p.externalId,title:p.title,priceUsd:p.price.amount,image:p.images[0]?.url??"",rating:p.rating,sales:0,url:p.sourceUrl})),page,source:"aliexpress-dropshipping",discovered:items.length,complete:items.length});}
+    try {
+      const { products, counts } = await inspectDropshipSearch(q, page);
+      logger.info({ page, counts }, "AliExpress importer keyword search completed");
+      res.setHeader("Cache-Control", "no-store");
+      res.json({
+        products: products.map(p => ({ id: p.externalId, title: p.title, priceUsd: p.price.amount,
+          image: p.images[0]?.url ?? "", rating: p.rating, sales: 0, url: p.sourceUrl })),
+        page, source: "aliexpress-dropshipping", discovered: counts.returned, complete: counts.priced,
+        diagnostic: dropshipSearchDiagnostic(counts),
+      });
+    }
     catch(error){logger.warn({error},"AliExpress Dropshipping search failed");res.status(502).json({error:error instanceof Error?error.message:"AliExpress Dropshipping search failed"});}return;
   }
   // Prefer official AliExpress through Bazunk Platform Core; never fall back silently to scraping.
