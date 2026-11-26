@@ -23,6 +23,7 @@ const NAV = [
   { label: "Go Live", href: "/admin/go-live", icon: Radio },
   { label: "Live Commerce", href: "/admin/live-commerce", icon: Megaphone },
   { label: "Importer Overview", href: "/admin/importer-overview", icon: ArrowDownToLine },
+  { label: "International Marketplace", href: "/admin/international-marketplace", icon: Store },
   { label: "Settings Overview", href: "/admin/settings-overview", icon: Settings },
   { label: "Design Center", href: "/admin/design-system", icon: Palette },
   { label: "Content", href: "/admin/content", icon: FileText },
@@ -81,7 +82,7 @@ const NAV_GROUPS = [
  {id:"design",label:"Design Center",href:"/admin/design-system",icon:Palette,pages:["Design Center"]},
  {id:"importers",label:"Importers",href:"/admin/imports",icon:ArrowDownToLine,pages:["Importers","Amazon","eBay","AliExpress","Gumtree","General Settings","Apply Update to All","Importer Control"]},
  {id:"analytics",label:"Analytics",href:"/admin/analytics",icon:BarChart3,pages:["Analytics"]},
- {id:"settings",label:"Settings",href:"/admin/settings-overview",icon:Settings,pages:["Settings Overview","Settings","Feature Toggles","System Status","Audit Log","Support","Chatwoot Settings"]}
+ {id:"settings",label:"Settings",href:"/admin/settings-overview",icon:Settings,pages:["International Marketplace","Settings Overview","Settings","Feature Toggles","System Status","Audit Log","Support","Chatwoot Settings"]}
 ] as const;
 
 let savedAdminExpandedGroups: Record<string,boolean> = {};
