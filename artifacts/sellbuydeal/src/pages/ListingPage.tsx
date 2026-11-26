@@ -74,7 +74,7 @@ function normaliseCondition(raw: unknown): string {
 }
 
 type SpecRow = { key: string; value: string };
-type ApiListingExtra = { _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string; dispatchTime?: string; deliveryEstimate?: string };
+type ApiListingExtra = { _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string; isAliExpress?: boolean; dispatchTime?: string; deliveryEstimate?: string };
 
 const TAG_COLORS = [
   "bg-[#4A5CE8]/10 text-[#4A5CE8]",
@@ -89,10 +89,12 @@ const TAG_COLORS = [
 function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & ApiListingExtra {
   let parsedSpecs: SpecRow[] | undefined;
   let gallery: string[] = [];
+  let isAliExpress = false;
   let dispatchTime: string | undefined;
   let deliveryEstimate: string | undefined;
   try {
     const parsed = typeof l.specifications === "string" ? JSON.parse(l.specifications) : l.specifications;
+    isAliExpress = typeof parsed?.source === "string" && parsed.source.toLowerCase() === "aliexpress";
     dispatchTime = typeof parsed?.dispatch_time === "string" ? parsed.dispatch_time : undefined;
     deliveryEstimate = typeof parsed?.delivery_estimate === "string" ? parsed.delivery_estimate : undefined;
     parsedSpecs = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.details) ? parsed.details : [];
@@ -123,7 +125,7 @@ function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & A
     _tags: tagsRaw,
     _specifications: parsedSpecs,
     _gallery: gallery,
-    dispatchTime, deliveryEstimate,
+    isAliExpress, dispatchTime, deliveryEstimate,
     shipOrigin: (l.shipOrigin as string) ?? undefined,
     shipOriginOther: (l.shipOriginOther as string) ?? undefined,
     shipZone: (l.shipZone as string) ?? undefined,
@@ -240,6 +242,10 @@ export function ListingPage() {
   const { addToWatchlist, removeFromWatchlist, isWatched } = useWatchlist();
   const { makeOffer } = useOffers();
   const { formatPrice, country, currency } = useCurrency();
+  const listingPrice = (amount: number) => apiProduct?.isAliExpress && apiProduct.listingCurrency && /^[A-Z]{3}$/.test(apiProduct.listingCurrency)
+    ? new Intl.NumberFormat(apiProduct.listingCurrency === "USD" ? "en-US" : "en-GB",
+      { style: "currency", currency: apiProduct.listingCurrency }).format(amount)
+    : formatPrice(amount);
   const { t } = useLanguage();
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   const [activeImg, setActiveImg] = useState(0);
@@ -535,14 +541,14 @@ export function ListingPage() {
             <section className="bz-mockup-product-summary" aria-label="Product overview">
               <h1 className="bz-mockup-product-title">{product.title}</h1>
               <div className="bz-mockup-product-seller"><span className="bz-mockup-condition">{product.condition}</span><span>Sold by {(product as typeof product & ApiListingExtra)._sellerName || (product as typeof product & ApiListingExtra)._sellerUsername || "Marketplace seller"}</span>{product.verified&&<CheckCircle2 size={18} className="text-emerald-500" aria-label="Identity verified"/>}</div>
-              <div className="bz-mockup-product-price">{formatPrice(product.price + (product.variants?.reduce((sum,v)=>sum+(v.options.find(o=>o.value===selectedVariants[v.type])?.priceDelta??0),0)??0))}</div>
+              <div className="bz-mockup-product-price">{listingPrice(product.price + (product.variants?.reduce((sum,v)=>sum+(v.options.find(o=>o.value===selectedVariants[v.type])?.priceDelta??0),0)??0))}</div>
               <div className="bz-mockup-product-stock"><CheckCircle2 size={20}/> {isDemoListing?"Currently unavailable":(product as typeof product & ApiListingExtra).quantity!=null?((product as typeof product & ApiListingExtra).quantity!>0?"In stock ("+(product as typeof product & ApiListingExtra).quantity+" available)":"Out of stock"):"Check availability with seller"}</div>
 
               <div className="bz-visual-feature-grid" aria-label="Listing highlights">
                 <div className="bz-feature-blue"><Zap size={24}/><span><strong>Quick facts</strong><small>{category?.name || product.category}</small></span></div>
                 <div className="bz-feature-cyan"><CheckCircle2 size={24}/><span><strong>Condition</strong><small>{product.condition}</small></span></div>
                 <div className="bz-feature-purple"><Package size={24}/><span><strong>Availability</strong><small>{isDemoListing?"Unavailable":(product as typeof product & ApiListingExtra).quantity!=null?((product as typeof product & ApiListingExtra).quantity!>0?"In stock":"Out of stock"):"Ask seller"}</small></span></div>
-                <div className="bz-feature-orange"><Truck size={24}/><span><strong>Postage</strong><small>{(product as typeof product & ApiListingExtra).shippingPrice==null?"At checkout":(product as typeof product & ApiListingExtra).shippingPrice===0?"Free":formatPrice((product as typeof product & ApiListingExtra).shippingPrice!)}</small></span></div>
+                <div className="bz-feature-orange"><Truck size={24}/><span><strong>Postage</strong><small>{(product as typeof product & ApiListingExtra).shippingPrice==null?"At checkout":(product as typeof product & ApiListingExtra).shippingPrice===0?"Free":listingPrice((product as typeof product & ApiListingExtra).shippingPrice!)}</small></span></div>
               </div>
               <div className="bz-visual-facts">
                 <span><Tag size={18}/><strong>Condition</strong>{product.condition}</span>
@@ -690,8 +696,8 @@ export function ListingPage() {
                     <div className="bz-shipping-tile bz-shipping-origin"><div className="bz-shipping-icon"><MapPin aria-hidden="true" /></div><div><p className="bz-shipping-label">{t("shipsFrom")}</p><p className="bz-shipping-value">{origin}</p></div></div>
                     <div className="bz-shipping-tile bz-shipping-destination"><div className="bz-shipping-icon"><Globe2 aria-hidden="true" /></div><div><p className="bz-shipping-label">{t("shipsTo")}</p><p className="bz-shipping-value">{destination}</p></div></div>
                     {x.carrier && <div className="bz-shipping-tile bz-shipping-carrier"><div className="bz-shipping-icon"><Truck aria-hidden="true" /></div><div><p className="bz-shipping-label">Carrier</p><p className="bz-shipping-value capitalize">{x.carrier.replaceAll("-", " ")}</p></div></div>}
-                    <div className="bz-shipping-tile bz-shipping-postage"><div className="bz-shipping-icon"><Package aria-hidden="true" /></div><div><p className="bz-shipping-label">Postage</p><p className="bz-shipping-value">{x.shippingPrice == null ? "Calculated at checkout" : x.shippingPrice === 0 ? "Free (seller rate)" : formatPrice(x.shippingPrice)}</p></div></div>
-                    {x.handlingCharge != null && x.handlingCharge > 0 && <div><p className="bz-shipping-label">Handling</p><p>{formatPrice(x.handlingCharge)}</p></div>}
+                    <div className="bz-shipping-tile bz-shipping-postage"><div className="bz-shipping-icon"><Package aria-hidden="true" /></div><div><p className="bz-shipping-label">Postage</p><p className="bz-shipping-value">{x.shippingPrice == null ? "Calculated at checkout" : x.shippingPrice === 0 ? "Free (seller rate)" : listingPrice(x.shippingPrice)}</p></div></div>
+                    {x.handlingCharge != null && x.handlingCharge > 0 && <div><p className="bz-shipping-label">Handling</p><p>{listingPrice(x.handlingCharge)}</p></div>}
                     {x.dispatchTime && <div><p className="bz-shipping-label">Dispatch time</p><p>{x.dispatchTime}</p></div>}
                     {x.deliveryEstimate && <div><p className="bz-shipping-label">Estimated delivery</p><p>{x.deliveryEstimate}</p></div>}
                   </div>
@@ -745,7 +751,7 @@ export function ListingPage() {
                 <div className="border-t border-slate-200 pt-2.5">
                   <div className="flex justify-between gap-3">
                     <span className="font-semibold text-slate-600 inline-flex items-center gap-2"><Truck size={17} className="text-indigo-600"/>Postage</span>
-                    <span className="font-bold">{(product as typeof product & ApiListingExtra).shippingPrice == null ? "Confirm at checkout" : (product as typeof product & ApiListingExtra).shippingPrice === 0 ? "Free" : formatPrice((product as typeof product & ApiListingExtra).shippingPrice!)}</span>
+                    <span className="font-bold">{(product as typeof product & ApiListingExtra).shippingPrice == null ? "Confirm at checkout" : (product as typeof product & ApiListingExtra).shippingPrice === 0 ? "Free" : listingPrice((product as typeof product & ApiListingExtra).shippingPrice!)}</span>
                   </div>
                   <p className="mt-1 text-xs text-slate-600">Ships from {(product as typeof product & ApiListingExtra).shipOriginOther || (product as typeof product & ApiListingExtra).shipOrigin || product.location}. Delivery timing depends on seller and destination.</p>
                   <p className="mt-1 text-xs text-slate-600">Final totals are confirmed before payment.</p>
@@ -761,12 +767,12 @@ export function ListingPage() {
                     onChange={(type, value) =>
                       setSelectedVariants((prev) => ({ ...prev, [type]: value }))
                     }
-                    formatPrice={formatPrice}
+                    formatPrice={listingPrice}
                   />
                 </div>
               )}
 
-              <ListingDeliveryCalculator origin={(product as typeof product & ApiListingExtra).shipOrigin || ""} zone={(product as typeof product & ApiListingExtra).shipZone || ""} shippingPrice={(product as typeof product & ApiListingExtra).shippingPrice} formatPrice={formatPrice} />
+              <ListingDeliveryCalculator origin={(product as typeof product & ApiListingExtra).shipOrigin || ""} zone={(product as typeof product & ApiListingExtra).shipZone || ""} shippingPrice={(product as typeof product & ApiListingExtra).shippingPrice} formatPrice={listingPrice} />
 
               {/* Buy Now */}
               <button
