@@ -25,4 +25,4 @@ jobs:
       - run: pnpm --filter @workspace/sellbuydeal run typecheck
       - run: node --test scripts/pricing-cashback-policy.test.mjs scripts/mobile-shopping-contract.test.mjs
       - run: pnpm build
-      - run: node --experimental-strip-types --test scripts/global-marketplace.test.mjs
+      - run: node --experimental-strip-types --test scripts/global-marketplace.test.mjs scripts/gbp-checkout-regression.test.mjs
