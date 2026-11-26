@@ -1,3 +1,4 @@
+import {useSeoMetadata} from "@/hooks/useSeoMetadata";
 import { createPortal } from "react-dom";
 import { ProductDiscovery, rememberViewedListing } from "@/components/ProductDiscovery";
 import { MarketplaceLoader } from "@/components/MarketplaceLoader";
@@ -175,6 +176,9 @@ export function ListingPage() {
   }, [id, staticProduct]);
 
   const product = staticProduct ?? apiProduct;
+  const seoUrl=apiProduct?"https://www.bazunk.com/listing/"+encodeURIComponent(String(apiProduct._publicId||apiProduct.id)):"";
+  const seoDescription=apiProduct?String(apiProduct.description||apiProduct.title).replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim().slice(0,160):"";
+  useSeoMetadata(apiProduct?{title:apiProduct.title+" | Bazunk",description:seoDescription,url:seoUrl,schema:{"@context":"https://schema.org","@type":"Product",name:apiProduct.title,description:seoDescription,url:seoUrl,offers:{"@type":"Offer",url:seoUrl,price:Number(apiProduct.price),priceCurrency:apiProduct.listingCurrency||"GBP"}}}:null);
   // Keep numeric and importer URLs working, but show the canonical public token after loading.
   useEffect(() => {
     const token=apiProduct?._publicUrlToken;
