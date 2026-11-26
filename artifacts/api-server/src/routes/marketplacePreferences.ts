@@ -1,3 +1,4 @@
+import { convertPaymentAmount } from "../fxRates.js";
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
@@ -25,5 +26,12 @@ router.put("/marketplace/preferences", async (req,res) => {
     if (!row) {res.status(404).json({error:"Account not found"});return;}
     res.json(row);
   } catch { res.status(503).json({error:"Preferences unavailable"}); }
+});
+router.get("/public/exchange-rates", async (_req,res)=>{
+  try {
+    const rates=Object.fromEntries(await Promise.all([...currencies].map(async code=>[code,await convertPaymentAmount(1,"GBP",code)])));
+    res.setHeader("Cache-Control","public, max-age=300");
+    res.json({base:"GBP",rates,checkedAt:new Date().toISOString()});
+  } catch {res.status(503).json({error:"Exchange rates unavailable"});}
 });
 export default router;
