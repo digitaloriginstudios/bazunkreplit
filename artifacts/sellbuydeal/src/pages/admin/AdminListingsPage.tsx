@@ -333,7 +333,7 @@ export function AdminListingsPage() {
       <div className="admin-listings-page wp-management-page wp-listings-page">
       <AdminManagementHeader title="Listings" description="Manage marketplace listings, product visibility and source imports." meta={<span>{total.toLocaleString("en-GB")} listings match the current filters</span>} actions={<>
         <button type="button" onClick={()=>setLocation("/admin/imports")} className="wp-action wp-action-secondary"><ShoppingCart className="h-4 w-4"/>Import products</button>
-        <button type="button" onClick={load} disabled={loading} className="wp-action wp-action-primary"><RefreshCw className={"h-4 w-4 "+(loading?"animate-spin":"")}/>Refresh listings</button>
+        <button type="button" onClick={()=>void load()} disabled={loading} className="wp-action wp-action-primary"><RefreshCw className={"h-4 w-4 "+(loading?"animate-spin":"")}/>Refresh listings</button>
       </>}/>
       <AdminStatusTabs label="Listing status" value={statusFilter} onChange={x=>setStatusFilter(x)} options={[
         {value:"all",label:"All listings"},{value:"active",label:"Live"},{value:"pending",label:"Pending"},
