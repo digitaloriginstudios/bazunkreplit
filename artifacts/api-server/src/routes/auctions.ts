@@ -193,14 +193,14 @@ router.post("/auctions", async (req, res) => {
   await db.execute(sql`
     INSERT INTO auctions
       (id, title, description, images, category, condition, seller_email, seller_name,
-       starting_bid, reserve_price, bid_increment, end_time, extend_enabled, status, marketplace_region, created_at, updated_at)
+       starting_bid, reserve_price, bid_increment, end_time, extend_enabled, status, marketplace_region, currency, created_at, updated_at)
     VALUES (
       ${id}, ${title}, ${description ?? null}, ${JSON.stringify(images)},
       ${category ?? null}, ${condition ?? "used"}, ${sellerEmail}, ${sellerName},
       ${startAmount},
       ${reserveAmount},
       ${incrementAmount},
-      ${endTime}, false, 'active', ${marketplaceRegion}, NOW(), NOW()
+      ${endTime}, false, 'active', ${marketplaceRegion}, ${"GBP"}, NOW(), NOW()
     )
   `);
   let newBalance: number | undefined;
