@@ -10,7 +10,7 @@ export function smallestUnit(amount: number, currency: string): number {
   return ZERO_DECIMAL.has(currency.toUpperCase()) ? Math.round(amount) : Math.round(amount * 100);
 }
 
-async function fetchRate(fromCurrency: string): Promise<number> {
+async function fetchRate(fromCurrency: string, strict = false): Promise<number> {
   const key = fromCurrency.toUpperCase();
   if (key === "GBP") return 1;
   const now = Date.now();
@@ -22,10 +22,11 @@ async function fetchRate(fromCurrency: string): Promise<number> {
     if (!resp.ok) throw new Error(`Frankfurter HTTP ${resp.status}`);
     const data = await resp.json() as { rates?: Record<string, number> };
     const rate = data.rates?.["GBP"];
-    if (!rate) throw new Error(`No GBP rate returned for ${key}`);
+    if (typeof rate !== "number" || !Number.isFinite(rate) || rate <= 0) throw new Error(`No GBP rate returned for ${key}`);
     cache[key] = { rateToGbp: rate, cachedAt: now };
     return rate;
   } catch (err) {
+    if (strict) throw new Error("Exchange rate unavailable; please try again later");
     logger.warn({ err, fromCurrency }, "FX rate fetch failed — falling back to cached or 1:1");
     return cache[key]?.rateToGbp ?? 1;
   }
@@ -43,4 +44,11 @@ export async function convertAmount(amount: number, fromCurrency: string, toCurr
   if (toCurrency.toUpperCase() === "GBP") return gbp;
   const rate = await fetchRate(toCurrency);
   return gbp / rate;
+}
+
+/** Payment conversion must never silently fall back to parity. */
+export async function convertPaymentAmount(amount:number, from:string, to:string):Promise<number> {
+  if (!Number.isFinite(amount) || amount < 0) throw new Error("Invalid payment amount");
+  if (from.toUpperCase() === to.toUpperCase()) return amount;
+  return amount * await fetchRate(from,true) / await fetchRate(to,true);
 }
