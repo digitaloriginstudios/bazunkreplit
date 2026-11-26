@@ -15,6 +15,19 @@ import { awardReferralMilestone } from "../lib/referrals.js";
 import { getPromoConfig } from "../lib/promoConfig.js";
 
 const router = Router();
+let priceHistoryReady:Promise<void>|undefined;
+function ensurePriceHistory(){if(!priceHistoryReady)priceHistoryReady=db.transaction(async tx=>{
+await tx.execute(sql`SELECT pg_advisory_xact_lock(81273645)`);
+await tx.execute(sql`CREATE TABLE IF NOT EXISTS listing_price_history(id BIGSERIAL PRIMARY KEY,listing_id INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,old_price NUMERIC,new_price NUMERIC NOT NULL,currency TEXT,changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+await tx.execute(sql`CREATE INDEX IF NOT EXISTS listing_price_history_latest ON listing_price_history(listing_id,changed_at DESC,id DESC)`);
+await tx.execute(sql`CREATE OR REPLACE FUNCTION bazunk_record_listing_price() RETURNS trigger LANGUAGE plpgsql AS $ BEGIN IF TG_OP='INSERT' THEN INSERT INTO listing_price_history(listing_id,new_price,currency) VALUES(NEW.id,NEW.price::numeric,NEW.currency); ELSIF NEW.price IS DISTINCT FROM OLD.price OR NEW.currency IS DISTINCT FROM OLD.currency THEN INSERT INTO listing_price_history(listing_id,old_price,new_price,currency) VALUES(NEW.id,CASE WHEN NEW.currency IS NOT DISTINCT FROM OLD.currency THEN OLD.price::numeric ELSE NULL END,NEW.price::numeric,NEW.currency); END IF; RETURN NEW; END; $`);
+await tx.execute(sql`DROP TRIGGER IF EXISTS bazunk_listing_price_history ON listings`);
+await tx.execute(sql`CREATE TRIGGER bazunk_listing_price_history AFTER INSERT OR UPDATE OF price,currency ON listings FOR EACH ROW EXECUTE FUNCTION bazunk_record_listing_price()`);
+await tx.execute(sql`INSERT INTO listing_price_history(listing_id,new_price,currency) SELECT l.id,l.price::numeric,l.currency FROM listings l WHERE l.price IS NOT NULL AND NOT EXISTS(SELECT 1 FROM listing_price_history h WHERE h.listing_id=l.id)`);
+}).catch(e=>{priceHistoryReady=undefined;throw e;});return priceHistoryReady;}
+void ensurePriceHistory().catch(e=>console.error("Price history initialization failed",e));
+const latestPriceDrop=sql`(SELECT h.old_price FROM listing_price_history h WHERE h.listing_id=${listingsTable.id} ORDER BY h.changed_at DESC,h.id DESC LIMIT 1)`;
+
 const listingMediaUrl=(value:unknown):unknown=>typeof value==="string"&&value.startsWith("/api/listing-media/")?"https://bazunk-api-ifqs.onrender.com"+value:value;
 const normalizeListingMedia=<T extends Record<string,any>>(item:T):T=>({...item,image:listingMediaUrl(item.image)});
 
@@ -176,7 +189,7 @@ router.get("/listings", async (req, res) => {
     if (collection === "christmas") clauses.push(sql`LOWER(${listingsTable.title} || ' ' || COALESCE(${listingsTable.tags},'')) ~ 'christmas|festive|stocking filler|xmas|advent'`);
     if (collection === "gift-finder") clauses.push(sql`LOWER(${listingsTable.title} || ' ' || COALESCE(${listingsTable.tags},'')) ~ 'gift|present|hamper|gift set'`);
     if (collection === "local") { const place=String(req.query.place||"").trim().slice(0,100); clauses.push(place?sql`STRPOS(LOWER(COALESCE(${listingsTable.shipOriginOther},'')),LOWER(${place}))>0`:sql`FALSE`); }
-    if (collection === "price-drops") clauses.push(sql`FALSE`); // No verified historical price source yet.
+    if (collection === "price-drops") { await ensurePriceHistory(); clauses.push(sql`EXISTS (SELECT 1 FROM (SELECT h.* FROM listing_price_history h WHERE h.listing_id=${listingsTable.id} ORDER BY h.changed_at DESC,h.id DESC LIMIT 1) h WHERE h.old_price>h.new_price AND h.new_price=${listingsTable.price}::numeric AND h.currency IS NOT DISTINCT FROM ${listingsTable.currency} AND h.changed_at>=NOW()-INTERVAL '30 days')`); }
 
     if (collection === "eco") clauses.push(sql`(COALESCE(${listingsTable.tags}, '') ILIKE '%eco-friendly%' OR ${listingsTable.category} = 'eco-friendly')`);
     if (collection === "deals") clauses.push(sql`EXISTS (SELECT 1 FROM ${listingPromotionsTable} lp WHERE lp.listing_id = ${listingsTable.id} AND lp.expires_at > NOW() AND lp.type IN ('homepage-spotlight','spotlight','premium-placement','featured-badge','featured','visibility-boost','move-to-top','flash'))`);
@@ -231,6 +244,7 @@ router.get("/listings", async (req, res) => {
         currency: listingsTable.currency,
         marketplaceRegion: sql<string | null>`CASE WHEN COALESCE(${listingsTable.specifications}, '') ~ '^\\s*\\{' THEN ${listingsTable.specifications}::jsonb->>'marketplace_region' ELSE NULL END`,
         priceGbp: listingsTable.priceGbp,
+        previousPrice: collection==="price-drops"?latestPriceDrop:sql`NULL`,
         createdAt: listingsTable.createdAt,
       })
       .from(listingsTable)
