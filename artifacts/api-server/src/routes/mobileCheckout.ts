@@ -50,6 +50,7 @@ router.post('/mobile/checkout',async(req,res)=>{try{
   if(existing)return existing;
   if(req.body.recoverOnly)throw new QuoteError('No payment was started. Cancel this attempt and refresh your cart.',409);
   if(req.body.delivery!=='standard')throw new QuoteError('Select standard delivery.');
+  if(req.body.expectedCurrency!==undefined&&req.body.expectedCurrency!=='GBP')throw new QuoteError('Checkout must be quoted in GBP. Refresh your cart.',409);
   const quote=await quoteCart(req.body.items);
   if(!Number.isFinite(req.body.expectedTotal)||Math.round(req.body.expectedTotal*100)!==quote.totalMinor)throw new QuoteError('Prices or fees changed. Cancel this unpaid checkout and refresh the total.',409);
   if(quote.units.some(u=>u.sellerEmail.toLowerCase()===email))throw new QuoteError('You cannot purchase your own listing.');
