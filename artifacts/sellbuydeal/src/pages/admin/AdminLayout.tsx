@@ -75,7 +75,7 @@ const NAV_GROUPS = [
  {id:"customers",label:"Customers",href:"/admin/users",icon:Users,pages:["Users"]},
  {id:"sellers",label:"Sellers",href:"/admin/seller-compliance",icon:Store,pages:["Seller Compliance","TrustProof","Reviews"]},
  {id:"payments",label:"Payments",href:"/admin/payments",icon:CreditCard,pages:["Payments"]},
- {id:"marketing",label:"Marketing",href:"/admin/marketing",icon:Megaphone,pages:["Marketing","Image Generator","Go Live","Live Commerce","Promotions","Cashback","Rewards","Referrals","Credits Economy"]},
+ {id:"marketing",label:"Marketing",href:"/admin/marketing",icon:Megaphone,pages:["Marketing","Image Generator","Go Live","Live Commerce","Promotions","Cashback","Rewards","Referrals","Affiliate Programme","Credits Economy"]},
  {id:"advertising",label:"Advertising",href:"/admin/advertising",icon:Megaphone,pages:["Advertising"]},
  {id:"content",label:"Content",href:"/admin/content",icon:FileText,pages:["Content","Email Templates"]},
  {id:"design",label:"Design Center",href:"/admin/design-system",icon:Palette,pages:["Design Center"]},
