@@ -215,8 +215,8 @@ export function QuickSellPage() {
 
   async function uploadVideo(file: File) {
     setVideoError("");
-    if (!["video/mp4", "video/webm"].includes(file.type) || file.size > 8 * 1024 * 1024) {
-      setVideoError("Choose an MP4 or WebM video up to 8 MB.");
+    if (!["video/mp4", "video/webm"].includes(file.type) || file.size > 25 * 1024 * 1024) {
+      setVideoError("Choose an MP4 or WebM video up to 25 MB.");
       return;
     }
     setVideoProgress(0);
@@ -1133,7 +1133,7 @@ export function QuickSellPage() {
               className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
               <Upload className="h-4 w-4" /> {videoUpload ? "Replace video" : "Upload video"}
             </button>
-            <p className="text-sm text-gray-600">MP4 or WebM, up to 8 MB.</p>
+            <p className="text-sm text-gray-600">MP4 or WebM, up to 25 MB.</p>
             {videoProgress !== null && <div role="status" className="flex items-center gap-2 text-sm">
               <progress aria-label="Video upload progress" value={videoProgress} max={100} />
               {videoProgress === 100 ? "Saving video…" : `Uploading ${videoProgress}%`}
