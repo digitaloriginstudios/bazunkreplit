@@ -1,3 +1,4 @@
+import {useSeoMetadata} from "@/hooks/useSeoMetadata";
 import { toast } from "@/hooks/use-toast";
 import { useMarketplaceLoadingDelay } from "@/components/useMarketplaceLoadingDelay";
 import { MarketplaceLoader } from "@/components/MarketplaceLoader";
@@ -63,6 +64,8 @@ export function SellerProfilePage() {
       .finally(() => setLoading(false));
   }, [sellerEmail, marketRegion]);
 
+  const sellerName=rep?.profile.name;
+  useSeoMetadata(sellerName&&!loading&&!error?{title:sellerName+" | Bazunk seller",description:"Browse products and public seller information for "+sellerName+" on Bazunk.",url:"https://www.bazunk.com/seller/"+encodeURIComponent(sellerEmail),schema:{"@context":"https://schema.org","@type":"ProfilePage",name:sellerName,mainEntity:{"@type":"Person",name:sellerName}}}:null);
   const breakdown = useMemo(() => [5,4,3,2,1].map(star => ({ star, count: reviews.filter(r => r.rating === star).length })), [reviews]);
   const maxBreakdown = Math.max(1, ...breakdown.map(x => x.count));
   const isSeller = !!user?.email && user.email.toLowerCase() === sellerEmail.toLowerCase();
