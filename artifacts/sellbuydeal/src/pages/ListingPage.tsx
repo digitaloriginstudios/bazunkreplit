@@ -1,3 +1,4 @@
+import { shippingCountries, shippingCountryLabel, shippingZoneLabel, shipsToCountry } from "@/lib/listingShipping";
 import {useSeoMetadata} from "@/hooks/useSeoMetadata";
 import { createPortal } from "react-dom";
 import { ProductDiscovery, rememberViewedListing } from "@/components/ProductDiscovery";
@@ -73,7 +74,7 @@ function normaliseCondition(raw: unknown): string {
 }
 
 type SpecRow = { key: string; value: string };
-type ApiListingExtra = { _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string };
+type ApiListingExtra = { _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string; dispatchTime?: string; deliveryEstimate?: string };
 
 const TAG_COLORS = [
   "bg-[#4A5CE8]/10 text-[#4A5CE8]",
@@ -88,8 +89,12 @@ const TAG_COLORS = [
 function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & ApiListingExtra {
   let parsedSpecs: SpecRow[] | undefined;
   let gallery: string[] = [];
+  let dispatchTime: string | undefined;
+  let deliveryEstimate: string | undefined;
   try {
     const parsed = typeof l.specifications === "string" ? JSON.parse(l.specifications) : l.specifications;
+    dispatchTime = typeof parsed?.dispatch_time === "string" ? parsed.dispatch_time : undefined;
+    deliveryEstimate = typeof parsed?.delivery_estimate === "string" ? parsed.delivery_estimate : undefined;
     parsedSpecs = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.details) ? parsed.details : [];
     gallery = Array.isArray(parsed?.admin_gallery_images) ? parsed.admin_gallery_images.filter((p: unknown) => typeof p === "string").slice(0, 12) : Array.isArray(parsed?.photos) ? parsed.photos.filter((p: unknown) => typeof p === "string").slice(0, 10) : [];
   } catch { parsedSpecs = []; }
@@ -118,6 +123,7 @@ function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & A
     _tags: tagsRaw,
     _specifications: parsedSpecs,
     _gallery: gallery,
+    dispatchTime, deliveryEstimate,
     shipOrigin: (l.shipOrigin as string) ?? undefined,
     shipOriginOther: (l.shipOriginOther as string) ?? undefined,
     shipZone: (l.shipZone as string) ?? undefined,
@@ -133,17 +139,16 @@ function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & A
 
 /** Destination eligibility preview. Never presents a flat seller rate as a live courier quote. */
 function ListingDeliveryCalculator({origin,zone,shippingPrice,formatPrice}:{origin:string;zone:string;shippingPrice?:number;formatPrice:(amount:number)=>string}) {
-  const [destination,setDestination]=useState("UK");
+  const [destination,setDestination]=useState("GB");
   const [postcode,setPostcode]=useState("");
   const [checked,setChecked]=useState(false);
-  const domestic=origin.toUpperCase()==="GB"?"UK":origin.toUpperCase();
-  const eligible=zone==="worldwide"||zone==="international"||(zone==="domestic"&&destination===domestic)||(zone==="europe"&&["UK","EU"].includes(destination));
+  const eligible = shipsToCountry(zone, origin, destination);
   return <section className="mb-5 rounded-xl border border-slate-300 bg-slate-50 p-4 text-slate-900 dark:border-slate-600 dark:bg-[#132742] dark:text-white" aria-label="Calculate delivery">
     <h3 className="mb-1 flex items-center gap-2 font-bold"><Truck className="h-5 w-5 text-orange-500"/> Calculate delivery</h3>
     <p className="mb-3 text-xs text-slate-600 dark:text-slate-300">Check seller delivery coverage and any advertised flat postage. Final delivery cost is confirmed at checkout.</p>
     <label className="mb-2 block text-xs font-semibold">Delivery country
       <select value={destination} onChange={e=>{setDestination(e.target.value);setChecked(false);}} className="mt-1 w-full rounded-lg border border-slate-400 bg-white p-2.5 text-slate-900 dark:bg-[#192f4d] dark:text-white">
-        <option value="UK">United Kingdom</option><option value="US">United States</option><option value="EU">European Union</option><option value="CA">Canada</option><option value="AU">Australia</option>
+        {shippingCountries.map(country => <option key={country.code} value={country.code}>{country.name}</option>)}
       </select>
     </label>
     <label className="mb-3 block text-xs font-semibold">Postcode / ZIP code
@@ -671,12 +676,10 @@ export function ListingPage() {
             {/* Shipping availability — based on the seller's Direct Sale choices */}
             {showSection("delivery_details")&&(() => {
               const x = product as typeof product & ApiListingExtra;
-              const origin = x.shipOriginOther || x.shipOrigin || product.location || "Not specified";
-              const domesticNames: Record<string, string> = { UK: "United Kingdom", US: "United States", EU: "European Union", CA: "Canada", AU: "Australia", Other: x.shipOriginOther || "seller's country" };
-              const zoneLabels: Record<string, string> = { domestic: domesticNames[x.shipOrigin || ""] || origin, eu: "UK & EU", "eu-only": "European Union", europe: "Europe", "north-america": "North America", asia: "Asia Pacific", worldwide: "Worldwide" };
-              const destination = zoneLabels[x.shipZone || ""] || "Seller has not specified destinations";
-              const domesticOnly = x.shipZone === "domestic";
-              const viewerMismatch = domesticOnly && country.name.toLowerCase() !== String(domesticNames[x.shipOrigin || ""] || origin).toLowerCase();
+              const countryName = shippingCountryLabel(x.shipOrigin);
+              const origin = [x.shipOriginOther, countryName].filter(Boolean).join(", ") || "Not specified";
+              const destination = shippingZoneLabel(x.shipZone, x.shipOrigin) || "Seller has not specified destinations";
+              const viewerMismatch = !!x.shipZone && !shipsToCountry(x.shipZone, x.shipOrigin || "", country.code);
               return (
                 <ListingDeliverySection>
                   <div className="bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-4 text-white">
@@ -688,8 +691,11 @@ export function ListingPage() {
                     <div className="bz-shipping-tile bz-shipping-destination"><div className="bz-shipping-icon"><Globe2 aria-hidden="true" /></div><div><p className="bz-shipping-label">{t("shipsTo")}</p><p className="bz-shipping-value">{destination}</p></div></div>
                     {x.carrier && <div className="bz-shipping-tile bz-shipping-carrier"><div className="bz-shipping-icon"><Truck aria-hidden="true" /></div><div><p className="bz-shipping-label">Carrier</p><p className="bz-shipping-value capitalize">{x.carrier.replaceAll("-", " ")}</p></div></div>}
                     <div className="bz-shipping-tile bz-shipping-postage"><div className="bz-shipping-icon"><Package aria-hidden="true" /></div><div><p className="bz-shipping-label">Postage</p><p className="bz-shipping-value">{x.shippingPrice == null ? "Calculated at checkout" : x.shippingPrice === 0 ? "Free (seller rate)" : formatPrice(x.shippingPrice)}</p></div></div>
+                    {x.handlingCharge != null && x.handlingCharge > 0 && <div><p className="bz-shipping-label">Handling</p><p>{formatPrice(x.handlingCharge)}</p></div>}
+                    {x.dispatchTime && <div><p className="bz-shipping-label">Dispatch time</p><p>{x.dispatchTime}</p></div>}
+                    {x.deliveryEstimate && <div><p className="bz-shipping-label">Estimated delivery</p><p>{x.deliveryEstimate}</p></div>}
                   </div>
-                  {viewerMismatch && <div className="mx-5 mb-5 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900 font-semibold">You're browsing from {country.name}, but this seller currently ships this item only within {destination}. The price is still shown in {currency.code} for your convenience.</div>}
+                  {viewerMismatch && <div className="mx-5 mb-5 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-900 font-semibold">You're browsing from {country.name}, but the seller’s stated delivery coverage is {destination}. The price is still shown in {currency.code} for your convenience.</div>}
                 </ListingDeliverySection>
               );
             })()}

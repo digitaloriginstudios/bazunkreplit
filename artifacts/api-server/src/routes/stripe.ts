@@ -1,3 +1,4 @@
+import { shipsToCountry } from "../lib/listingShipping.js";
 import { startSpecialCheckout, fulfillSpecialCheckout } from "../lib/specialCheckout.js";
 import { authenticatedSellerEmail } from "../lib/authenticatedSeller.js";
 import { getAuth, clerkClient } from "@clerk/express";
@@ -295,11 +296,7 @@ router.post("/stripe/checkout-cart", async (req, res) => {
     const shippingRows=(await db.execute(sql`SELECT id,ship_origin,ship_zone FROM listings WHERE id IN (${sql.join(cartIds.map(id=>sql`${id}`),sql`, `)})`)).rows as Array<Record<string,unknown>>;
     if(shippingRows.length!==new Set(cartIds).size)throw new QuoteError("A listing is no longer available.",409);
     for(const row of shippingRows){
-      const zone=String(row.ship_zone??"").toLowerCase(), origin=String(row.ship_origin??"").toUpperCase();
-      const country=shippingCountry==="GB"?"UK":shippingCountry;
-      const domestic=origin==="GB"?"UK":origin;
-      const european=["GB","IE","FR","DE","ES","IT","NL","BE","PT","AT","DK","SE","FI","PL","CZ","GR","RO","HU","SK","SI","HR","BG","EE","LV","LT","LU","MT","CY"].includes(shippingCountry);
-      if(!zone || (zone==="domestic"&&country!==domestic) || (zone==="eu"&&!(european&&(origin==="UK"||origin==="GB"||shippingCountry!=="GB"))) || (zone==="eu-only"&&!european) || (zone==="europe"&&!([...["GB","NO","CH","IS","LI"],...["IE","FR","DE","ES","IT","NL","BE","PT","AT","DK","SE","FI","PL","CZ","GR","RO","HU","SK","SI","HR","BG","EE","LV","LT","LU","MT","CY"]].includes(shippingCountry))) || (zone==="north-america"&&!["US","CA","MX"].includes(shippingCountry)) || (zone==="asia"&&!["CN","JP","KR","SG","MY","TH","VN","PH","ID","AU","NZ"].includes(shippingCountry)) || !["domestic","eu","eu-only","europe","north-america","asia","worldwide"].includes(zone))
+      if (!shipsToCountry(String(row.ship_zone ?? ""), String(row.ship_origin ?? ""), shippingCountry))
         throw new QuoteError("One or more sellers have not enabled delivery to this destination. Please update your basket or delivery address.",409);
     }
     const quote=await quoteCart(body.items);
