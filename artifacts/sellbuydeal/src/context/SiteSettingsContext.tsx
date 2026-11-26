@@ -140,11 +140,21 @@ export function SiteSettingsProvider({ children }: { children: React.ReactNode }
     const refreshOnFocus = () => {
       if (document.visibilityState === "visible") void loadSettings();
     };
-    const onUpdate = () => { void loadSettings(); };
+    const invalidate = () => {
+      setRawSettings(prev=>Object.fromEntries(Object.entries(prev).filter(([key])=>!key.startsWith("feature_"))));
+      setSettingsLoaded(false);
+      void loadSettings();
+    };
+    const onUpdate = () => { try { localStorage.setItem("bazunk-settings-revision",String(Date.now())); } catch {} invalidate(); };
+    const onStorage = (event:StorageEvent) => { if(event.key==="bazunk-settings-revision") invalidate(); };
+    window.addEventListener("storage",onStorage);
+    const poll = setInterval(refreshOnFocus,30000);
     window.addEventListener("bazunk-settings-updated", onUpdate);
     window.addEventListener("focus", refreshOnFocus);
     document.addEventListener("visibilitychange", refreshOnFocus);
     return () => {
+      clearInterval(poll);
+      window.removeEventListener("storage",onStorage);
       disposed = true;
       ++requestId;
       controller?.abort();
