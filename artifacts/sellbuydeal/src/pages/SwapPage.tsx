@@ -29,7 +29,7 @@ export default function SwapPage(){
  }catch(e){setError(e instanceof Error?e.message:"Unable to create listing");}finally{setBusy(false);}}
  const visible=items.filter(i=>!search||[i.title,i.category,i.wanted].join(" ").toLowerCase().includes(search.toLowerCase()));
  return <><Navbar/><main className="mx-auto max-w-6xl space-y-5 px-4 py-8 pb-24 text-slate-900">
- <section className="rounded-2xl bg-[#123568] p-6 text-white"><ArrowLeftRight size={36}/><h1 className="mt-2 text-3xl font-black">Bazunk Swap</h1><p>Swap what you have. Get what you want.</p><p className="mt-2 text-sm">Preview: negotiate exchanges. Payments, dispatch and exchange protection are not yet available.</p></section>
+ <section className="rounded-2xl bg-[#123568] p-6 text-white"><ArrowLeftRight size={36}/><h1 className="mt-2 text-3xl font-black">Bazunk Swap</h1><p>Swap what you have. Get what you want.</p><p className="mt-2 text-sm">Preview: negotiate exchanges. Test-mode cash checkout only. Do not dispatch items; live exchange protection is not yet available.</p></section>
  <nav className="flex flex-wrap gap-3"><Link href="/swap" className="rounded-xl border p-3 font-bold">Browse swaps</Link><Link href="/swap/create" className={button}>Create swap</Link><Link href="/dashboard/swaps" className="rounded-xl border p-3 font-bold">My swaps</Link></nav>
  {error&&<p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{error}</p>}
  {(create||mine)&&!isSignedIn?<p>{isLoaded?"Sign in to manage your swaps.":"Loading account…"}</p>:create?<form onSubmit={submit} className="max-w-2xl space-y-4 rounded-2xl border bg-white p-5">
@@ -66,11 +66,26 @@ function Negotiation({target,mine}:{target:string|null;mine:boolean}){
  <button className={button} disabled={busy||!selected}>Send proposal</button></form>:<>
  {!offers.length&&<p>No offers yet.</p>}
  {offers.map(o=><article key={o.id} className="space-y-2 rounded-xl border p-4"><h3 className="font-bold">{o.offered_title} ↔ {o.target_title}</h3><p>{o.is_proposer?"Outgoing":"Incoming"} · {o.status} · Revision {o.revision}</p><p>{o.cash_minor===0?"No cash adjustment":((o.cash_minor>0)===o.is_proposer?"You pay ":"You receive ")+"£"+(Math.abs(o.cash_minor)/100).toFixed(2)}</p>
- {o.status==="accepted"&&<p>Items reserved. Do not dispatch or pay until exchange protection is available.</p>}
+ {o.status==="accepted"&&<p>Items reserved. Do not dispatch or make real payments until exchange protection is available.</p>}
+ {o.status==="accepted"&&<SwapPayment offer={o}/>}
  {o.status==="pending"&&<div className="flex flex-wrap gap-2">{(o.is_last_actor?["withdraw"]:["accept","decline","counter"]).map(action=><button key={action} className={button} disabled={busy} onClick={()=>{if(action==="accept"&&!window.confirm("Reserve both items? Payments and dispatch are not available yet."))return;void act(()=>api("/offers/"+o.id+"/action",{action,revision:o.revision,...(action==="counter"?{cashMinor:minor(counter[o.id]??String(o.cash_minor/100))}:{})}),"Offer updated.");}}>{action}</button>)}
  {!o.is_last_actor&&<label className="w-full">Counter amount (positive: original proposer pays; negative: target owner pays)<input className={field} type="number" step=".01" value={counter[o.id]??String(o.cash_minor/100)} onChange={e=>setCounter(v=>({...v,[o.id]:e.target.value}))}/></label>}</div>}
  <button className="font-bold text-blue-700" disabled={busy} onClick={()=>void act(async()=>{const data=await api("/offers/"+o.id+"/history");setHistory(h=>({...h,[o.id]:data.items}));},"History loaded.")}>View history</button>
  {history[o.id]?.map((h,i)=><p key={i} className="text-sm">{new Date(h.created_at).toLocaleString()} · {h.is_mine?"You":"Other member"} · {h.event}</p>)}
  </article>)}</>}
  </section>;
+}
+
+function SwapPayment({offer}:{offer:Offer}){
+ const {getToken}=useAuth();
+ const [data,setData]=useState<{testEnabled:boolean;payments:{amount_minor:number;fee_minor:number;status:string;is_mine:boolean}[]}|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
+ const owes=offer.cash_minor!==0&&((offer.cash_minor>0)===offer.is_proposer);
+ async function request(suffix="",post=false){const token=await getToken();if(!token)throw Error("Sign in required.");const r=await fetch("/api/swaps/offers/"+offer.id+"/payment"+suffix,{method:post?"POST":"GET",cache:"no-store",headers:{Authorization:"Bearer "+token}});const body=await r.json();if(!r.ok)throw Error(body.error||"Payment request failed");return body;}
+ async function run(action:"load"|"checkout"|"verify"){setBusy(true);setError("");try{if(action==="checkout"){const d=await request("/checkout",true);const url=new URL(d.url);if(url.protocol!=="https:"||url.hostname!=="checkout.stripe.com")throw Error("Unexpected checkout destination");window.location.assign(url.href);return;}if(action==="verify")await request("/verify",true);setData(await request());}catch(e){setError(e instanceof Error?e.message:"Payment unavailable");}finally{setBusy(false);}}
+ useEffect(()=>{void run("load");},[offer.id]);
+ const own=data?.payments.find(p=>p.is_mine);
+ return <div className="space-y-2 rounded-xl border border-blue-200 bg-blue-50 p-3"><p className="font-bold">Cash adjustment · GBP</p><p>{offer.cash_minor===0?"No cash adjustment required":owes?"You owe £"+(Math.abs(offer.cash_minor)/100).toFixed(2):"You would receive £"+(Math.abs(offer.cash_minor)/100).toFixed(2)}</p><p className="text-sm">Test only. No live funds or payouts.</p>{data?.payments.map((p,i)=><p key={i}>{p.is_mine?"Your payment":"Other member's payment"}: {p.status}</p>)}{error&&<p role="alert" className="text-red-700">{error}</p>}
+ {owes&&data?.testEnabled&&(!own||own.status==="pending")&&<button disabled={busy} className={button} onClick={()=>void run("checkout")}>Open test checkout</button>}
+ {owes&&own?.status==="pending"&&<button disabled={busy} className="ml-2 font-bold text-blue-700" onClick={()=>void run("verify")}>Verify test payment</button>}
+ <button disabled={busy} className="ml-2 font-bold text-blue-700" onClick={()=>void run("load")}>Refresh status</button></div>;
 }
