@@ -1,3 +1,4 @@
+import { FEATURE_DEFINITIONS as PUBLIC_FEATURE_DEFINITIONS } from "../lib/featureFlags.js";
 import { shippingCountry, shippingZone, shipsToCountry } from "../lib/listingShipping.js";
 import { getAliExpressUsdToGbpRate, tidyAliExpressDescription } from "../lib/aliExpressImportDetails.js";
 import { randomUUID } from "node:crypto";
@@ -100,11 +101,16 @@ router.get("/settings/public", async (_req, res) => {
       if (isPrivateSetting(row.key) || (String(row.key).startsWith("theme_studio_") && row.key !== "theme_studio_enabled")) continue;
       settings[row.key] = row.value;
     }
+    for (const [key] of PUBLIC_FEATURE_DEFINITIONS) {
+      const setting = `feature_${key}`;
+      settings[setting] = String(key === "global_marketplace" ? settings[setting] === "true" : settings[setting] !== "false");
+    }
     res.setHeader("Cache-Control", "no-store");
     res.json(settings);
   } catch (err) {
     logger.error({ err }, "Failed to get public settings");
-    res.json({});
+    res.setHeader("Cache-Control", "no-store");
+    res.status(503).json({error:"Public settings unavailable"});
   }
 });
 
