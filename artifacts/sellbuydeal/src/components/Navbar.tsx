@@ -21,7 +21,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { useCurrency, CURRENCIES, MARKET_COUNTRIES, type CurrencyCode } from "@/context/CurrencyContext";
 import { useLanguage } from "@/context/LanguageContext";
-import { useMarketplaceRegion, MARKETPLACE_REGION_STORAGE_KEY } from "@/hooks/useMarketplaceRegion";
+import { useMarketplaceRegion } from "@/hooks/useMarketplaceRegion";
 import { MessageCenterOverlay } from "./MessageCenterOverlay";
 import { useRawSettings } from "@/context/SiteSettingsContext";
 import {parseIconOverrides,iconForPlacement} from "@/design-system/designCenterFields";
@@ -144,7 +144,7 @@ export function Navbar() {
   const { itemCount, openCart } = useCart();
   const { currency, setCurrency, formatPrice, country, setCountry } = useCurrency();
   const { t } = useLanguage();
-  const changeCountry = (code: string) => { setCountry(code); };
+  const changeCountry = (code: string) => { setCountry(code); changeMarketRegion(code === "US" ? "us" : "uk"); };
   const featureSettings = useRawSettings();
   const { resolvedTheme } = useTheme();
   const defaultLogo = "/bazunk-brand-dark.png";
@@ -165,19 +165,6 @@ export function Navbar() {
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [marketRegion, changeMarketRegion] = useMarketplaceRegion();
-  const [regionPromptOpen, setRegionPromptOpen] = useState(() => {
-    try { return !window.localStorage.getItem(MARKETPLACE_REGION_STORAGE_KEY); } catch { return false; }
-  });
-  const [regionTransition, setRegionTransition] = useState(false);
-  const selectMarket = (region: "uk" | "us") => {
-    if (region !== marketRegion) {
-      setRegionTransition(true);
-      window.setTimeout(() => setRegionTransition(false), 2400);
-    }
-    changeMarketRegion(region);
-    setCurrency(region === "uk" ? "GBP" : "USD");
-    setRegionPromptOpen(false);
-  };
   const [sellOpen, setSellOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [protectionOpen,setProtectionOpen] = useState(false);
@@ -316,62 +303,10 @@ export function Navbar() {
 
   return (
     <>
-      <AnimatePresence>
-        {regionPromptOpen && (
-          <motion.div key="marketplace-welcome" role="dialog" aria-modal="true" aria-labelledby="marketplace-welcome-title"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
-            <motion.div initial={{ opacity: 0, scale: 0.85, y: 36 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: -12 }} transition={{ type: "spring", stiffness: 250, damping: 22 }}
-              className="w-full max-w-lg rounded-3xl border border-white/20 bg-white p-6 sm:p-9 shadow-2xl text-center">
-              <motion.div initial={{ rotate: -10, scale: 0.8 }} animate={{ rotate: 0, scale: 1 }} transition={{ delay: 0.15, type: "spring" }}
-                className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-50 text-4xl">🌍</motion.div>
-              <h2 id="marketplace-welcome-title" className="text-2xl sm:text-3xl font-bold text-slate-900">Welcome to Bazunk!</h2>
-              <p className="mt-2 text-sm sm:text-base text-slate-600">Choose which listings to browse. Your account works in both markets, and you can switch anytime.</p>
-              <div className="mt-7 grid grid-cols-2 gap-3">
-                {(["uk", "us"] as const).map(region => (
-                  <motion.button key={region} type="button" whileHover={{ y: -5, scale: 1.03 }} whileTap={{ scale: 0.96 }}
-                    onClick={() => selectMarket(region)}
-                    className="rounded-2xl border-2 border-slate-200 bg-slate-50 px-3 py-6 text-slate-900 transition-colors hover:border-orange-500 hover:bg-orange-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-orange-500">
-                    <span className="block text-5xl">{region === "uk" ? "🇬🇧" : "🇺🇸"}</span>
-                    <span className="mt-3 block font-bold">{region === "uk" ? "United Kingdom" : "United States"}</span>
-                    <span className="mt-1 block text-sm font-semibold text-slate-500">{region === "uk" ? "GBP · £" : "USD · $"}</span>
-                  </motion.button>
-                ))}
-              </div>
-              <p className="mt-5 text-xs text-slate-500">Currency changes the displayed price. International shipping depends on the seller and the listing.</p>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {regionTransition && !regionPromptOpen && (
-          <motion.div key="market-switch" aria-live="polite" initial={{ opacity: 0, scale: 0.94 }}
-            animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.04 }}
-            transition={{ duration: 0.4 }} className="pointer-events-none fixed inset-0 z-[190] flex items-center justify-center bg-gradient-to-br from-fuchsia-600/80 via-indigo-600/80 to-orange-500/80 backdrop-blur-md">
-            <motion.div initial={{ y: 16 }} animate={{ y: 0 }} className="relative overflow-hidden rounded-[2rem] border-4 border-white/80 bg-gradient-to-br from-white via-amber-50 to-pink-100 px-12 py-10 text-center shadow-[0_25px_90px_rgba(0,0,0,.35)]">
-              <motion.div aria-hidden="true" className="absolute inset-0 opacity-40" style={{background:"radial-gradient(circle at 15% 20%,#facc15 0,transparent 35%),radial-gradient(circle at 85% 80%,#f472b6 0,transparent 35%)"}} animate={{rotate:[0,8,-8,0],scale:[1,1.15,1]}} transition={{duration:2.3}} />\n              <motion.div className="relative text-7xl drop-shadow-xl" initial={{scale:.2,rotate:-35,y:70}} animate={{scale:[.2,1.35,1],rotate:[-35,12,-8,0],y:[70,-18,0]}} transition={{duration:1.5,ease:"easeOut"}}>{marketRegion === "uk" ? "🇬🇧" : "🇺🇸"}</motion.div>\n              <motion.div aria-hidden="true" className="relative text-2xl mt-1" initial={{opacity:0,scale:.5}} animate={{opacity:[0,1,1],scale:[.5,1.25,1]}} transition={{delay:.45,duration:1.3}}>✨ 🎉 ✨</motion.div>
-              <div className="relative mt-3 text-2xl font-bold text-slate-900">{marketRegion === "uk" ? "UK Marketplace" : "USA Marketplace"}</div>
-              <div className="relative mt-2 text-base font-bold text-indigo-700">{marketRegion === "uk" ? "Prices in GBP" : "Prices in USD"}</div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
       <nav data-bz-site-header className="bz-mockup-header relative z-50 w-full bg-white shadow-sm">
-        <div className="bz-mockup-topbar border-b border-gray-100 bg-gray-50 px-4 py-1.5 flex items-center gap-2" aria-label="Marketplace region">
-          <span className="text-xs font-semibold text-gray-600">Marketplace:</span>
-          <div className="relative inline-flex rounded-full border border-gray-200 bg-white p-1 shadow-sm">
-            <motion.div layout initial={false} transition={{ type: "spring", stiffness: 420, damping: 30 }}
-              className="absolute top-1 bottom-1 rounded-full bg-[#F26B21] shadow-sm"
-              style={{ left: marketRegion === "uk" ? 4 : "50%", width: "calc(50% - 4px)" }} />
-            {(["uk", "us"] as const).map(region => (
-              <button key={region} type="button" aria-pressed={marketRegion === region}
-                onClick={() => selectMarket(region)}
-                className={`relative z-10 rounded-full px-3 py-1.5 text-xs font-bold transition-colors duration-200 ${marketRegion === region ? "text-white" : "text-gray-700 hover:text-[#F26B21]"}`}>
-                <span className="inline-flex items-center gap-1.5"><img src={region === "uk" ? "https://flagcdn.com/w40/gb.png" : "https://flagcdn.com/w40/us.png"} alt={region === "uk" ? "United Kingdom flag" : "United States flag"} width={24} height={16} className="h-4 w-6 rounded-[2px] object-cover shadow-sm" /><span>{region === "uk" ? "UK" : "USA"}</span></span>
-              </button>
-            ))}
-          </div>
+        <div className="bz-mockup-topbar border-b border-gray-100 bg-gray-50 px-4 py-1.5 flex items-center gap-2" aria-label="Delivery and currency preferences">
+          <label className="flex items-center gap-1 text-xs font-semibold text-gray-600">Deliver to <select aria-label="Delivery country" value={country.code} onChange={e=>changeCountry(e.target.value)} className="max-w-[130px] rounded-md border bg-white px-1 py-1 text-xs">{MARKET_COUNTRIES.map(c=><option key={c.code} value={c.code}>{c.flag} {c.name}</option>)}</select></label>
+          <label className="flex items-center gap-1 text-xs font-semibold text-gray-600"><span className="sr-only">Display currency</span><select aria-label="Display currency" value={currency.code} onChange={e=>setCurrency(e.target.value as CurrencyCode)} className="rounded-md border bg-white px-1 py-1 text-xs">{Object.values(CURRENCIES).map(c=><option key={c.code} value={c.code}>{c.code}</option>)}</select></label>
           <div className="bz-mockup-top-links">
             <Link href="/support">Help</Link>
             <button type="button" onClick={() => {setMoreOpen(false);setSellOpen(false);setProtectionOpen(true)}} aria-haspopup="dialog" aria-expanded={protectionOpen}><ShieldCheck size={17}/> Buyer Protection</button>
