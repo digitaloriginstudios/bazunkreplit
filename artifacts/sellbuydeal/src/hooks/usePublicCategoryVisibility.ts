@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 
 const API_BASE = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "https://bazunk-api.onrender.com").replace(/\/$/, "");
 type Visibility = { hidden: string[]; display: Record<string,string> };
@@ -13,7 +13,9 @@ const aliases: Record<string,string> = {
 export function usePublicCategoryVisibility() {
   const [visibility,setVisibility] = useState<Visibility>(EMPTY);
   const [ready,setReady] = useState(false);
+  const sequence=useRef(0);
   const refresh = useCallback(async () => {
+    const request=++sequence.current;
     try {
       // Read both the public visibility endpoint and the canonical taxonomy
       // overrides. The latter is the source saved by Admin > Categories.
@@ -33,10 +35,12 @@ export function usePublicCategoryVisibility() {
         if (item.visible === false) { hidden.add(key); display[key]="hidden"; }
         else if (item.visible === true && !display[key]) display[key]="active";
       }
+      if(request!==sequence.current)return;
       setVisibility({hidden:[...hidden],display});
       setReady(true);
     } catch {
       // Fail closed: never briefly show a category whose status could not be read.
+      if(request!==sequence.current)return;
       setVisibility(EMPTY);
       setReady(false);
     }
@@ -45,7 +49,7 @@ export function usePublicCategoryVisibility() {
     void refresh();
     window.addEventListener("bazunk-settings-updated",refresh);
     window.addEventListener("focus",refresh);
-    return ()=>{window.removeEventListener("bazunk-settings-updated",refresh);window.removeEventListener("focus",refresh);};
+    return ()=>{++sequence.current;window.removeEventListener("bazunk-settings-updated",refresh);window.removeEventListener("focus",refresh);};
   },[refresh]);
   const isActive = (slug:string,sub?:string) => {
     if (!ready) return false;
