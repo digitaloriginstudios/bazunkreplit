@@ -8,6 +8,8 @@ import adminOperationsRouter from "./adminOperations.js";
 import adminActionRequiredRouter from "./adminActionRequired.js";
 import adminFinanceMonitorRouter from "./adminFinanceMonitor.js";
 import adminComplianceReviewRouter from "./adminComplianceReview.js";
+import adminAliExpressRouter from "./adminAliExpress.js";
+import { hasManagedAliExpressConnection } from "../lib/aliexpressOAuth.js";
 import adminImporterMonitorRouter from "./adminImporterMonitor.js";
 import { scanSellerCompliance } from "../lib/sellerComplianceScan.js";
 import { syncAllImports } from "../lib/syncJob.js";
@@ -125,6 +127,7 @@ router.use(adminNavigationRouter); // real alerts and global search, after admin
 router.use(adminFinanceMonitorRouter);
 router.use(adminComplianceReviewRouter);
 router.use(adminImporterMonitorRouter);
+router.use(adminAliExpressRouter);
 router.use(adminActionRequiredRouter); // refund/dispute/compliance/Stripe review, also admin-only
 
 // Seller compliance: restricted to authenticated administrators by router.use above.
@@ -327,10 +330,15 @@ router.get("/admin/system-status", async (_req, res) => {
 
     // AliExpress imports use Bazunk Platform Core's official integration, not
     // the retired RapidAPI DataHub endpoint (which often returns 403).
+    const managedAliExpress = await hasManagedAliExpressConnection();
     const officialAliExpress = await timed(
       "aliexpress_official", "AliExpress importer", "Official AliExpress",
-      Boolean(process.env.BAZUNK_DATA_API_URL && process.env.BAZUNK_DATA_INTERNAL_TOKEN),
+      managedAliExpress || Boolean(process.env.BAZUNK_DATA_API_URL && process.env.BAZUNK_DATA_INTERNAL_TOKEN),
       async () => {
+        if (managedAliExpress) {
+          const products = await searchDropship("usb cable", 1, { requireManaged: true });
+          return `Managed AliExpress search responding (${products.length} products returned)`;
+        }
         const url = new URL("/internal/aliexpress/search", process.env.BAZUNK_DATA_API_URL!);
         url.searchParams.set("q", "usb cable");
         url.searchParams.set("page", "1");
@@ -1566,7 +1574,7 @@ router.patch("/admin/listings/:id/image", async (req, res) => {
 
 // AliExpress keyword search — authenticated admin only; RapidAPI key stays server-side.
 router.get("/admin/search-aliexpress", async (req, res) => {
-  if (dropshipConfigured()) {
+  if (await dropshipConfigured()) {
     const q=String(req.query.q??"").trim().slice(0,120), page=Math.min(100,Math.max(1,Number(req.query.page??1)||1));
     if(!q){res.status(400).json({error:"Search keywords are required"});return;}
     try {const items=await searchDropship(q,page);res.setHeader("Cache-Control","no-store");res.json({products:items.map(p=>({id:p.externalId,title:p.title,priceUsd:p.price.amount,image:p.images[0]?.url??"",rating:p.rating,sales:0,url:p.sourceUrl})),page,source:"aliexpress-dropshipping",discovered:items.length,complete:items.length});}
@@ -1661,7 +1669,7 @@ router.get("/admin/search-aliexpress", async (req, res) => {
 
 // GET /api/admin/aliexpress-product-preview — fetch verified supplier details for the import modal.
 router.get("/admin/aliexpress-product-preview", async (req, res) => {
-  if(dropshipConfigured()){
+  if(await dropshipConfigured()){
     const id=aliExpressProductId(String(req.query.url??""));
     if(!id){res.status(400).json({error:"Enter a supported AliExpress product URL or product ID"});return;}
     try{const p=await getDropshipProduct(id);res.setHeader("Cache-Control","no-store");res.json({id,title:p.title,description:p.description,imageUrl:p.images[0]?.url??"",supplierPrice:p.price.amount||null,currency:p.price.currency,sourceUrl:p.sourceUrl});}
@@ -1793,7 +1801,8 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
   const official = Boolean(process.env.BAZUNK_DATA_API_URL && process.env.BAZUNK_DATA_INTERNAL_TOKEN);
   const base = official ? process.env.BAZUNK_DATA_API_URL : process.env.ALIEXPRESS_SCRAPER_URL;
   const token = official ? process.env.BAZUNK_DATA_INTERNAL_TOKEN : process.env.ALIEXPRESS_SCRAPER_TOKEN;
-  if (!dropshipConfigured() && (!base || !token)) { res.status(503).json({error:"AliExpress product provider not configured"});return; }
+  const useDropship = await dropshipConfigured();
+  if (!useDropship && (!base || !token)) { res.status(503).json({error:"AliExpress product provider not configured"});return; }
   const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.map((v: unknown) => String(v)))] as string[] : [];
   if (!ids.length || ids.length > 30 || ids.some(id => !/^\d{10,20}$/.test(id))) {
     res.status(400).json({ error: "Select 1–30 valid AliExpress product IDs" }); return;
@@ -1823,7 +1832,7 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
       const exists = await db.execute(sql`SELECT id FROM listings WHERE specifications LIKE ${'%"aliexpress_id":"' + id + '"%'} LIMIT 1`);
       if (exists.rows.length) { results.push({id,status:"skipped",reason:"Already imported"}); continue; }
       let p:any;
-      if(dropshipConfigured()) p=await getDropshipProduct(id);
+      if(useDropship) p=await getDropshipProduct(id);
       else {
         const url = new URL((official ? "/internal/aliexpress/products/" : "/v1/aliexpress/products/") + id, base);
         const response = await fetch(url, { headers: { Authorization: "Bearer " + token }, signal: AbortSignal.timeout(20000) });
@@ -1914,6 +1923,7 @@ router.post("/admin/import-selected-amazon", async (req, res) => {
   const category     = (req.body.category    as string) || "other";
   const subcategory  = (req.body.subcategory as string) || null;
   const sellerEmail  = (req.body.sellerEmail as string) || "bazunkdeals@gmail.com";
+  const ecoFriendly = req.body.ecoFriendly === true;
 
   if (!products.length) { res.status(400).json({ error: "products array required" }); return; }
   // Bound synchronous imports to protect the production database.

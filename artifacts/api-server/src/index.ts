@@ -13,6 +13,8 @@ import { startDealPilotMonitor } from "./lib/dealPilot.js";
 import { startTrustProofRetention } from "./lib/trustProof.js";
 import { ensureCashback } from "./lib/cashback.js";
 
+import { aliExpressOAuthMigration, startAliExpressRenewal } from "./lib/aliexpressOAuth.js";
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {
@@ -36,6 +38,8 @@ async function runAppMigrations() {
       logger.error({ err, label }, "Migration statement failed");
     }
   };
+
+  await run(aliExpressOAuthMigration, "bazunk_aliexpress_connection");
 
   // ── Base tables (mirror lib/db/src/schema + site_settings) ───────────────
   // These used to be created by `drizzle-kit push` on Replit. Creating them
@@ -914,6 +918,7 @@ app.listen(port, (err?: Error) => {
 });
 
 runAppMigrations()
+  .then(startAliExpressRenewal)
   // Install price-drop/restock change tracking before routine listing edits.
   // Failure is logged without interrupting unrelated storefront services.
   .then(async () => { try { await ensureCashback(); logger.info("Cashback ledger and payout policy ready"); }

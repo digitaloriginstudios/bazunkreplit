@@ -1,55 +1,144 @@
 import { createHmac } from "node:crypto";
+import {
+  aliExpressCredentials, AliExpressConnectionError, hasManagedAliExpressConnection, managedAliExpressAccessToken,
+} from "./aliexpressOAuth.js";
 
-/** Official AliExpress Dropshipping API. Never expose credentials to the browser. */
-export function dropshipConfigured(): boolean {
-  return Boolean(process.env.ALIEXPRESS_DS_APP_KEY && process.env.ALIEXPRESS_DS_APP_SECRET && process.env.ALIEXPRESS_DS_ACCESS_TOKEN);
+export async function dropshipConfigured() {
+  return Boolean(process.env.ALIEXPRESS_DS_ACCESS_TOKEN && aliExpressCredentials()) ||
+    hasManagedAliExpressConnection();
 }
-type Product = { externalId: string; title: string; description: string; images: {url:string}[]; price:{amount:number;currency:string}; sourceUrl:string; rating:number };
-const absolute = (value:unknown):string => {
-  const s=String(value??"");
-  return s.startsWith("//") ? "https:"+s : /^https:\/\//i.test(s) ? s : "";
+
+type Product = {
+  externalId: string;
+  title: string;
+  description: string;
+  images: { url: string }[];
+  price: { amount: number; currency: string };
+  sourceUrl: string;
+  rating: number;
+  availability: "in_stock" | "out_of_stock" | "unknown";
 };
-function normalize(p:any):Product {
-  const id=String(p.itemId??p.product_id??p.productId??p.ae_item_base_info_dto?.product_id??"");
-  const images=[p.itemMainPic,p.product_main_image_url,p.ae_multimedia_info_dto?.image_urls?.split(";")?.[0],p.image].map(absolute).filter(Boolean);
-  const price=Number(p.targetSalePrice??p.target_sale_price??p.ae_item_sku_info_dtos?.ae_item_sku_info_d_t_o?.[0]?.offer_sale_price??p.price??0);
-  return {externalId:id,title:String(p.title??p.product_title??p.ae_item_base_info_dto?.subject??""),description:String(p.description??p.ae_item_base_info_dto?.detail??""),images:images.map(url=>({url})),price:{amount:Number.isFinite(price)?price:0,currency:"USD"},sourceUrl:absolute(p.itemUrl??p.product_detail_url) || (id?"https://www.aliexpress.com/item/"+id+".html":""),rating:Number(p.score??0)||0};
+
+const absolute = (value: unknown): string => {
+  const url = String(value ?? "");
+  return url.startsWith("//") ? "https:" + url : /^https:\/\//i.test(url) ? url : "";
+};
+
+function normalize(p: any): Product {
+  const id = String(p.itemId ?? p.product_id ?? p.productId ?? p.ae_item_base_info_dto?.product_id ?? "");
+  const images = [p.itemMainPic, p.product_main_image_url, ...String(p.ae_multimedia_info_dto?.image_urls ?? "").split(";"), p.image]
+    .map(absolute).filter(Boolean);
+  const skuData = p.ae_item_sku_info_dtos;
+  const skuList = Array.isArray(skuData) ? skuData : skuData?.ae_item_sku_info_d_t_o;
+  const skus: any[] = Array.isArray(skuList) ? skuList.filter(Boolean) : [];
+  const pricedSkus = skus.map(sku => ({
+    amount: Number(sku.offer_sale_price ?? sku.sku_price),
+    currency: sku.currency_code,
+  })).filter(price => Number.isFinite(price.amount) && price.amount > 0 && (!price.currency || price.currency === "USD"));
+  const skuPrice = pricedSkus.length ? Math.min(...pricedSkus.map(price => price.amount)) : undefined;
+  const amount = Number(p.targetSalePrice ?? p.target_sale_price ?? skuPrice ?? p.price ?? 0);
+  const stock = skus.map(sku => Number(sku.sku_available_stock)).filter(Number.isFinite);
+  return {
+    externalId: id,
+    title: String(p.title ?? p.product_title ?? p.ae_item_base_info_dto?.subject ?? ""),
+    description: String(p.description ?? p.ae_item_base_info_dto?.detail ?? ""),
+    images: images.map(url => ({ url })),
+    price: {
+      amount: Number.isFinite(amount) ? amount : 0,
+      currency: String(p.targetSalePriceCurrency ?? p.target_sale_price_currency ?? "USD").toUpperCase(),
+    },
+    sourceUrl: absolute(p.itemUrl ?? p.product_detail_url) || (id ? "https://www.aliexpress.com/item/" + id + ".html" : ""),
+    rating: Number(p.score ?? p.ae_item_base_info_dto?.avg_evaluation_rating ?? 0) || 0,
+    availability: stock.length ? (stock.some(count => count > 0) ? "in_stock" : "out_of_stock") : "unknown",
+  };
 }
-async function call(method:string, extra:Record<string,string>):Promise<any> {
-  if (!dropshipConfigured()) throw new Error("AliExpress Dropshipping API credentials missing: configure ALIEXPRESS_DS_APP_KEY, ALIEXPRESS_DS_APP_SECRET and ALIEXPRESS_DS_ACCESS_TOKEN on Render");
-  const params:Record<string,string>={app_key:process.env.ALIEXPRESS_DS_APP_KEY!,session:process.env.ALIEXPRESS_DS_ACCESS_TOKEN!,method,sign_method:"sha256",timestamp:String(Date.now()),format:"json",v:"2.0",...extra};
-  const payload=Object.keys(params).sort().map(k=>k+params[k]).join("");
-  params.sign=createHmac("sha256",process.env.ALIEXPRESS_DS_APP_SECRET!).update(payload).digest("hex").toUpperCase();
-  const response=await fetch("https://api-sg.aliexpress.com/sync",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams(params),signal:AbortSignal.timeout(25000)});
-  if(!response.ok) throw new Error("AliExpress API HTTP "+response.status);
-  const json=await response.json() as any;
-  if(json.error_response) throw new Error("AliExpress API "+String(json.error_response.code??"error")+": "+String(json.error_response.sub_msg??json.error_response.msg??"Request rejected").slice(0,180));
-  const key=method.replace(/\./g,"_")+"_response";
-  const result=json[key];
-  if(!result) throw new Error("AliExpress API returned no "+key+" payload");
-  if(result.code && !["00","0","200"].includes(String(result.code))) throw new Error("AliExpress API "+String(result.code)+": "+String(result.msg??"Request rejected"));
+
+async function call(method: string, extra: Record<string, string>, requireManaged = false): Promise<any> {
+  const credentials = aliExpressCredentials();
+  if (!credentials) throw new AliExpressConnectionError("AliExpress app credentials are missing.");
+  const managed = await managedAliExpressAccessToken();
+  const { appKey, secret } = credentials;
+  const token = managed ?? (requireManaged ? undefined : process.env.ALIEXPRESS_DS_ACCESS_TOKEN);
+  if (!token) throw new AliExpressConnectionError("Authorise the AliExpress connection before making API requests.");
+
+  async function send(session: string) {
+    const params: Record<string, string> = {
+      app_key: appKey,
+      session,
+      method,
+      sign_method: "sha256",
+      timestamp: new Date().toISOString().replace("T", " ").slice(0, 19),
+      format: "json",
+      v: "2.0",
+      ...extra,
+    };
+    const payload = Object.keys(params).sort().map(key => key + params[key]).join("");
+    params.sign = createHmac("sha256", secret).update(payload).digest("hex").toUpperCase();
+    const response = await fetch("https://api-sg.aliexpress.com/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(params),
+      redirect: "error",
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new AliExpressConnectionError("AliExpress API returned HTTP " + response.status + ".");
+    return await response.json() as Record<string, any>;
+  }
+
+  let json = await send(token);
+  const authError = String(json.error_response?.sub_code ?? json.error_response?.code ?? json.code ?? "");
+  if (managed && /^(?:27|invalid-session|invalid_access_token|access_token_expired|isv\.invalid-session|isv\.session-expired)$/i.test(authError)) {
+    const replacement = await managedAliExpressAccessToken({ rejectedToken: token });
+    if (!replacement) throw new AliExpressConnectionError("The AliExpress connection was disconnected.");
+    json = await send(replacement);
+  }
+  const key = method.replace(/\./g, "_") + "_response";
+  const result = json[key] ?? (json.result || json.data ? json : null);
+  const code = String(json.error_response?.code ?? result?.code ?? json.code ?? "");
+  const responseCode = String(result?.rsp_code ?? "");
+  if (json.error_response || (code && !["00", "0", "200"].includes(code)) ||
+      (responseCode && !["0", "200"].includes(responseCode))) {
+    const reference = /^[a-z0-9_.-]{1,48}$/i.test(code) ? " (" + code + ")" : "";
+    throw new AliExpressConnectionError("AliExpress rejected the API request" + reference + ".");
+  }
+  if (!result) throw new AliExpressConnectionError("AliExpress returned an unexpected API response.");
   return result;
 }
-export async function searchDropship(q:string,page:number):Promise<Product[]> {
-  const result=await call("aliexpress.ds.text.search",{keyword:q,countryCode:"GB",currency:"USD",local:"en_US",page_index:String(page),page_size:"20"});
-  const list=result.data?.products?.selection_search_product??[];
-  if(!Array.isArray(list)) throw new Error("AliExpress search response has an unexpected format");
-  return list.map(normalize).filter((p:Product)=>/^\d{10,20}$/.test(p.externalId)&&p.title&&p.price.amount>0);
+
+export async function searchDropship(q: string, page: number, options: { requireManaged?: boolean } = {}): Promise<Product[]> {
+  const result = await call("aliexpress.ds.text.search", {
+    keyword: q, countryCode: "GB", currency: "USD", local: "en_US", page_index: String(Math.trunc(page)), page_size: "20",
+  }, options.requireManaged);
+  const products = result.data?.products;
+  const list = Array.isArray(products) ? products : products?.selection_search_product ?? [];
+  if (!Array.isArray(list)) throw new AliExpressConnectionError("AliExpress search returned an unexpected product list.");
+  const keywords = q.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
+  return list.filter(p => String(p?.type ?? "").toLowerCase() !== "recommend")
+    .filter(Boolean).map(normalize)
+    .filter(p => /^\d{10,20}$/.test(p.externalId) && p.title && p.price.amount > 0 &&
+      p.price.currency === "USD" && keywords.every(keyword => p.title.toLowerCase().includes(keyword)));
 }
-export async function getDropshipProduct(id:string):Promise<Product> {
-  if(!/^\d{10,20}$/.test(id)) throw new Error("Invalid AliExpress product ID");
-  const result=await call("aliexpress.ds.product.get",{product_id:id,ship_to_country:"GB",target_currency:"USD",target_language:"EN"});
-  const raw=result.result??result.data??result;
-  const p=normalize({...raw,product_id:id});
-  if(!p.title) throw new Error("AliExpress returned no product title; check product availability and access permissions");
-  return p;
+
+export async function getDropshipProduct(id: string): Promise<Product> {
+  if (!/^\d{10,20}$/.test(id)) throw new AliExpressConnectionError("Invalid AliExpress product ID.");
+  const result = await call("aliexpress.ds.product.get", {
+    product_id: id, ship_to_country: "GB", target_currency: "USD", target_language: "en", remove_personal_benefit: "true",
+  });
+  const raw = result.result ?? result.data ?? result;
+  const product = normalize({ ...raw, product_id: id });
+  if (!product.title) throw new AliExpressConnectionError("AliExpress returned no product title. Check product availability.");
+  return product;
 }
-export function aliExpressProductId(raw:string):string|null {
-  const input=raw.trim();
-  if(/^\d{10,20}$/.test(input)) return input;
-  try{
-    const u=new URL(input);
-    if(u.protocol!=="https:" || !(u.hostname==="aliexpress.com"||u.hostname.endsWith(".aliexpress.com"))) return null;
-    return u.pathname.match(/\/(?:item\/)?(\d{10,20})(?:\.html)?\/?$/)?.[1]??u.searchParams.get("productId")?.match(/^\d{10,20}$/)?.[0]??null;
-  } catch{return null;}
+
+export function aliExpressProductId(raw: string): string | null {
+  const input = raw.trim();
+  if (/^\d{10,20}$/.test(input)) return input;
+  try {
+    const url = new URL(input);
+    if (url.protocol !== "https:" || !(url.hostname === "aliexpress.com" || url.hostname.endsWith(".aliexpress.com"))) return null;
+    return url.pathname.match(/\/(?:item\/)?(\d{10,20})(?:\.html)?\/?$/)?.[1] ??
+      url.searchParams.get("productId")?.match(/^\d{10,20}$/)?.[0] ?? null;
+  } catch {
+    return null;
+  }
 }
