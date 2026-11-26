@@ -42,6 +42,7 @@ assert.equal((html.match(/rel="canonical"/g)||[]).length,1);
 assert.ok(html.includes('<title>'+escape(title)+'</title>'));
 assert.ok(html.includes('property="og:url" content="'+url+'"'));
 assert.ok(html.includes('id="root"'));
+if(slug.startsWith("marketplace/")){const locale=({"uk":"en-GB","us":"en-US","ireland":"en-IE","canada":"en-CA","australia":"en-AU"})[slug.split("/")[1]];html=html.replace(/<html\b[^>]*>/i,tag=>tag.replace(/\s+lang=["\'][^"\']*["\']/i,"").replace(/>$/,` lang="${locale}">`));}
 const target=resolve(dist,slug,"index.html");await mkdir(dirname(target),{recursive:true});await writeFile(target,html);
 if(slug)await writeFile(resolve(dist,slug+".html"),html);
 }
