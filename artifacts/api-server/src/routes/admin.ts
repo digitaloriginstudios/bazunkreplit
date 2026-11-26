@@ -1523,38 +1523,67 @@ router.patch("/admin/listings/:id/visibility",async(req,res)=>{
   res.json({id,status});
  }catch(err){logger.error({err},"Listing visibility update failed");res.status(500).json({error:"Could not change listing visibility"});}
 });
-router.delete("/admin/listings/:id/safe-delete",async(req,res)=>{
- const id=Number(req.params.id);
- if(!Number.isSafeInteger(id)||id<1){res.status(400).json({error:"Invalid listing ID"});return;}
- try{
-  const rows=await db.execute(sql`SELECT id,public_id,status,title,specifications FROM listings WHERE id=${id}`).then(r=>r.rows);
-  if(!rows.length){res.status(404).json({error:"Listing not found"});return;}
-  const item=rows[0] as any;
-  if(item.status==="sold"){res.status(409).json({error:"Sold listings cannot be deleted because their transaction history must be preserved. Hide instead."});return;}
-  const imported=/^BZK-(EBY|AMZ|ALI)-/.test(String(item.public_id??""));
-  let blockedSourceId:string|null=null;
-  if(imported){
-    const specs=typeof item.specifications==="string"?JSON.parse(item.specifications||"{}"):item.specifications||{};
-    blockedSourceId=String(specs.item_id??specs.own_ebay_item_id??specs.asin??specs.aliexpress_id??"").trim()||null;
-    if(!blockedSourceId){res.status(409).json({error:"Cannot identify imported source item. Hide this listing instead."});return;}
+router.delete("/admin/listings/:id/safe-delete", async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) { res.status(400).json({ error:"Invalid listing ID" }); return; }
+  try {
+    const result = await db.transaction(async tx => {
+      const { rows: [item] } = await tx.execute(sql`
+        SELECT id, public_id, status, title, specifications FROM listings WHERE id=${id} FOR UPDATE
+      `);
+      if (!item) return { status:404, error:"Listing not found." };
+      if (item.status === "sold") return { status:409, error:"Sold listings cannot be permanently deleted. Hide the listing instead." };
+
+      const refs = await tx.execute<{
+        table_schema:string; table_name:string; column_name:string; delete_action:string;
+      }>(sql`
+        SELECT ns.nspname AS table_schema, tbl.relname AS table_name, attr.attname AS column_name,
+          fk.confdeltype AS delete_action
+        FROM pg_constraint fk
+        JOIN pg_class tbl ON tbl.oid=fk.conrelid
+        JOIN pg_namespace ns ON ns.oid=tbl.relnamespace
+        JOIN pg_attribute attr ON attr.attrelid=tbl.oid AND attr.attnum=fk.conkey[1]
+        JOIN pg_attribute target ON target.attrelid=fk.confrelid AND target.attnum=fk.confkey[1]
+        WHERE fk.contype='f' AND fk.confrelid='listings'::regclass AND cardinality(fk.conkey)=1
+          AND target.attname='id'
+      `);
+      for (const ref of refs.rows) {
+        // Import tracking is dependent metadata with a declared cascade.
+        if (ref.table_schema === "public" && ref.table_name === "supplier_imports" &&
+            ref.column_name === "listing_id" && ref.delete_action === "c") continue;
+        const related = await tx.execute(sql`
+          SELECT 1 FROM ${sql.identifier(ref.table_schema)}.${sql.identifier(ref.table_name)}
+          WHERE ${sql.identifier(ref.column_name)}=${id} LIMIT 1
+        `);
+        if (related.rows.length) return { status:409, error:"This listing has protected related records. Hide the listing instead." };
+      }
+
+      const prefix = String(item.public_id ?? "").match(/^BZK-(EBY|AMZ|ALI)-/)?.[1];
+      if (prefix) {
+        let specs;
+        try { specs = typeof item.specifications === "string" ? JSON.parse(item.specifications) : item.specifications; }
+        catch { specs = null; }
+        const sourceId = String(specs?.item_id ?? specs?.own_ebay_item_id ?? specs?.asin ?? specs?.aliexpress_id ?? "").trim();
+        if (!sourceId) return { status:409, error:"The imported source item could not be identified. Hide the listing instead." };
+        const source = prefix === "EBY" ? "ebay" : prefix === "AMZ" ? "amazon" : "aliexpress";
+        await tx.execute(sql`CREATE TABLE IF NOT EXISTS admin_import_exclusions (
+          source TEXT NOT NULL, source_item_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY(source, source_item_id)
+        )`);
+        await tx.execute(sql`INSERT INTO admin_import_exclusions(source,source_item_id)
+          VALUES (${source},${sourceId}) ON CONFLICT DO NOTHING`);
+      }
+      await tx.execute(sql`DELETE FROM listings WHERE id=${id}`);
+      return { item };
+    });
+    if ("error" in result) { res.status(result.status ?? 500).json({ error:result.error }); return; }
+    await recordAdminAudit({ req, category:"listings", action:"listings.delete", targetType:"listing", targetId:String(id),
+      summary:`Deleted listing ${result.item.title}`, before:result.item });
+    res.json({ deleted:true, id });
+  } catch (err) {
+    logger.error({ err, id }, "Safe listing deletion failed");
+    res.status(500).json({ error:"Could not delete the listing. You can hide it instead." });
   }
-  // Decline hard deletion when any database relationship references this listing.
-  const refs=await db.execute(sql`SELECT tc.table_schema,tc.table_name,kcu.column_name FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_name=kcu.constraint_name AND tc.table_schema=kcu.table_schema JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name=tc.constraint_name AND ccu.table_schema=tc.table_schema WHERE tc.constraint_type='FOREIGN KEY' AND ccu.table_name='listings' AND ccu.column_name='id' AND tc.table_schema=current_schema()`).then(r=>r.rows);
-  for(const ref of refs){
-    const schema=String(ref.table_schema),table=String(ref.table_name),column=String(ref.column_name);
-    if(!/^[a-z_][a-z0-9_]*$/.test(schema)||!/^[a-z_][a-z0-9_]*$/.test(table)||!/^[a-z_][a-z0-9_]*$/.test(column))continue;
-    const check=await db.execute(sql.raw(`SELECT 1 FROM "${schema}"."${table}" WHERE "${column}" = ${id} LIMIT 1`)).then(r=>r.rows);
-    if(check.length){res.status(409).json({error:"This listing has related records and cannot be permanently deleted. Hide it instead."});return;}
-  }
-  if(imported && blockedSourceId){
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS admin_import_exclusions (source TEXT NOT NULL, source_item_id TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY(source,source_item_id))`);
-    const source=String(item.public_id).startsWith("BZK-EBY-")?"ebay":String(item.public_id).startsWith("BZK-AMZ-")?"amazon":"aliexpress";
-    await db.execute(sql`INSERT INTO admin_import_exclusions(source,source_item_id) VALUES (${source},${blockedSourceId}) ON CONFLICT DO NOTHING`);
-  }
-  await db.execute(sql`DELETE FROM listings WHERE id=${id}`);
-  await recordAdminAudit({req,category:"listings",action:"listings.delete",targetType:"listing",targetId:String(id),summary:`Deleted listing ${item.title}`,before:item});
-  res.json({deleted:true,id});
- }catch(err){logger.error({err},"Safe listing deletion failed");res.status(500).json({error:"Deletion blocked to protect related records; hide the listing instead."});}
 });
 
 // PATCH /api/admin/listings/:id/image — set or replace a listing image from Admin

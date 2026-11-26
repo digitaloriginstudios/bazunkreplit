@@ -59,13 +59,14 @@ export function AdminListingsPage() {
   const [editingId,setEditingId]=useState<number|null>(null);
 
   const [rowBusy,setRowBusy]=useState<number|null>(null);
+  const [deleteBusy,setDeleteBusy]=useState(false);
+  const [deleteMessage,setDeleteMessage]=useState("");
   const [sharingId,setSharingId]=useState<number|null>(null);
   const [copiedId,setCopiedId]=useState<number|null>(null);
   const publicListingUrl=(l:Listing)=>window.location.origin+"/listing/"+(l.public_url_token||l.public_id||l.id);
   async function copyAdminListingLink(l:Listing){try{await navigator.clipboard.writeText(publicListingUrl(l));setCopiedId(l.id);}catch{setActionError("Unable to copy link. Please copy it from the public listing.");}}
   function shareAdminListing(l:Listing){const url=publicListingUrl(l);if(navigator.share){void navigator.share({title:l.title,url}).catch(()=>{});}else{window.open("https://wa.me/?text="+encodeURIComponent(l.title+" "+url),"_blank","noopener,noreferrer");}}
   const [actionError,setActionError]=useState("");
-  const [actionSuccess,setActionSuccess]=useState("");
   async function hideListing(id:number) {
     setRowBusy(id);setActionError("");
     try {
@@ -76,19 +77,36 @@ export function AdminListingsPage() {
     }catch(e){setActionError(e instanceof Error?e.message:"Action failed");}
     finally{setRowBusy(null);}
   }
-  async function deleteListing(id:number) {
-    if(!window.confirm("Permanently delete this listing? Listings associated with transactions must be preserved. This action cannot be undone."))return;
-    setRowBusy(id);setActionError("");setActionSuccess("");
+  async function deleteListings(ids: string[]) {
+    if (deleteBusy || rowBusy !== null || !ids.length) return;
+    const label = ids.length === 1 ? "this listing" : `${ids.length} selected listings`;
+    if (!window.confirm(`Permanently delete ${label}? This cannot be undone. Protected listings will be skipped.`)) return;
+    setDeleteBusy(true);
+    setDeleteMessage("");
+    const deleted = new Set<string>();
+    const failed: string[] = [];
     try {
-      const res=await authFetch(`/api/admin/listings/${id}/safe-delete`,{method:"DELETE"});
-      const data=await res.json().catch(()=>null);
-      if(!res.ok)throw Error(data?.error||"Could not delete listing");
-      setListings(prev=>prev.filter(l=>l.id!==id));setTotal(t=>Math.max(0,t-1));setSelectedIds(prev=>prev.filter(x=>x!==String(id)));
-      setActionSuccess("Listing deleted successfully.");
-      // Refresh from the database so the table, pagination and listing total stay in sync.
-      await load();
-    }catch(e){setActionError(e instanceof Error?e.message:"Action failed");}
-    finally{setRowBusy(null);}
+      for (const id of ids) {
+        setDeleteMessage(`Deleting ${deleted.size + failed.length + 1} of ${ids.length}…`);
+        try {
+          const res = await authFetch(`/api/admin/listings/${encodeURIComponent(id)}/safe-delete`, { method: "DELETE" });
+          const result = await res.json().catch(() => null);
+          if (!res.ok || result?.deleted !== true) throw Error(result?.error || "Could not delete listing.");
+          deleted.add(id);
+        } catch (error) {
+          failed.push(`#${id}: ${error instanceof Error ? error.message : "Could not delete listing."}`);
+        }
+      }
+      setListings(current => current.filter(listing => !deleted.has(String(listing.id))));
+      setSelectedIds(current => current.filter(id => !deleted.has(id)));
+      setTotal(current => Math.max(0, current - deleted.size));
+      const removedOnPage = listings.filter(listing => deleted.has(String(listing.id))).length;
+      if (offset > 0 && removedOnPage === listings.length) setOffset(Math.max(0, offset - LIMIT));
+      else if (deleted.size) await load(true).catch(() => setActionError("Listings were deleted, but the table could not refresh."));
+    } finally {
+      setDeleteMessage(`${deleted.size} deleted.${failed.length ? " " + failed.length + " could not be deleted.\n" + failed.join("\n") : ""}`);
+      setDeleteBusy(false);
+    }
   }
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -260,7 +278,7 @@ export function AdminListingsPage() {
   useEffect(() => { setOffset(0); setSelectedIds([]); }, [search, filter, statusFilter]);
   useEffect(() => { load(); }, [search, filter, statusFilter, offset]);
 
-  async function load() {
+  async function load(keepSelection = false) {
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: String(LIMIT), offset: String(offset) });
@@ -272,7 +290,7 @@ export function AdminListingsPage() {
       if (res.ok) {
         const d = await res.json();
         setListings(d.listings ?? []);
-        setSelectedIds([]);
+        if (!keepSelection) setSelectedIds([]);
         setTotal(d.total ?? 0);
       }
     } finally {
@@ -321,7 +339,6 @@ export function AdminListingsPage() {
           <div className="grid gap-2 md:grid-cols-3">{[1].map(()=> <Fragment key="fields"><label className="text-xs font-bold text-white">Main category<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedCategory} onChange={e=>{const cat=ACTIVE_CATEGORIES.find(c=>c.slug===e.target.value);patchReview(x.id,{suggestedCategory:e.target.value,suggestedSubcategory:cat?.subcategories[0]?.slug||"",suggestedThird:""});}}>{ACTIVE_CATEGORIES.map(c=><option key={c.slug} value={c.slug}>{c.name}</option>)}</select></label><label className="text-xs font-bold text-white">Subcategory<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedSubcategory} onChange={e=>patchReview(x.id,{suggestedSubcategory:e.target.value,suggestedThird:""})}>{choices.map(c=><option key={c.slug} value={c.slug}>{c.name}</option>)}</select></label><label className="text-xs font-bold text-white">Third-level category<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedThird} onChange={e=>patchReview(x.id,{suggestedThird:e.target.value})}><option value="">None / review later</option>{thirdOptions.map(t=><option key={t.slug} value={t.slug}>{t.name}{t.visible?"":" (hidden)"}</option>)}</select></label></Fragment>)}</div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">{chosen&&!chosen.visible?<label className="flex items-center gap-2 text-xs font-bold text-white"><input type="checkbox" checked={enableThirdIds.includes(x.id)} onChange={e=>setEnableThirdIds(prev=>e.target.checked?[...prev,x.id]:prev.filter(id=>id!==x.id))}/> Enable this hidden third-level category on the site</label>:<span className="text-xs text-slate-200">{chosen?"Third-level already enabled":"No third-level selected"}</span>}<button disabled={reviewBusy===x.id} onClick={()=>void approveReview(x)} className="rounded-lg border-2 border-blue-200 !bg-[#114ab1] px-4 py-2 text-sm font-black !text-white hover:!bg-[#1d63c7]">{reviewBusy===x.id?"Saving…":x.approved?"Save Changes / Reapprove":"Approve & Mark Checked"}</button></div>
         </div>})}{!reviewLoading&&!reviews.length&&<p className="text-white">No listings left to review.</p>}</div></section></div>}
-      {actionSuccess&&<p role="status" className="my-2 rounded-lg border border-emerald-500 p-3 font-bold text-emerald-600 dark:text-emerald-300">{actionSuccess}</p>}
       {actionError&&<p role="alert" className="my-2 rounded-lg border border-red-500 p-3 font-bold text-red-500">{actionError}</p>}
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -347,6 +364,14 @@ export function AdminListingsPage() {
 
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <span className="text-xs font-semibold text-slate-600 dark:text-slate-200">Select or export current page (up to {LIMIT} listings)</span>
+      </div>
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <button type="button" onClick={() => void deleteListings([...selectedIds])}
+          disabled={deleteBusy || rowBusy !== null || !selectedIds.length}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-red-700 px-3 py-2 text-sm font-bold text-white hover:bg-red-800 disabled:opacity-50">
+          <Trash2 className="h-4 w-4" /> {deleteBusy ? "Deleting…" : selectedIds.length ? `Delete selected (${selectedIds.length})` : "Delete selected"}
+        </button>
+        {deleteMessage && <p role="status" className="whitespace-pre-line text-sm">{deleteMessage}</p>}
       </div>
       <div className="mb-3"><AdminBulkSelection selected={selectedIds}
         rows={listings.map(l=>({id:String(l.id),cells:[l.public_id??"",l.title,l.status,l.category,l.price,l.currency,l.seller_email]}))}
@@ -460,7 +485,7 @@ export function AdminListingsPage() {
                         <button type="button" onClick={()=>setSharingId(sharingId===l.id?null:l.id)} aria-expanded={sharingId===l.id} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-orange-500 bg-[#2d344b] px-3 py-2 text-xs font-bold text-white hover:bg-[#3d4f68]"><Flag className="h-3.5 w-3.5"/>Sharing &amp; trust</button>
                         <button type="button" onClick={()=>setEditingId(l.id)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border-2 border-white bg-blue-700 px-3 py-2 text-xs font-black !text-white hover:bg-blue-600 dark:bg-blue-600 dark:text-white"><Pencil className="inline h-3 w-3"/> Edit Listing</button>
                         <button type="button" disabled={rowBusy===l.id||l.status==="inactive"} onClick={()=>void hideListing(l.id)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border-2 border-white bg-amber-700 px-3 py-2 text-xs font-black !text-white hover:bg-amber-500 dark:bg-amber-600 dark:text-white disabled:cursor-not-allowed disabled:opacity-60"><EyeOff className="inline h-3 w-3"/> Hide</button>
-                        <button type="button" disabled={rowBusy===l.id} onClick={()=>void deleteListing(l.id)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border-2 border-white bg-red-700 px-3 py-2 text-xs font-black !text-white hover:bg-red-600 dark:bg-red-600 dark:text-white disabled:cursor-not-allowed disabled:opacity-60"><Trash2 className="inline h-3 w-3"/> Delete</button>
+                        <button type="button" disabled={deleteBusy||rowBusy===l.id} onClick={()=>void deleteListings([String(l.id)])} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border-2 border-white bg-red-700 px-3 py-2 text-xs font-black !text-white hover:bg-red-600 dark:bg-red-600 dark:text-white disabled:cursor-not-allowed disabled:opacity-60"><Trash2 className="inline h-3 w-3"/> Delete</button>
                       
                       </div>
                       {sharingId===l.id&&<div className="mt-3 rounded-xl border border-orange-500 bg-[#132a48] p-4 text-white"><h4 className="mb-2 text-sm font-extrabold">Sharing &amp; trust · Listing #{l.id}</h4><div className="flex flex-wrap gap-2"><button type="button" onClick={()=>void copyAdminListingLink(l)} className="rounded-lg border border-[#6b88ab] px-3 py-2 text-xs font-bold hover:bg-[#284a70]"><Link2 className="mr-1 inline h-3.5 w-3.5"/>Copy public URL</button><a href={publicListingUrl(l)} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-[#6b88ab] px-3 py-2 text-xs font-bold text-white hover:bg-[#284a70]"><ExternalLink className="mr-1 inline h-3.5 w-3.5"/>Open listing</a><a href="/admin/support" className="rounded-lg border border-orange-500 px-3 py-2 text-xs font-bold text-orange-200 hover:bg-[#284a70]"><Flag className="mr-1 inline h-3.5 w-3.5"/>Review support tickets</a></div><p className="mt-2 text-xs text-slate-200">Listing reports are submitted as support tickets. Review incoming reports in the support workspace before changing listing visibility.</p></div>}
