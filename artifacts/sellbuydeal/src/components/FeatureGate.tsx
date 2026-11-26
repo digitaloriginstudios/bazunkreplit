@@ -1,19 +1,20 @@
 import { Link } from "wouter";
 import { useRawSettings, useSettingsLoaded } from "@/context/SiteSettingsContext";
 import { Power } from "lucide-react";
-
 export function isFeatureEnabled(settings: Record<string,string>, key:string){ return settings[`feature_${key}`] === "true"; }
 export function useFeature(key:string){ const settings=useRawSettings(); const loaded=useSettingsLoaded(); return loaded && isFeatureEnabled(settings, key); }
 export function FeatureVisible({feature,children}:{feature:string;children:React.ReactNode}){ return useFeature(feature) ? <>{children}</> : null; }
 export function featureForHref(href:string):string|undefined {
   const [path,query=""]=href.split("?");
   const section=new URLSearchParams(query).get("section");
+  if(path==="/swap"||path.startsWith("/swap/")||path==="/dashboard/swaps") return "swaps";
   if(path==="/dashboard" && section==="go-live") return "live";
   if(path==="/sell/snap") return "snap_sell";
   if(path==="/sell/quick" || path==="/sell/direct") return "quick_sell";
   if(path==="/bundle") return "bundles";
   if(path==="/credits") return "credits";
   if(path==="/rewards/referrals") return "referrals";
+
   if(path.startsWith("/trust-proof")) return "trust_proof";
   if(path.startsWith("/deal-pilot")) return "deal_pilot";
   if(path.startsWith("/find-it")) return "find_it";

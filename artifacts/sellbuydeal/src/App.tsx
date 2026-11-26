@@ -1,3 +1,4 @@
+import SwapPage from "@/pages/SwapPage";
 import AffiliatesPage,{AffiliateTracking} from "@/pages/AffiliatesPage";
 import {AdminAffiliatesPage} from "@/pages/admin/AdminAffiliatesPage";
 import BulkImportPage from "@/pages/BulkImportPage";
@@ -444,6 +445,10 @@ function Router() {
       <Route path="/register">{() => <Redirect to="/sign-up" />}</Route>
       <Route path="/categories" component={CategoriesPage} />
       <Route path="/sell" component={SellPage} />
+      <Route path="/swap/create">{() => <FeatureGate feature="swaps" name="Bazunk Swap"><SwapPage /></FeatureGate>}</Route>
+      <Route path="/swap/:id">{() => <FeatureGate feature="swaps" name="Bazunk Swap"><SwapPage /></FeatureGate>}</Route>
+      <Route path="/swap">{() => <FeatureGate feature="swaps" name="Bazunk Swap"><SwapPage /></FeatureGate>}</Route>
+      <Route path="/dashboard/swaps">{() => <FeatureGate feature="swaps" name="Bazunk Swap"><SwapPage /></FeatureGate>}</Route>
       <Route path="/sell/import" component={BulkImportPage} />
       <Route path="/sell/snap">{() => <FeatureGate feature="snap_sell" name="Snap & Sell"><SnapSellPage /></FeatureGate>}</Route>
       <Route path="/sell/direct">{() => <FeatureGate feature="quick_sell" name="Direct Sale"><DirectSalePage /></FeatureGate>}</Route>
