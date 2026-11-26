@@ -7,6 +7,7 @@ import {
   CheckSquare, Square, ArrowDownToLine, User, Globe, Plus, FileText,
 } from "lucide-react";
 import { AdminLayout } from "./AdminLayout";
+import { AliExpressPageLinks } from "./AliExpressPageLinks";
 import { AliExpressConnectionPanel } from "./AliExpressConnectionPanel";
 import { RapidApiPanel } from "./RapidApiPanel";
 import { ImportModal } from "@/components/ImporterSection";
@@ -1437,6 +1438,7 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
                 <div><h2 className="font-black text-gray-900">Find AliExpress products</h2><p className="text-sm text-gray-500">Paste one or more product links to prepare an import, just like eBay and Amazon.</p></div>
               </div>
               <div className="p-4 sm:p-5 space-y-3">
+                <AliExpressPageLinks setProductUrls={setAliUrls} />
                 <label className="block text-sm font-bold text-gray-700">Product URLs · up to 50</label>
                 <textarea rows={3} value={aliUrls} onChange={e=>setAliUrls(e.target.value)} placeholder="Paste AliExpress item links here, one per line" className={inputCls+" w-full min-h-24 break-all"} />
                 <button type="button" className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-white font-bold text-sm" onClick={()=>{
