@@ -1,3 +1,4 @@
+import {useSeoMetadata} from "@/hooks/useSeoMetadata";
 import { useEffect,useState } from "react";
 import { Link,useLocation } from "wouter";
 import { useAuth } from "@clerk/react";
@@ -27,6 +28,8 @@ export default function SwapPage(){
  const r=await fetch("/api/swaps",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({...draft,valueMinor:Math.round(Number(draft.value)*100)})});
  const data=await r.json();if(!r.ok)throw Error(data.error||"Unable to create listing");setDraft(initial);navigate("/dashboard/swaps");
  }catch(e){setError(e instanceof Error?e.message:"Unable to create listing");}finally{setBusy(false);}}
+ const seoItem=detail&&items[0]?.id===detail?items[0]:null;
+ useSeoMetadata(create||mine?null:detail?(seoItem?{title:seoItem.title+" | Bazunk Swap",description:seoItem.description.slice(0,160),url:"https://www.bazunk.com/swap/"+seoItem.id,schema:{"@context":"https://schema.org","@type":"WebPage",name:seoItem.title,description:seoItem.description,url:"https://www.bazunk.com/swap/"+seoItem.id}}:null):{title:"Bazunk Swap | Exchange products",description:"Discover products to exchange and find items matching your wanted list.",url:"https://www.bazunk.com/swap"});
  const visible=items.filter(i=>!mine||!search||[i.title,i.category,i.wanted].join(" ").toLowerCase().includes(search.toLowerCase()));
  return <><Navbar/><main className="mx-auto max-w-6xl space-y-5 px-4 py-8 pb-24 text-slate-900">
  <section className="rounded-2xl bg-[#123568] p-6 text-white"><ArrowLeftRight size={36}/><h1 className="mt-2 text-3xl font-black">Bazunk Swap</h1><p>Swap what you have. Get what you want.</p><p className="mt-2 text-sm">Preview: negotiate exchanges. Test-mode cash checkout only. Do not dispatch items; live exchange protection is not yet available.</p></section>
@@ -45,7 +48,7 @@ export default function SwapPage(){
  {!mine&&!detail&&<div className="flex gap-3"><button disabled={offset===0||loading} onClick={()=>setOffset(n=>Math.max(0,n-50))}>Previous</button><button disabled={items.length<50||loading||offset>=10000} onClick={()=>setOffset(n=>n+50)}>Next</button></div>}</>}
  {isSignedIn&&!create&&!detail&&<SwapDiscovery/>}
  {isSignedIn&&detail&&items.length>0&&<SwapSave id={detail}/>}
- {mine&&isSignedIn&&<SwapActivity/>}
+ {mine&&isSignedIn&&<><SwapNotificationPreferences/><SwapActivity/></>}
  {(mine||detail)&&!create&&<Negotiation key={path} target={detail} mine={mine}/>}
  </main><Footer/></>;
 }
@@ -188,4 +191,10 @@ function SwapPhotoUpload({id}:{id:string}){
 function SwapAddress({offer}:{offer:Offer}){
  const api=useSwapPrivateApi();const [open,setOpen]=useState(false),[draft,setDraft]=useState({name:"",line1:"",line2:"",city:"",postcode:"",country:"United Kingdom"}),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
  return <div className="rounded-xl border p-3"><button onClick={()=>{setOpen(!open);if(!open)void api("/offers/"+offer.id+"/address").then(d=>{if(d.own)setDraft(d.own);}).catch(e=>setNotice(e.message));}}>Private delivery address</button>{open&&<form className="space-y-2" onSubmit={async e=>{e.preventDefault();setBusy(true);try{await api("/offers/"+offer.id+"/address",draft);setNotice("Address stored privately. Sharing is not enabled in this preview.");}catch(e){setNotice(e instanceof Error?e.message:"Save failed");}finally{setBusy(false);}}}><p>Preview only. Do not enter real delivery details or dispatch products.</p>{(Object.keys(draft) as (keyof typeof draft)[]).map(k=><label key={k} className="block capitalize">{k}<input className={field} maxLength={150} required={k!=="line2"} value={draft[k]} onChange={e=>setDraft(d=>({...d,[k]:e.target.value}))}/></label>)}<button className={button} disabled={busy}>Save private address</button></form>}{notice&&<p role="status">{notice}</p>}</div>;
+}
+
+function SwapNotificationPreferences(){
+ const api=useSwapPrivateApi();const [prefs,setPrefs]=useState<{match_email:boolean;activity_email:boolean}|null>(null),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
+ useEffect(()=>{void api("/notification-preferences").then(setPrefs).catch(e=>setNotice(e.message));},[]);
+ return <section className="space-y-2 rounded-xl border p-4"><h2 className="font-bold">Swap email preferences</h2>{prefs&&<><label className="block"><input type="checkbox" checked={prefs.match_email} onChange={e=>setPrefs(p=>p&&({...p,match_email:e.target.checked}))}/> Email me about mutual swap matches</label><label className="block"><input type="checkbox" checked={prefs.activity_email} onChange={e=>setPrefs(p=>p&&({...p,activity_email:e.target.checked}))}/> Email me about exchange activity</label><button className={button} disabled={busy} onClick={async()=>{setBusy(true);try{await api("/notification-preferences",prefs);setNotice("Preferences saved.");}catch(e){setNotice(e instanceof Error?e.message:"Save failed");}finally{setBusy(false);}}}>Save preferences</button></>}{notice&&<p role="status">{notice}</p>}</section>;
 }
