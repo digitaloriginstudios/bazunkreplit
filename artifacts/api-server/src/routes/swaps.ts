@@ -1,3 +1,4 @@
+import { getUncachableStripeClient } from "../stripeClient.js";
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
@@ -29,6 +30,7 @@ function ensureTables(){
  await db.execute(sql`UPDATE swap_offers SET last_actor_email=proposer_email WHERE last_actor_email IS NULL`);
  await db.execute(sql`ALTER TABLE swap_offers ALTER COLUMN last_actor_email SET NOT NULL`);
  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS swap_pending_pair ON swap_offers(target_id,offered_id) WHERE status='pending'`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_payments(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),offer_id UUID NOT NULL REFERENCES swap_offers(id),payer_email TEXT NOT NULL,amount_minor INTEGER NOT NULL CHECK(amount_minor>0),fee_minor INTEGER NOT NULL DEFAULT 0 CHECK(fee_minor>=0),session_id TEXT UNIQUE,intent_id TEXT UNIQUE,status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','paid','refund_pending','refunded')),created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(offer_id,payer_email))`);
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_events (
  id BIGSERIAL PRIMARY KEY, offer_id UUID NOT NULL REFERENCES swap_offers(id),
  actor_email TEXT NOT NULL, event TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
@@ -133,6 +135,60 @@ router.get("/swaps/offers/:id/history",async(req,res)=>{
  res.setHeader("Cache-Control","private, no-store");
  res.json({items:(await db.execute(sql`SELECT event,created_at,(actor_email=${email}) AS is_mine FROM swap_events WHERE offer_id=${id} ORDER BY id`)).rows});
  }catch{res.status(503).json({error:"History unavailable"});}
+});
+
+
+async function paymentOffer(id:string,email:string){
+ return (await db.execute(sql`SELECT o.id,o.cash_minor,o.status,o.proposer_email,t.owner_email AS target_email FROM swap_offers o JOIN swap_listings t ON t.id=o.target_id JOIN swap_listings p ON p.id=o.offered_id WHERE o.id=${id} AND (t.owner_email=${email} OR p.owner_email=${email})`)).rows[0];
+}
+async function paymentRecord(id:string,email:string){
+ return (await db.execute(sql`SELECT * FROM swap_payments WHERE offer_id=${id} AND payer_email=${email}`)).rows[0];
+}
+router.get("/swaps/offers/:id/payment",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id;
+ if(!uuid(id)){res.status(400).json({error:"Invalid offer ID"});return;}
+ const o=await paymentOffer(id,email);if(!o){res.status(404).json({error:"Offer unavailable"});return;}
+ const rows=(await db.execute(sql`SELECT amount_minor,fee_minor,status,(payer_email=${email}) AS is_mine FROM swap_payments WHERE offer_id=${id}`)).rows;
+ res.setHeader("Cache-Control","private, no-store");res.json({status:o.status,cashMinor:o.cash_minor,payments:rows,testEnabled:process.env.SWAP_TEST_PAYMENTS_ENABLED==="true"});
+ }catch{res.status(503).json({error:"Payment status unavailable"});}
+});
+router.post("/swaps/offers/:id/payment/checkout",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id;
+ if(!uuid(id)){res.status(400).json({error:"Invalid offer ID"});return;}
+ if(process.env.SWAP_TEST_PAYMENTS_ENABLED!=="true"){res.status(503).json({error:"Swap payments are disabled"});return;}
+ const stripe=await getUncachableStripeClient();
+ // Explicitly refuse live-mode keys: fulfilment and payout are not implemented.
+ const accountBalance=await stripe.balance.retrieve();
+ if(accountBalance.livemode){res.status(503).json({error:"Swap checkout requires Stripe test mode"});return;}
+ const o=await paymentOffer(id,email);if(!o||o.status!=="accepted"){res.status(409).json({error:"Accepted offer required"});return;}
+ const cash=Number(o.cash_minor),payer=cash>0?o.proposer_email:o.target_email;
+ if(!cash||payer!==email||Math.abs(cash)<30){res.status(409).json({error:"No payable cash adjustment, or below the Stripe minimum"});return;}
+ // Fee remains zero until the two-sided protection policy is approved.
+ await db.execute(sql`INSERT INTO swap_payments(offer_id,payer_email,amount_minor,fee_minor) VALUES(${id},${email},${Math.abs(cash)},0) ON CONFLICT(offer_id,payer_email) DO NOTHING`);
+ const p=await paymentRecord(id,email);if(!p||p.status!=="pending"){res.status(409).json({error:"Payment already processed or closed"});return;}
+ if(Date.now()-new Date(String(p.created_at)).getTime()>23*3600000){res.status(409).json({error:"Checkout recovery window elapsed; contact support"});return;}
+ const session=p.session_id?await stripe.checkout.sessions.retrieve(String(p.session_id)):await stripe.checkout.sessions.create({
+ mode:"payment",payment_method_types:["card"],customer_email:email,
+ line_items:[{price_data:{currency:"gbp",unit_amount:Number(p.amount_minor)+Number(p.fee_minor),product_data:{name:"Bazunk Swap test cash adjustment"}},quantity:1}],
+ metadata:{kind:"bazunk_swap",offer_id:id,payment_id:String(p.id)},
+ success_url:"https://bazunk.com/dashboard/swaps?payment=return",cancel_url:"https://bazunk.com/dashboard/swaps?payment=cancel"
+ },{idempotencyKey:"swap-test-"+String(p.id)});
+ await db.execute(sql`UPDATE swap_payments SET session_id=${session.id} WHERE id=${p.id} AND (session_id IS NULL OR session_id=${session.id})`);
+ if(session.livemode||session.status!=="open"||!session.url){res.status(409).json({error:"Checkout is closed; verify payment status"});return;}
+ res.json({url:session.url});
+ }catch{res.status(503).json({error:"Could not open test checkout"});}
+});
+router.post("/swaps/offers/:id/payment/verify",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id;
+ if(!uuid(id)){res.status(400).json({error:"Invalid offer ID"});return;}
+ const p=await paymentRecord(id,email);if(!p||!p.session_id){res.status(404).json({error:"Payment unavailable"});return;}
+ const stripe=await getUncachableStripeClient(),s=await stripe.checkout.sessions.retrieve(String(p.session_id));
+ if(s.livemode||s.metadata?.kind!=="bazunk_swap"||s.metadata?.offer_id!==id||s.metadata?.payment_id!==String(p.id)||s.currency!=="gbp"||s.amount_total!==Number(p.amount_minor)+Number(p.fee_minor)){res.status(409).json({error:"Payment verification mismatch"});return;}
+ if(s.payment_status==="paid"&&s.status==="complete"&&typeof s.payment_intent==="string"){
+ await db.execute(sql`UPDATE swap_payments SET status='paid',intent_id=${s.payment_intent},updated_at=NOW() WHERE id=${p.id} AND status='pending'`);
+ }
+ const latest=await paymentRecord(id,email);res.json({status:latest?.status});
+ }catch{res.status(503).json({error:"Payment verification unavailable"});}
 });
 
 export default router;
