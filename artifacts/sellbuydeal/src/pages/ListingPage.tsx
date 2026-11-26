@@ -74,7 +74,7 @@ function normaliseCondition(raw: unknown): string {
 }
 
 type SpecRow = { key: string; value: string };
-type ApiListingExtra = { _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string; dispatchTime?: string; deliveryEstimate?: string };
+type ApiListingExtra = { _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string; isAliExpress?: boolean; dispatchTime?: string; deliveryEstimate?: string };
 
 const TAG_COLORS = [
   "bg-[#4A5CE8]/10 text-[#4A5CE8]",
@@ -89,10 +89,12 @@ const TAG_COLORS = [
 function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & ApiListingExtra {
   let parsedSpecs: SpecRow[] | undefined;
   let gallery: string[] = [];
+  let isAliExpress = false;
   let dispatchTime: string | undefined;
   let deliveryEstimate: string | undefined;
   try {
     const parsed = typeof l.specifications === "string" ? JSON.parse(l.specifications) : l.specifications;
+    isAliExpress = typeof parsed?.source === "string" && parsed.source.toLowerCase() === "aliexpress";
     dispatchTime = typeof parsed?.dispatch_time === "string" ? parsed.dispatch_time : undefined;
     deliveryEstimate = typeof parsed?.delivery_estimate === "string" ? parsed.delivery_estimate : undefined;
     parsedSpecs = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.details) ? parsed.details : [];
@@ -123,7 +125,7 @@ function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & A
     _tags: tagsRaw,
     _specifications: parsedSpecs,
     _gallery: gallery,
-    dispatchTime, deliveryEstimate,
+    isAliExpress, dispatchTime, deliveryEstimate,
     shipOrigin: (l.shipOrigin as string) ?? undefined,
     shipOriginOther: (l.shipOriginOther as string) ?? undefined,
     shipZone: (l.shipZone as string) ?? undefined,
@@ -240,7 +242,7 @@ export function ListingPage() {
   const { addToWatchlist, removeFromWatchlist, isWatched } = useWatchlist();
   const { makeOffer } = useOffers();
   const { formatPrice, country, currency } = useCurrency();
-  const listingPrice = (amount: number) => apiProduct?.listingCurrency && /^[A-Z]{3}$/.test(apiProduct.listingCurrency)
+  const listingPrice = (amount: number) => apiProduct?.isAliExpress && apiProduct.listingCurrency && /^[A-Z]{3}$/.test(apiProduct.listingCurrency)
     ? new Intl.NumberFormat(apiProduct.listingCurrency === "USD" ? "en-US" : "en-GB",
       { style: "currency", currency: apiProduct.listingCurrency }).format(amount)
     : formatPrice(amount);

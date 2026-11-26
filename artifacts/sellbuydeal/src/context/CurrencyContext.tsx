@@ -73,7 +73,8 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     try {
       const saved = localStorage.getItem(STORAGE_KEY) as CurrencyCode | null;
       if (saved && saved in CURRENCIES) return saved as CurrencyCode;
-      return countryToCurrency(countryCode);
+      // USD is the default for new visitors regardless of browser locale.
+      return "USD";
     } catch {
       return "GBP";
     }
