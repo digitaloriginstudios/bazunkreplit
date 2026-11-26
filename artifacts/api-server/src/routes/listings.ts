@@ -380,6 +380,25 @@ router.get("/listings/mine", async (req, res) => {
   }
 });
 
+
+// Public SEO inventory: never expose seller emails or hidden/demo listings.
+router.get("/seo/products",async(req,res)=>{
+ try{
+ const visible=await categoryVisibility();
+ const after=Math.max(0,Math.floor(Number(req.query.after)||0));
+ const rows=await db.select({id:listingsTable.id,publicId:listingsTable.publicId,title:listingsTable.title,description:listingsTable.description,price:listingsTable.price,currency:listingsTable.currency,image:listingsTable.image,condition:listingsTable.condition,updatedAt:listingsTable.updatedAt,sellerName:listingsTable.sellerName}).from(listingsTable).where(and(visible,eq(listingsTable.status,"active"),gt(listingsTable.id,after),sql`NOT EXISTS(SELECT 1 FROM demo_listing_registry d WHERE d.listing_id=${listingsTable.id})`)).orderBy(listingsTable.id).limit(500);
+ res.setHeader("Cache-Control","public, max-age=60");res.json(rows.map(normalizeListingMedia));
+ }catch(e){console.error("SEO inventory",e);res.status(503).json({error:"SEO inventory unavailable"});}
+});
+router.get("/seo/product-sitemap.xml",async(req,res)=>{
+ try{
+ const visible=await categoryVisibility();
+ const rows=await db.select({id:listingsTable.id,publicId:listingsTable.publicId,updatedAt:listingsTable.updatedAt}).from(listingsTable).where(and(visible,eq(listingsTable.status,"active"),sql`NOT EXISTS(SELECT 1 FROM demo_listing_registry d WHERE d.listing_id=${listingsTable.id})`)).orderBy(listingsTable.id).limit(50000);
+ const xml=rows.map(x=>"<url><loc>https://www.bazunk.com/listing/"+encodeURIComponent(String(x.publicId||x.id))+"</loc>"+(x.updatedAt?"<lastmod>"+new Date(x.updatedAt).toISOString()+"</lastmod>":"")+"</url>").join("");
+ res.type("application/xml").set("Cache-Control","public, max-age=300").send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+xml+'</urlset>');
+ }catch(e){console.error("SEO sitemap",e);res.status(503).send("Sitemap unavailable");}
+});
+
 router.get("/listings/:id", async (req, res) => {
   try {
     const rawId = decodeURIComponent(req.params.id).trim();
