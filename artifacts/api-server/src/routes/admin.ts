@@ -1,3 +1,4 @@
+import adminInternationalRouter from "./adminInternational.js";
 import { FEATURE_DEFINITIONS as PUBLIC_FEATURE_DEFINITIONS } from "../lib/featureFlags.js";
 import { shippingCountry, shippingZone, shipsToCountry } from "../lib/listingShipping.js";
 import { getAliExpressUsdToGbpRate, tidyAliExpressDescription } from "../lib/aliExpressImportDetails.js";
@@ -129,6 +130,7 @@ router.get("/cashback/settings",async(_req,res)=>{try{res.json(await readCashbac
 router.use(publicThemeStudioRouter);
 router.use("/admin", requireAdmin);
 router.use(adminThemeStudioRouter);
+router.use(adminInternationalRouter);
 router.use(adminFeatureControlsRouter);
 router.use(adminOperationsRouter);
 router.use(adminNavigationRouter); // real alerts and global search, after admin auth
