@@ -174,6 +174,13 @@ export function ListingPage() {
   const [apiProduct, setApiProduct] = useState<(typeof ALL_PRODUCTS[0] & ApiListingExtra) | null>(null);
   const [loading, setLoading] = useState(!staticProduct);
   const trustProofEnabled=useFeature("trust_proof");
+  const offersEnabled=useFeature("offers");
+  const messagingEnabled=useFeature("messaging");
+  const watchersEnabled=useFeature("watchers");
+  const protectionEnabled=useFeature("buyer_protection");
+  const verificationEnabled=useFeature("verification");
+  const promotionsEnabled=useFeature("promotions");
+  const recentlyViewedEnabled=useFeature("recently_viewed");
   const listingSettings=useRawSettings();
   const showSection=(key:string,defaultOn=true)=>listingSettings[`listing_section_${key}`] === undefined ? defaultOn : listingSettings[`listing_section_${key}`] !== "false";
   const [informationTab,setInformationTab]=useState<"details"|"trust">("details");
@@ -199,12 +206,13 @@ export function ListingPage() {
       window.history.replaceState(window.history.state,"",`/listing/${token}`);
     }
   },[apiProduct?._publicUrlToken,id]);
-  useEffect(() => { if (apiProduct?.id) rememberViewedListing(Number(apiProduct.id)); }, [apiProduct?.id]);
+  useEffect(() => { if (recentlyViewedEnabled && apiProduct?.id) rememberViewedListing(Number(apiProduct.id)); }, [apiProduct?.id, recentlyViewedEnabled]);
   const { user: viewer } = useAuth();
   const { session } = useSession();
   const [startingMessage, setStartingMessage] = useState(false);
 
   async function handleMessageSeller() {
+    if (!messagingEnabled) return;
     if (!viewer || !session) { navigate(`/sign-in?redirect=${encodeURIComponent(`/listing/${id}`)}`); return; }
     if (!apiProduct?.id) { window.dispatchEvent(new CustomEvent("bazunk:open-message-center")); return; }
     try {
@@ -373,6 +381,7 @@ export function ListingPage() {
   }
 
   function handleWatchlist() {
+    if (!watchersEnabled) return;
     if (!product) return;
     if (isWatched(product.id)) {
       removeFromWatchlist(product.id);
@@ -389,6 +398,7 @@ export function ListingPage() {
   const offerRatio = product ? offerPrice / product.price : 0;
 
   async function handleSendOffer() {
+    if (!offersEnabled) return;
     if (!offerPrice || offerPrice <= 0 || !product) return;
     if (!session) {navigate(`/sign-in?redirect=${encodeURIComponent(`/listing/${id}`)}`);return;}
     if(!apiProduct?.id){setOfferError("Offers are available for live marketplace listings only");return;}
@@ -483,7 +493,7 @@ export function ListingPage() {
         <div className="lg:hidden relative mb-3 rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-600 dark:bg-[#132742]" aria-label="Listing actions">
           <div className="grid grid-cols-3 gap-2">
             <button type="button" onClick={()=>{setShareOpen(open=>!open);setReportOpen(false);}} aria-expanded={shareOpen} className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-slate-300 text-sm font-bold text-slate-900 dark:border-slate-500 dark:text-white"><Share2 className="h-4 w-4"/>Share</button>
-            <button type="button" onClick={handleWatchlist} aria-pressed={isWatched(product.id)} className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-slate-300 text-sm font-bold text-slate-900 dark:border-slate-500 dark:text-white"><Heart className="h-4 w-4"/> {isWatched(product.id)?"Saved":"Save"}</button>
+            {watchersEnabled && <button type="button" onClick={handleWatchlist} aria-pressed={isWatched(product.id)} className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-slate-300 text-sm font-bold text-slate-900 dark:border-slate-500 dark:text-white"><Heart className="h-4 w-4"/> {isWatched(product.id)?"Saved":"Save"}</button>}
             <button type="button" onClick={()=>{setReportOpen(true);setShareOpen(false);}} className="flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-rose-400 text-sm font-bold text-rose-800 dark:text-rose-200"><Flag className="h-4 w-4"/>Report</button>
           </div>
           {shareOpen && <div className="absolute top-full left-0 right-0 z-50 mt-2 rounded-xl border border-slate-300 bg-white p-2 shadow-2xl dark:border-slate-600 dark:bg-[#132742]">
@@ -503,7 +513,7 @@ export function ListingPage() {
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full border capitalize ${CONDITION_COLORS[product.condition]}`}>
                       {product.condition}
                     </span>
-                    {product.verified && (
+                    {verificationEnabled && product.verified && (
                       <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-500 text-white flex items-center gap-1">
                         <CheckCircle2 className="w-3 h-3" /> Identity verified
                       </span>
@@ -558,7 +568,7 @@ export function ListingPage() {
 
             <section className="bz-mockup-product-summary" aria-label="Product overview">
               <h1 className="bz-mockup-product-title">{product.title}</h1>
-              <div className="bz-mockup-product-seller"><span className="bz-mockup-condition">{product.condition}</span><span>Sold by {(product as typeof product & ApiListingExtra)._sellerName || (product as typeof product & ApiListingExtra)._sellerUsername || "Marketplace seller"}</span>{product.verified&&<CheckCircle2 size={18} className="text-emerald-500" aria-label="Identity verified"/>}</div>
+              <div className="bz-mockup-product-seller"><span className="bz-mockup-condition">{product.condition}</span><span>Sold by {(product as typeof product & ApiListingExtra)._sellerName || (product as typeof product & ApiListingExtra)._sellerUsername || "Marketplace seller"}</span>{verificationEnabled&&product.verified&&<CheckCircle2 size={18} className="text-emerald-500" aria-label="Identity verified"/>}</div>
               <div className="bz-mockup-product-price">{listingPrice((option?.price ?? product.price) + (product.variants?.reduce((sum,v)=>sum+(v.options.find(o=>o.value===selectedVariants[v.type])?.priceDelta??0),0)??0))}</div>
               <div className="bz-mockup-product-stock"><CheckCircle2 size={20}/> {isDemoListing?"Currently unavailable":shownQuantity!=null?(shownQuantity!>0?"In stock ("+shownQuantity+" available)":"Out of stock"):"Check availability with seller"}</div>
 
@@ -680,7 +690,7 @@ export function ListingPage() {
                     {/* Stats row */}
                     {showSection("stats",false)&&<div className="flex items-center gap-4 pt-3 border-t border-gray-100 text-xs text-slate-600">
                       <span className="flex items-center gap-1.5"><Eye className="w-3.5 h-3.5" />{product.views.toLocaleString()} views</span>
-                      <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" />{product.watchers} watching</span>
+                      {watchersEnabled && <span className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" />{product.watchers} watching</span>}
                     </div>}
                     <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-slate-300 bg-slate-50 p-2.5 dark:border-[#3b5172] dark:bg-[#10223d]">
                       {showSection("sharing")&&<div className="relative">
@@ -688,7 +698,7 @@ export function ListingPage() {
                         {shareOpen&&<div className="absolute bottom-full left-0 z-50 mb-2 w-60 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-300 bg-white p-2 shadow-2xl dark:border-[#496286] dark:bg-[#132742]">{([["Copy link",()=>void copyListingUrl()],["WhatsApp",()=>shareTo("whatsapp")],["Facebook",()=>shareTo("facebook")],["X (Twitter)",()=>shareTo("x")],["Email",()=>shareTo("email")],["More options",()=>shareTo("native")]] as [string,()=>void][]).map(([label,fn])=><button type="button" key={label} onClick={()=>{fn();if(label==="Copy link")setShareOpen(false);}} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-slate-900 hover:bg-orange-100 dark:text-white dark:hover:bg-[#29466e]">{label}</button>)}</div>}
                       </div>}
                       {showSection("sharing")&&<button type="button" onClick={()=>void copyListingUrl()} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-900 hover:bg-slate-200 dark:border-[#496286] dark:text-white dark:hover:bg-[#29466e]"><Copy className="h-4 w-4"/>{copied?"Copied!":"Copy link"}</button>}
-                      <button type="button" onClick={handleWatchlist} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-900 hover:bg-slate-200 dark:border-[#496286] dark:text-white dark:hover:bg-[#29466e]"><Heart className="h-4 w-4"/>Save</button>
+                      {watchersEnabled && <button type="button" onClick={handleWatchlist} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 text-sm font-bold text-slate-900 hover:bg-slate-200 dark:border-[#496286] dark:text-white dark:hover:bg-[#29466e]"><Heart className="h-4 w-4"/>Save</button>}
                       <button type="button" onClick={()=>{setReportOpen(true);setShareOpen(false);}} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-rose-400 px-3 text-sm font-bold text-rose-800 hover:bg-rose-50 dark:border-rose-500 dark:text-rose-200 dark:hover:bg-[#3c2740]" data-testid="button-report"><Flag className="h-4 w-4"/>{reported?"Report submitted":"Report listing"}</button>
                     </div>
                     {reportOpen&&<div className="fixed inset-x-3 top-[8vh] z-[100] max-h-[84dvh] overflow-y-auto rounded-xl border border-orange-400 bg-white p-4 shadow-2xl dark:bg-[#10223d] dark:text-white lg:static lg:inset-auto lg:max-h-none lg:shadow-lg"><h3 className="text-lg font-bold">Report this listing</h3><p className="mb-3 text-sm text-slate-600 dark:text-slate-200">Your report goes to Bazunk support for review. Reporting does not automatically remove a listing.</p><form onSubmit={e=>void submitListingReport(e)} className="space-y-3"><label className="block text-sm font-semibold">Reason<select required value={reportReason} onChange={e=>setReportReason(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-400 bg-white p-2.5 text-slate-900 dark:border-[#587096] dark:bg-[#192f4d] dark:text-white"><option value="">Select a reason</option>{["Scam or fraudulent","Prohibited item","Wrong category","Counterfeit / fake item","Abusive content","Misleading description","Other"].map(x=><option key={x} value={x}>{x}</option>)}</select></label>{!viewer?.email&&<label className="block text-sm font-semibold">Your email<input required type="email" value={reportEmail} onChange={e=>setReportEmail(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-400 bg-white p-2.5 text-slate-900 dark:border-[#587096] dark:bg-[#192f4d] dark:text-white"/></label>}<label className="block text-sm font-semibold">Additional details<textarea value={reportDetails} maxLength={2000} onChange={e=>setReportDetails(e.target.value)} placeholder="Explain the issue (optional)" className="mt-1 w-full rounded-lg border border-slate-400 bg-white p-2.5 text-slate-900 dark:border-[#587096] dark:bg-[#192f4d] dark:text-white"/></label>{reportError&&<p role="alert" className="text-sm font-semibold text-red-700 dark:text-red-300">{reportError}</p>}<div className="flex gap-2"><button type="submit" disabled={reportBusy} className="rounded-lg bg-orange-600 px-4 py-2.5 font-bold text-white hover:bg-orange-700 disabled:opacity-50">{reportBusy?"Submitting…":"Submit report"}</button><button type="button" onClick={()=>setReportOpen(false)} className="rounded-lg border border-slate-400 px-4 py-2.5 font-bold text-slate-800 dark:text-white">Cancel</button></div></form></div>}
@@ -738,7 +748,7 @@ export function ListingPage() {
             })()}
 
             {/* Trust signals: colourful, high-contrast reassurance cards. */}
-            {showSection("buyer_protection")&&<section className="bz-listing-safety rounded-2xl p-5" aria-label="Buying safely">
+            {protectionEnabled&&showSection("buyer_protection")&&<section className="bz-listing-safety rounded-2xl p-5" aria-label="Buying safely">
               <div className="flex items-center gap-3 mb-5"><span className="bz-safety-heading-icon"><Shield aria-hidden="true" /></span><div><h3 className="text-xl font-extrabold">Buying safely</h3><p className="text-sm bz-safety-subtitle">Shop confidently with Bazunk</p></div></div>
               <div className="grid sm:grid-cols-2 gap-4 mb-5">
                 <div className="bz-safety-tile bz-safety-checkout"><span className="bz-safety-icon"><Shield aria-hidden="true"/></span><h4 className="font-extrabold text-base">Secure Checkout</h4><p className="text-sm">Pay securely through Bazunk</p></div>
@@ -828,26 +838,26 @@ export function ListingPage() {
               </button>
 
               {/* Make an Offer */}
-              <button
+              {offersEnabled && <button
                 onClick={() => setOfferOpen(true)}
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm border-2 border-[#4A5CE8] bg-[#4A5CE8]/10 text-[#4A5CE8] hover:bg-[#4A5CE8]/20 transition-colors mb-2.5"
                 data-testid="button-make-offer"
               >
                 <Tag className="w-4 h-4" /> {t("makeOffer")}
-              </button>
+              </button>}
 
               {/* Message Seller */}
-              <button
+              {messagingEnabled && <button
                 onClick={handleMessageSeller}
                 disabled={startingMessage}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors mb-4 disabled:opacity-60"
                 data-testid="button-message-seller"
               >
                 <MessageSquare className="w-4 h-4" /> {startingMessage ? "Opening chat…" : t("messageSeller")}
-              </button>
+              </button>}
 
               {/* Watchlist */}
-              <button
+              {watchersEnabled && <button
                 onClick={handleWatchlist}
                 className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors border ${
                   product && isWatched(product.id)
@@ -858,7 +868,7 @@ export function ListingPage() {
               >
                 <Heart className={`w-4 h-4 ${product && isWatched(product.id) ? "fill-red-500" : ""}`} />
                 {watchToast === "added" ? "✓ Added to Watchlist!" : watchToast === "removed" ? "Removed" : product && isWatched(product.id) ? "Saved to Watchlist" : "Add to Watchlist"}
-              </button>
+              </button>}
 
               <p className="mt-4 rounded-xl bg-blue-50 border border-blue-100 px-3 py-2.5 text-xs leading-relaxed text-blue-900">
                 Pay securely through Bazunk. Any Buyer Protection fee and your final total are shown at checkout before payment.
@@ -867,7 +877,7 @@ export function ListingPage() {
               {/* Meta */}
               {showSection("stats",false)&&<div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100 text-xs text-slate-600">
                 <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" />{product.views} views</span>
-                <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{product.watchers} watching</span>
+                {watchersEnabled && <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" />{product.watchers} watching</span>}
                 <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{product.location}</span>
               </div>}
             </ListingPurchaseSection>
@@ -878,13 +888,13 @@ export function ListingPage() {
               sellerUsername={(product as typeof product & ApiListingExtra)._sellerUsername}
               sellerEmail={(product as typeof product & ApiListingExtra)._sellerEmail}
               location={product.location}
-              verified={product.verified}
+              verified={verificationEnabled && product.verified}
             /></ListingSellerSection>
 
             {/* Engagement contact buttons — shown when seller has engagement-boost promo */}
             {(() => {
               const promos: string[] = (product as unknown as { _promotions?: string[] })._promotions ?? [];
-              if (!promos.includes("engagement-boost")) return null;
+              if (!messagingEnabled || !promotionsEnabled || !promos.includes("engagement-boost")) return null;
               return (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                   <h3 className="text-sm font-bold text-gray-900 mb-3 flex items-center gap-2">
@@ -934,7 +944,7 @@ export function ListingPage() {
                       <p className="text-xs font-semibold text-gray-800 line-clamp-2 group-hover:text-[#4A5CE8] transition-colors">{p.title}</p>
                       <div className="flex items-center justify-between mt-2">
                         <span className="text-sm font-bold text-gray-900">{formatPrice(p.price)}</span>
-                        {p.verified && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
+                        {verificationEnabled && p.verified && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />}
                       </div>
                     </div>
                   </motion.div>
@@ -947,7 +957,7 @@ export function ListingPage() {
 
       {/* Make an Offer modal */}
       {createPortal(<AnimatePresence>
-        {offerOpen && product && (
+        {offersEnabled && offerOpen && product && (
           <>
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
