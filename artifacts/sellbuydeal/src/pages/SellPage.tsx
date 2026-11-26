@@ -4,7 +4,7 @@ import { featureForHref, isFeatureEnabled } from "@/components/FeatureGate";
 import { motion } from "framer-motion";
 import { Link } from "wouter";
 import {
-  Camera,
+  ArrowLeftRight, Camera,
   ShoppingCart,
   Gavel,
   Layers,
@@ -220,6 +220,7 @@ function FeeCalculator() {
 }
 
 const SELL_HUB_OPTIONS = [
+ {id:"swap",title:"Bazunk Swap",desc:"List an item and describe what you want in return.",href:"/swap/create",icon:ArrowLeftRight,colors:"from-blue-500 to-blue-700",border:"border-blue-600",label:"Create swap"},
  {id:"direct",title:"Direct Sale",desc:"Create a detailed listing with pricing, shipping and offers.",href:"/sell/direct",icon:ShoppingCart,colors:"from-[#ffad12] to-[#ff7900]",border:"border-[#ff9500]",label:"List item"},
  {id:"quick",title:"Quick Sale",desc:"Get your item listed quickly with the essentials.",href:"/sell/quick",icon:Zap,colors:"from-[#20b4ff] to-[#0067ff]",border:"border-[#087cff]",label:"List now"},
  {id:"auction",title:"List an Auction",desc:"Set a starting bid and let buyers compete.",href:"/auctions/create",icon:Gavel,colors:"from-[#b54bff] to-[#7921f1]",border:"border-[#9235ff]",label:"Create auction"},
@@ -232,6 +233,7 @@ function SellHubArtwork({kind}:{kind:string}) {
  return <div aria-hidden="true" className="relative mb-3 flex h-40 w-full items-center justify-center overflow-hidden rounded-2xl">
   <div className="absolute inset-0 bg-[repeating-conic-gradient(from_0deg_at_50%_78%,rgba(255,255,255,.8)_0deg,rgba(255,255,255,0)_13deg,rgba(255,255,255,0)_26deg)] opacity-65"/>
   <span className="absolute left-[18%] top-[26%] h-2 w-5 -rotate-12 rounded-full bg-current opacity-30"/><span className="absolute right-[17%] top-[37%] h-2 w-4 rotate-12 rounded-full bg-current opacity-30"/>
+  {kind==="swap"&&<div className="rounded-2xl bg-blue-600 p-6 text-white"><ArrowLeftRight size={64}/></div>}
   {kind==="direct"&&<><div className="relative rotate-[-10deg] rounded-[24px] bg-gradient-to-br from-amber-300 to-orange-600 p-6 text-white shadow-[0_12px_22px_rgba(238,120,15,.35)] ring-4 ring-white"><ShoppingBag size={64} strokeWidth={2.5}/></div><Zap className={common+" right-[22%] top-[14%] rotate-12 text-amber-500"} size={43} fill="#fbbf24"/></>}
   {kind==="quick"&&<><div className="relative rounded-full bg-gradient-to-br from-sky-300 via-blue-500 to-blue-700 p-7 text-white shadow-[0_12px_22px_rgba(23,108,233,.35)] ring-[7px] ring-sky-100"><Zap size={67} strokeWidth={2.8} fill="#ffdd51" className="text-yellow-300"/></div><Sparkles className={common+" right-[20%] top-[12%] text-blue-500"} size={25}/></>}
   {kind==="auction"&&<><div className="relative rotate-[-16deg] rounded-3xl bg-gradient-to-br from-purple-300 to-violet-700 p-5 text-white shadow-[0_12px_22px_rgba(127,51,222,.35)] ring-4 ring-white"><Gavel size={76} strokeWidth={2.6}/></div><Sparkles className={common+" right-[17%] top-[16%] text-violet-500"} size={30}/></>}
