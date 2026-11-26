@@ -8,6 +8,8 @@ export const statuses = [
   "withdrawn",
   "expired",
 ] as const;
+export const offerCurrencies = ["GBP", "USD", "EUR", "AUD", "CAD", "NZD", "CHF"] as const;
+export type OfferCurrency = (typeof offerCurrencies)[number];
 export type Offer = {
   id: string;
   productId: number;
@@ -26,7 +28,7 @@ export type Offer = {
   expiresAt: string;
   version: number;
   role: "buyer" | "seller";
-  currency: "GBP";
+  currency: OfferCurrency;
   paymentState: "none" | "pending" | "paid";
 };
 export function parseOffer(x: unknown): Offer {
@@ -45,7 +47,7 @@ export function parseOffer(x: unknown): Offer {
     typeof o.counterMessage !== "string" ||
     !statuses.includes(o.status) ||
     !["buyer", "seller"].includes(o.role) ||
-    o.currency !== "GBP" ||
+    !offerCurrencies.includes(o.currency) ||
     !["none", "pending", "paid"].includes(o.paymentState) ||
     !Number.isInteger(o.version) ||
     o.version < 1 ||
