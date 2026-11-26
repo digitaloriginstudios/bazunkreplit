@@ -36,6 +36,9 @@ function ensureTables(){
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_events (
  id BIGSERIAL PRIMARY KEY, offer_id UUID NOT NULL REFERENCES swap_offers(id),
  actor_email TEXT NOT NULL, event TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_messages(id BIGSERIAL PRIMARY KEY,offer_id UUID NOT NULL REFERENCES swap_offers(id),sender_email TEXT NOT NULL,body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+ await db.execute(sql`CREATE INDEX IF NOT EXISTS swap_messages_thread ON swap_messages(offer_id,id DESC)`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_activity_reads(event_id BIGINT NOT NULL REFERENCES swap_events(id),reader_email TEXT NOT NULL,PRIMARY KEY(event_id,reader_email))`);
  })().catch(e=>{setup=undefined;throw e;});
 }
 router.use("/swaps",async(_req,res,next)=>{
@@ -236,6 +239,42 @@ router.post("/swaps/offers/:id/delivery",async(req,res)=>{
  return {...result,bothConfirmed:Number(done?.total)===2};
  });res.json(result);
  }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Delivery update unavailable"});}
+});
+
+
+router.get("/swaps/activity",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;
+ const rows=(await db.execute(sql`SELECT e.id::text AS id,e.offer_id,e.event,e.created_at,t.title AS target_title,(n.event_id IS NULL) AS unread FROM swap_events e JOIN swap_offers o ON o.id=e.offer_id JOIN swap_listings t ON t.id=o.target_id JOIN swap_listings p ON p.id=o.offered_id LEFT JOIN swap_activity_reads n ON n.event_id=e.id AND n.reader_email=${email} WHERE (t.owner_email=${email} OR p.owner_email=${email}) AND e.actor_email<>${email} ORDER BY e.id DESC LIMIT 100`)).rows;
+ res.setHeader("Cache-Control","private, no-store");res.json({items:rows});
+ }catch{res.status(503).json({error:"Activity unavailable"});}
+});
+router.post("/swaps/activity/read",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const ids=req.body?.ids;
+ if(!Array.isArray(ids)||ids.length>100||ids.some(x=>typeof x!=="string"||!/^\d{1,18}$/.test(x))){res.status(400).json({error:"Invalid activity IDs"});return;}
+ await db.transaction(async tx=>{for(const id of ids)await tx.execute(sql`INSERT INTO swap_activity_reads(event_id,reader_email) SELECT e.id,${email} FROM swap_events e JOIN swap_offers o ON o.id=e.offer_id JOIN swap_listings t ON t.id=o.target_id JOIN swap_listings p ON p.id=o.offered_id WHERE e.id=${id}::bigint AND (t.owner_email=${email} OR p.owner_email=${email}) AND e.actor_email<>${email} ON CONFLICT DO NOTHING`);});res.json({ok:true});
+ }catch{res.status(503).json({error:"Could not mark activity read"});}
+});
+router.get("/swaps/offers/:id/messages",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id;
+ if(!uuid(id)||!await paymentOffer(id,email)){res.status(404).json({error:"Exchange unavailable"});return;}
+ const before=req.query.before??"9223372036854775807";
+ if(typeof before!=="string"||!/^\d{1,19}$/.test(before)||BigInt(before)>9223372036854775807n){res.status(400).json({error:"Invalid cursor"});return;}
+ const rows=(await db.execute(sql`SELECT id::text AS id,body,created_at,(sender_email=${email}) AS is_mine FROM swap_messages WHERE offer_id=${id} AND id<${before}::bigint ORDER BY id DESC LIMIT 50`)).rows;
+ res.setHeader("Cache-Control","private, no-store");res.json({items:rows.reverse()});
+ }catch{res.status(503).json({error:"Messages unavailable"});}
+});
+router.post("/swaps/offers/:id/messages",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id,body=req.body?.body;
+ if(!uuid(id)||typeof body!=="string"||!body.trim()||body.trim().length>2000){res.status(400).json({error:"Enter a message of 1–2000 characters"});return;}
+ const result=await db.transaction(async tx=>{
+ const o=(await tx.execute(sql`SELECT o.status,o.proposer_email,t.owner_email AS target_email FROM swap_offers o JOIN swap_listings t ON t.id=o.target_id WHERE o.id=${id} FOR UPDATE OF o`)).rows[0];
+ if(!o||(email!==o.proposer_email&&email!==o.target_email)||!["pending","accepted","disputed"].includes(String(o.status)))throw new SwapConflict("Conversation unavailable.");
+ const recent=(await tx.execute(sql`SELECT count(*)::int AS total FROM swap_messages WHERE offer_id=${id} AND sender_email=${email} AND created_at>NOW()-INTERVAL '1 minute'`)).rows[0];
+ if(Number(recent?.total)>=10)throw new SwapConflict("Too many messages. Try again in a minute.");
+ const row=(await tx.execute(sql`INSERT INTO swap_messages(offer_id,sender_email,body) VALUES(${id},${email},${body.trim()}) RETURNING id::text AS id,body,created_at`)).rows[0];
+ await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},'new_message')`);return row;
+ });res.status(201).json({...result,is_mine:true});
+ }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Message could not be sent"});}
 });
 
 export default router;
