@@ -57,4 +57,12 @@ router.post("/swaps",async(req,res)=>{
  res.status(201).json(row);
  }catch{res.status(503).json({error:"Could not create swap listing"});}
 });
+router.get("/swaps/:id",async(req,res)=>{
+ try{
+ const id=req.params.id;
+ if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)){res.status(400).json({error:"Invalid swap ID"});return;}
+ const row=(await db.execute(sql`SELECT id,title,description,category,condition,wanted,value_minor,currency,created_at FROM swap_listings WHERE id=${id} AND status='active'`)).rows[0];
+ if(!row){res.status(404).json({error:"Swap not found"});return;}res.json(row);
+ }catch{res.status(503).json({error:"Swap unavailable"});}
+});
 export default router;
