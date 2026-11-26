@@ -170,6 +170,14 @@ router.get("/listings", async (req, res) => {
     // Apply browsing criteria before LIMIT/OFFSET, across the complete database.
     const clauses: any[] = [visible, regionalVisibility, eq(listingsTable.status, "active")];
     // Apply collection criteria in SQL before pagination.
+    if (collection === "under-5" || collection === "under-10") clauses.push(sql`${listingsTable.priceGbp}::numeric < ${collection==="under-5"?5:10}`);
+    if (collection === "free-delivery") clauses.push(sql`${listingsTable.shippingPrice} IS NOT NULL AND ${listingsTable.shippingPrice}::numeric = 0`);
+    if (collection === "new-arrivals") clauses.push(sql`${listingsTable.createdAt} >= NOW() - INTERVAL '7 days'`);
+    if (collection === "christmas") clauses.push(sql`LOWER(${listingsTable.title} || ' ' || COALESCE(${listingsTable.tags},'')) ~ 'christmas|festive|stocking filler|xmas|advent'`);
+    if (collection === "gift-finder") clauses.push(sql`LOWER(${listingsTable.title} || ' ' || COALESCE(${listingsTable.tags},'')) ~ 'gift|present|hamper|gift set'`);
+    if (collection === "local") { const place=String(req.query.place||"").trim().slice(0,100); clauses.push(place?sql`STRPOS(LOWER(COALESCE(${listingsTable.shipOriginOther},'')),LOWER(${place}))>0`:sql`FALSE`); }
+    if (collection === "price-drops") clauses.push(sql`FALSE`); // No verified historical price source yet.
+
     if (collection === "eco") clauses.push(sql`(COALESCE(${listingsTable.tags}, '') ILIKE '%eco-friendly%' OR ${listingsTable.category} = 'eco-friendly')`);
     if (collection === "deals") clauses.push(sql`EXISTS (SELECT 1 FROM ${listingPromotionsTable} lp WHERE lp.listing_id = ${listingsTable.id} AND lp.expires_at > NOW() AND lp.type IN ('homepage-spotlight','spotlight','premium-placement','featured-badge','featured','visibility-boost','move-to-top','flash'))`);
     if (sellerEmail) clauses.push(sql`LOWER(${listingsTable.sellerEmail}) = LOWER(${sellerEmail})`);
@@ -195,7 +203,7 @@ router.get("/listings", async (req, res) => {
     if (freeShipping === "true") clauses.push(sql`COALESCE(${listingsTable.shippingPrice}::numeric, 0) = 0`);
     const days = listedWithin === "today" ? 1 : listedWithin === "week" ? 7 : listedWithin === "month" ? 30 : null;
     if (days) clauses.push(sql`${listingsTable.createdAt} >= NOW() - ${days} * INTERVAL '1 day'`);
-    const ordering = sort === "price-asc" || sort === "price-lowest" ? sql`${listingsTable.price}::numeric ASC`
+    const ordering = collection === "trending" ? sql`COALESCE(${listingsTable.views},0) + 3 * COALESCE(${listingsTable.watchers},0) DESC` : sort === "price-asc" || sort === "price-lowest" ? sql`${listingsTable.price}::numeric ASC`
       : sort === "price-desc" ? sql`${listingsTable.price}::numeric DESC`
       : sort === "views" ? sql`${listingsTable.views} DESC` : desc(listingsTable.createdAt);
 
@@ -232,7 +240,7 @@ router.get("/listings", async (req, res) => {
       .offset(parsedOffset);
 
     const withPromos = await attachPromotions(rows);
-    withPromos.sort((a, b) => promoRank(b.promotions) - promoRank(a.promotions));
+    if (!collection) withPromos.sort((a, b) => promoRank(b.promotions) - promoRank(a.promotions));
     // Public browse cards change relatively infrequently; a tiny cache removes repeated
     // database work while keeping new/edited listings fresh within seconds.
     res.setHeader("Cache-Control", "public, max-age=15, stale-while-revalidate=45");
