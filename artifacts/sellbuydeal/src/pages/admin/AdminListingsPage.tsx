@@ -31,6 +31,8 @@ interface Listing {
 
 interface Specs {
   amazon_url?: string;
+  aliexpress_url?: string;
+  aliexpress_id?: string;
   asin?: string;
   source?: string;
   ebay_url?: string;
@@ -40,7 +42,19 @@ interface Specs {
 
 function parseSpecs(raw: string | null): Specs {
   if (!raw) return {};
-  try { return JSON.parse(raw); } catch { return {}; }
+  try { return JSON.parse(raw) ?? {}; } catch { return {}; }
+}
+
+function aliExpressSourceUrl(specs: Specs, publicId: string | null): string | undefined {
+  if (specs.aliexpress_url) {
+    try {
+      const url = new URL(specs.aliexpress_url);
+      if (url.protocol === "https:" && !url.username && !url.password &&
+          (url.hostname === "aliexpress.com" || url.hostname.endsWith(".aliexpress.com"))) return url.href;
+    } catch { /* Use the saved product ID when the original URL is unavailable. */ }
+  }
+  const id = specs.aliexpress_id ?? publicId?.match(/^BZK-ALI-(\d{10,20})$/)?.[1];
+  return id && /^\d{10,20}$/.test(id) ? `https://www.aliexpress.com/item/${id}.html` : undefined;
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -423,6 +437,7 @@ export function AdminListingsPage() {
               {!loading && listings.map(l => {
                 const isImported = l.public_id?.startsWith("BZK-DEMO-") ?? false;
                 const specs = parseSpecs(l.specifications);
+                const aliExpressUrl = aliExpressSourceUrl(specs, l.public_id);
                 const ebayItemId = specs.item_id ?? specs.own_ebay_item_id;
                 const ebayUrl = specs.ebay_url ?? (ebayItemId ? `https://www.ebay.co.uk/itm/${ebayItemId}` : undefined);
                 return (
@@ -480,6 +495,10 @@ export function AdminListingsPage() {
                       </div>
                       <div className="mt-3 flex flex-wrap items-center gap-2" aria-label={`Actions for ${l.title}`}>
                         <a href={`/listing/${l.public_url_token||l.public_id||l.id}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center rounded-lg border-2 border-white bg-[#334155] px-3 py-2 text-xs font-black !text-white hover:bg-[#475569]">View on Bazunk</a>
+                        {aliExpressUrl && <a href={aliExpressUrl} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border-2 border-white bg-[#334155] px-3 py-2 text-xs font-black !text-white hover:bg-[#475569]">
+                          <ExternalLink className="h-3 w-3" /> View on AliExpress
+                        </a>}
                         <button type="button" onClick={()=>void copyAdminListingLink(l)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#6782a8] bg-[#1b385c] px-3 py-2 text-xs font-bold text-white hover:bg-[#2e527d]"><Copy className="h-3.5 w-3.5"/>{copiedId===l.id?"Copied":"Copy public link"}</button>
                         <button type="button" onClick={()=>shareAdminListing(l)} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[#6782a8] bg-[#1b385c] px-3 py-2 text-xs font-bold text-white hover:bg-[#2e527d]"><Share2 className="h-3.5 w-3.5"/>Share preview</button>
                         <button type="button" onClick={()=>setSharingId(sharingId===l.id?null:l.id)} aria-expanded={sharingId===l.id} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-orange-500 bg-[#2d344b] px-3 py-2 text-xs font-bold text-white hover:bg-[#3d4f68]"><Flag className="h-3.5 w-3.5"/>Sharing &amp; trust</button>
