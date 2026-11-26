@@ -5,7 +5,7 @@ import { getUncachableStripeClient } from "../stripeClient.js";
 import { calculateFees, minor, percentage } from "./marketplaceFees.js";
 import { logger } from "./logger.js";
 import type Stripe from "stripe";
-import { convertAmount } from "../fxRates.js";
+import { convertPaymentAmount } from "../fxRates.js";
 import { recordCashbackForSession } from "./cashback.js";
 import { ensureFindItTables } from "./findIt.js";
 
@@ -28,7 +28,7 @@ async function getSale(kind: SaleKind, id:string, buyer:string):Promise<Sale> {
     if(!r||r.status!=="accepted"||r.selected_offer_id!==id||String(r.buyer_email).toLowerCase()!==buyer)
       throw Error("Only the buyer of the selected Find It offer may pay");
     if(String(r.seller_email).toLowerCase()===buyer)throw Error("Cannot purchase your own offer");
-    const price=r.region==="us" ? await convertAmount(Number(r.price_minor)/100,"USD","GBP") : Number(r.price_minor)/100;
+    const price=r.region==="us" ? await convertPaymentAmount(Number(r.price_minor)/100,"USD","GBP") : Number(r.price_minor)/100;
     if(!Number.isFinite(price)||price<1)throw Error("Invalid offered price");
     return {id,seller_email:r.seller_email,title:r.item_title,image:r.photo??null,
       category:r.category,price,source:`find_it:${id}`,region:r.region,budgetMinor:Number(r.budget_minor)};
@@ -50,7 +50,7 @@ async function getSale(kind: SaleKind, id:string, buyer:string):Promise<Sale> {
   const currency = row.currency == null ? null : String(row.currency).toUpperCase();
   if (currency && !["GBP","USD"].includes(currency)) throw new Error("Unsupported sale currency");
   if (!currency && row.marketplace_region === "us") throw new Error("Sale currency requires confirmation before checkout");
-  const price = currency === "USD" ? await convertAmount(originalPrice,"USD","GBP") : originalPrice;
+  const price = currency === "USD" ? await convertPaymentAmount(originalPrice,"USD","GBP") : originalPrice;
   if (!Number.isFinite(price) || price <= 0) throw new Error("Invalid sale price");
   return {id, seller_email:String(row.seller_email), title:String(row.title),image:kind==="auction" ? (Array.isArray(row.images) ? String(row.images[0] ?? "") || null : null) : row.image ?? null,category:row.category ?? null, price,source:`${kind}:${id}`};
 }
@@ -95,7 +95,7 @@ export async function startSpecialCheckout(kind:SaleKind,id:string,buyer:string,
     const quote=calculateFees([item],percentage(fees.buyer_protection_percent,6),fees.buyer_protection_fixed_gbp==null?100:minor(fees.buyer_protection_fixed_gbp),sale.price>=50?0:399);
     if(kind==="find_it"){
       // Recheck the maximum *including* delivery and protection at payment time.
-      const localTotal=sale.region==="us" ? await convertAmount(quote.totalMinor/100,"GBP","USD") : quote.totalMinor/100;
+      const localTotal=sale.region==="us" ? await convertPaymentAmount(quote.totalMinor/100,"GBP","USD") : quote.totalMinor/100;
       if(Math.round(localTotal*100)>Number(sale.budgetMinor))
         throw Error("Current payment total exceeds the buyer's budget; reopen the request");
     }
