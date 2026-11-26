@@ -3,7 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import router from "./routes/index.js";
-import { handleSwapWebhook } from "./routes/swaps.js";
+import { handleSwapWebhook, runSwapNotifications } from "./routes/swaps.js";
 import { logger } from "./lib/logger.js";
 import { WebhookHandlers } from "./webhookHandlers.js";
 import { handleDiditWebhook } from "./routes/verification.js";
@@ -130,4 +130,5 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   });
 });
 
+if(process.env.SWAP_EMAIL_ENABLED==="true"){const timer=setInterval(()=>void runSwapNotifications(),300000);timer.unref();}
 export default app;
