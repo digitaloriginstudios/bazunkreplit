@@ -1,3 +1,4 @@
+import { listingShipping as globalListingShipping, shippingCountry as globalShippingCountry, shipsToCountry as globalShipsToCountry } from "../lib/listingShipping.js";
 import { featureEnabled } from "../lib/featureFlags.js";
 import { recordCreditEconomy } from "../lib/creditEconomy.js";
 import { isBanned } from "../lib/banned.js";
@@ -183,6 +184,19 @@ router.get("/listings", async (req, res) => {
 
     // Apply browsing criteria before LIMIT/OFFSET, across the complete database.
     const clauses: any[] = [visible, regionalVisibility, eq(listingsTable.status, "active")];
+    const deliveryMode=String(req.query.deliveryMode??"");
+    if (deliveryMode) {
+      const destination=String(req.query.destination??"").toUpperCase();
+      if (!/^[A-Z]{2}$/.test(destination)||!["domestic","international","ships-to-me"].includes(deliveryMode)) {res.status(400).json({error:"Invalid delivery filter"});return;}
+      const candidates=(await db.execute(sql`SELECT id,ship_origin,ship_zone,specifications FROM listings WHERE status='active'`)).rows;
+      const eligible=candidates.filter(row=>{
+        const shipping=globalListingShipping(row.ship_origin,row.ship_zone,null,row.specifications);
+        const origin=globalShippingCountry(shipping.shipOrigin);
+        if(!globalShipsToCountry(shipping.shipZone,origin,destination))return false;
+        return deliveryMode==="ships-to-me" || (origin!==null && (deliveryMode==="domestic"?origin===destination:origin!==destination));
+      }).map(row=>Number(row.id));
+      clauses.push(eligible.length?sql`${listingsTable.id} = ANY(${"{" + eligible.join(",") + "}"}::int[])`:sql`FALSE`);
+    }
     // Apply collection criteria in SQL before pagination.
     if (collection === "under-5" || collection === "under-10") clauses.push(sql`${listingsTable.priceGbp}::numeric < ${collection==="under-5"?5:10}`);
     if (collection === "free-delivery") clauses.push(sql`${listingsTable.shippingPrice} IS NOT NULL AND ${listingsTable.shippingPrice}::numeric = 0`);
