@@ -1,5 +1,5 @@
 import adminInternationalRouter, {publicInternationalRouter} from "./adminInternational.js";
-import { FEATURE_DEFINITIONS as PUBLIC_FEATURE_DEFINITIONS } from "../lib/featureFlags.js";
+import { FEATURE_DEFINITIONS as PUBLIC_FEATURE_DEFINITIONS, resolveFeatureValue } from "../lib/featureFlags.js";
 import { shippingCountry, shippingZone, shipsToCountry } from "../lib/listingShipping.js";
 import { getAliExpressUsdToGbpRate, tidyAliExpressDescription } from "../lib/aliExpressImportDetails.js";
 import { randomUUID } from "node:crypto";
@@ -104,7 +104,7 @@ router.get("/settings/public", async (_req, res) => {
     }
     for (const [key] of PUBLIC_FEATURE_DEFINITIONS) {
       const setting = `feature_${key}`;
-      settings[setting] = String(key === "global_marketplace" ? settings[setting] === "true" : settings[setting] !== "false");
+      settings[setting] = String(resolveFeatureValue(key,settings[setting]));
     }
     res.setHeader("Cache-Control", "no-store");
     res.json(settings);
