@@ -24,6 +24,10 @@ function ensureTables(){
  currency TEXT NOT NULL DEFAULT 'GBP' CHECK(currency='GBP'),
  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','withdrawn','declined','accepted','completed','disputed')),
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), CHECK(target_id<>offered_id))`);
+ await db.execute(sql`ALTER TABLE swap_offers ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1`);
+ await db.execute(sql`ALTER TABLE swap_offers ADD COLUMN IF NOT EXISTS last_actor_email TEXT`);
+ await db.execute(sql`UPDATE swap_offers SET last_actor_email=proposer_email WHERE last_actor_email IS NULL`);
+ await db.execute(sql`ALTER TABLE swap_offers ALTER COLUMN last_actor_email SET NOT NULL`);
  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS swap_pending_pair ON swap_offers(target_id,offered_id) WHERE status='pending'`);
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_events (
  id BIGSERIAL PRIMARY KEY, offer_id UUID NOT NULL REFERENCES swap_offers(id),
@@ -65,4 +69,70 @@ router.get("/swaps/:id",async(req,res)=>{
  if(!row){res.status(404).json({error:"Swap not found"});return;}res.json(row);
  }catch{res.status(503).json({error:"Swap unavailable"});}
 });
+
+// Positive cash means the original proposer pays the target owner; negative reverses it.
+const uuid=(v:unknown):v is string=>typeof v==="string"&&/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+class SwapConflict extends Error {}
+router.get("/swaps/offers/mine",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;
+ res.setHeader("Cache-Control","private, no-store");
+ const rows=(await db.execute(sql`SELECT o.id,o.target_id,o.offered_id,o.cash_minor,o.status,o.revision,o.created_at,t.title AS target_title,p.title AS offered_title,
+ (o.proposer_email=${email}) AS is_proposer,(o.last_actor_email=${email}) AS is_last_actor
+ FROM swap_offers o JOIN swap_listings t ON t.id=o.target_id JOIN swap_listings p ON p.id=o.offered_id
+ WHERE t.owner_email=${email} OR p.owner_email=${email} ORDER BY o.created_at DESC LIMIT 100`)).rows;
+ res.json({items:rows});
+ }catch{res.status(503).json({error:"Offers unavailable"});}
+});
+router.post("/swaps/offers",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;
+ const {targetId,offeredId,cashMinor}=req.body??{};
+ if(!uuid(targetId)||!uuid(offeredId)||targetId.toLowerCase()===offeredId.toLowerCase()||!Number.isInteger(cashMinor)||Math.abs(cashMinor)>10000000){res.status(400).json({error:"Invalid proposal"});return;}
+ const result=await db.transaction(async tx=>{
+ const items=(await tx.execute(sql`SELECT id,owner_email,status FROM swap_listings WHERE id IN (${targetId},${offeredId}) ORDER BY id FOR UPDATE`)).rows;
+ const target=items.find(x=>x.id===targetId.toLowerCase()),offered=items.find(x=>x.id===offeredId.toLowerCase());
+ if(!target||!offered||target.status!=="active"||offered.status!=="active"||offered.owner_email!==email||target.owner_email===email)throw new SwapConflict("Items are unavailable or not eligible.");
+ const duplicate=(await tx.execute(sql`SELECT id FROM swap_offers WHERE status='pending' AND ((target_id=${targetId} AND offered_id=${offeredId}) OR (target_id=${offeredId} AND offered_id=${targetId}))`)).rows[0];
+ if(duplicate)throw new SwapConflict("A proposal already exists for these items.");
+ const row=(await tx.execute(sql`INSERT INTO swap_offers(target_id,offered_id,proposer_email,last_actor_email,cash_minor) VALUES(${targetId},${offeredId},${email},${email},${cashMinor}) RETURNING id,status,revision`)).rows[0];
+ await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${row.id},${email},${JSON.stringify({action:"proposed",cashMinor,revision:1})})`);
+ return row;
+ });res.status(201).json(result);
+ }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Could not submit proposal"});}
+});
+router.post("/swaps/offers/:id/action",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;
+ const id=req.params.id,{action,revision,cashMinor}=req.body??{};
+ if(!uuid(id)||!["counter","accept","decline","withdraw"].includes(action)||!Number.isInteger(revision)||revision<1||(action==="counter"&&(!Number.isInteger(cashMinor)||Math.abs(cashMinor)>10000000))){res.status(400).json({error:"Invalid action"});return;}
+ const result=await db.transaction(async tx=>{
+ // Always lock listings before offers, in stable ID order, including creation.
+ const initial=(await tx.execute(sql`SELECT target_id,offered_id FROM swap_offers WHERE id=${id}`)).rows[0];
+ if(!initial)throw new SwapConflict("Offer unavailable.");
+ const items=(await tx.execute(sql`SELECT id,owner_email,status FROM swap_listings WHERE id IN (${initial.target_id},${initial.offered_id}) ORDER BY id FOR UPDATE`)).rows;
+ const o=(await tx.execute(sql`SELECT * FROM swap_offers WHERE id=${id} FOR UPDATE`)).rows[0];
+ if(!o||!items.some(x=>x.owner_email===email)||o.status!=="pending"||Number(o.revision)!==revision)throw new SwapConflict("Offer unavailable or changed. Refresh and try again.");
+ if(action==="withdraw"?o.last_actor_email!==email:o.last_actor_email===email)throw new SwapConflict("This action is not available on your turn.");
+ if((action==="accept"||action==="counter")&&(items.length!==2||items.some(x=>x.status!=="active")))throw new SwapConflict("An item is no longer available.");
+ const status=action==="accept"?"accepted":action==="decline"?"declined":action==="withdraw"?"withdrawn":"pending";
+ const nextCash=action==="counter"?cashMinor:o.cash_minor;
+ if(action==="accept"){
+ await tx.execute(sql`UPDATE swap_listings SET status='reserved' WHERE id IN (${o.target_id},${o.offered_id})`);
+ const closed=(await tx.execute(sql`UPDATE swap_offers SET status='declined',revision=revision+1 WHERE id<>${id} AND status='pending' AND (target_id IN (${o.target_id},${o.offered_id}) OR offered_id IN (${o.target_id},${o.offered_id})) RETURNING id`)).rows;
+ for(const c of closed)await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${c.id},${email},'item_reserved')`);
+ }
+ const row=(await tx.execute(sql`UPDATE swap_offers SET status=${status},cash_minor=${nextCash},last_actor_email=${email},revision=revision+1 WHERE id=${id} RETURNING id,status,revision,cash_minor`)).rows[0];
+ await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},${JSON.stringify({action,cashMinor:nextCash,revision:revision+1})})`);
+ return row;
+ });res.json(result);
+ }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Could not update offer"});}
+});
+router.get("/swaps/offers/:id/history",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id;
+ if(!uuid(id)){res.status(400).json({error:"Invalid offer ID"});return;}
+ const allowed=(await db.execute(sql`SELECT o.id FROM swap_offers o JOIN swap_listings t ON t.id=o.target_id JOIN swap_listings p ON p.id=o.offered_id WHERE o.id=${id} AND (t.owner_email=${email} OR p.owner_email=${email})`)).rows[0];
+ if(!allowed){res.status(404).json({error:"Offer not found"});return;}
+ res.setHeader("Cache-Control","private, no-store");
+ res.json({items:(await db.execute(sql`SELECT event,created_at,(actor_email=${email}) AS is_mine FROM swap_events WHERE offer_id=${id} ORDER BY id`)).rows});
+ }catch{res.status(503).json({error:"History unavailable"});}
+});
+
 export default router;
