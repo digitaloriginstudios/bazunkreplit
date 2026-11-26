@@ -1850,7 +1850,7 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
         markup_type:markupType, markup_value:markupValue, source_sync:!options.length });
       const inserted = await tx.execute(sql`INSERT INTO listings
         (title,price,price_gbp,currency,quantity,ship_origin,ship_zone,shipping_price,category,subcategory,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
-        VALUES (${title},${base.sellingPrice},${base.priceGbp},${currency},${quantity},${origin},${shipZone},${shippingPrice},${category},${subcategory || null},${description || title},${images[0] ?? null},${seller.email},${seller.name ?? seller.email.split("@")[0]},${specs},'active',NOW(),NOW()) RETURNING id`);
+        VALUES (${title},${base.sellingPrice},${base.priceGbp},${currency},${quantity},${origin},${shipZone},${shippingPrice},${category},${subcategory || null},${description || title},${condition},${images[0] ?? null},${seller.email},${seller.name ?? seller.email.split("@")[0]},${specs},'active',NOW(),NOW()) RETURNING id`);
       const listingId = Number(inserted.rows[0].id);
       await tx.execute(sql`UPDATE listings SET public_id = ${"BZL-" + listingId} WHERE id = ${listingId}`);
       await tx.execute(sql`INSERT INTO supplier_imports
