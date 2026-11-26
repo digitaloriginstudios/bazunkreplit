@@ -36,6 +36,7 @@ const NAV = [
   { label: "Importer Control", href: "/admin/importer-control", icon: Package },
   { label: "Snap & Sell AI", href: "/admin/snap-sell", icon: Camera },
   { label: "DealPilot", href: "/admin/deal-pilot", icon: Search },
+  { label: "Bazunk Swap", href: "/admin/swaps", icon: Search },
   { label: "Find It", href: "/admin/find-it", icon: Search },
   { label: "Importers", href: "/admin/imports", icon: ArrowDownToLine },
   { label: "Amazon", href: "/admin/importers/amazon", icon: ArrowDownToLine },
