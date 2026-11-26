@@ -271,7 +271,13 @@ router.post("/swaps/offers/:id/delivery",async(req,res)=>{
  }
  await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},${"test_"+action})`);
  const done=(await tx.execute(sql`SELECT count(*)::int AS total FROM swap_deliveries WHERE offer_id=${id} AND received_at IS NOT NULL`)).rows[0];
- if(Number(done?.total)===2)await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},'test_both_receipts_confirmed')`);
+ if(Number(done?.total)===2){
+ if(Number(o.cash_minor)===0){
+ await tx.execute(sql`UPDATE swap_offers SET status='completed',revision=revision+1 WHERE id=${id} AND status='accepted'`);
+ await tx.execute(sql`UPDATE swap_listings SET status='completed' WHERE id IN (${o.target_id},${o.offered_id}) AND status='reserved'`);
+ await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},'test_exchange_completed')`);
+ }else await tx.execute(sql`INSERT INTO swap_events(offer_id,actor_email,event) VALUES(${id},${email},'test_both_receipts_confirmed')`);
+ }
  return {...result,bothConfirmed:Number(done?.total)===2};
  });res.json(result);
  }catch(e){res.status(e instanceof SwapConflict?409:503).json({error:e instanceof SwapConflict?e.message:"Delivery update unavailable"});}
