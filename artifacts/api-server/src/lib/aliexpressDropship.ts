@@ -209,11 +209,13 @@ export async function previewDropshipProduct(id: string, destination: "GB" | "US
     .map(p => ({ key: String(p.attr_name).slice(0, 80), value: String(p.attr_value).slice(0, 240) }));
   let shipping: { origin: string | null; destination: string; amount: number; currency: string; estimate: string } | null = null;
 
-  if (includeFreight && selected) {
+  // Get a one-item quote for the selected SKU, or the first in-stock SKU for a general rule.
+  const freightSku = selected ?? (!skuId ? choices.find(choice => (choice.quantity ?? 0) > 0) : undefined);
+  if (includeFreight && freightSku) {
     try {
       const freight = await call("aliexpress.ds.freight.query", {
         queryDeliveryReq: JSON.stringify({
-          productId: product.externalId, selectedSkuId: selected.id, shipToCountry: destination,
+          productId: product.externalId, selectedSkuId: freightSku.id, shipToCountry: destination,
           quantity: 1, currency: marketCurrency, locale: "en_US", language: "en_US",
         }),
       }, false, 8_000);
@@ -230,7 +232,7 @@ export async function previewDropshipProduct(id: string, destination: "GB" | "US
             const max = Number(option.max_delivery_days ?? option.maxDeliveryDays);
             const estimate = Number.isInteger(min) && Number.isInteger(max) && min > 0 && max >= min
               ? (min === max ? String(min) : min + "–" + max) + " days" : "";
-            return [{ origin: shippingCountry(option.ship_from_country ?? option.shipFromCountry) ?? selected.origin,
+            return [{ origin: shippingCountry(option.ship_from_country ?? option.shipFromCountry) ?? freightSku.origin,
               destination, amount, currency, estimate }];
           });
         shipping = options.sort((a, b) => a.amount - b.amount)[0] ?? null;

@@ -1,4 +1,4 @@
-import { shippingCountry, shippingZone } from "../lib/listingShipping.js";
+import { shippingCountry, shippingZone, shipsToCountry } from "../lib/listingShipping.js";
 import { getAliExpressUsdToGbpRate, tidyAliExpressDescription } from "../lib/aliExpressImportDetails.js";
 import { randomUUID } from "node:crypto";
 import { dropshipConfigured, dropshipSearchDiagnostic, inspectDropshipSearch, searchDropship, getDropshipProduct, previewDropshipProduct, aliExpressProductId, aliExpressAlternateProductId } from "../lib/aliexpressDropship.js";
@@ -1912,6 +1912,8 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
   if (postage !== null && (!zone || !Number.isFinite(postage) || postage < 0 || postage > 10000)) {
     res.status(400).json({ error:"Enter a valid postage amount or leave it blank." }); return;
   }
+  const destination = market === "uk" ? "GB" : "US";
+  const quotePostage = postage === null && shipsToCountry(zone, origin, destination);
   const listingCurrency = market === "uk" ? "GBP" : "USD";
   const official = Boolean(process.env.BAZUNK_DATA_API_URL && process.env.BAZUNK_DATA_INTERNAL_TOKEN);
   const base = official ? process.env.BAZUNK_DATA_API_URL : process.env.ALIEXPRESS_SCRAPER_URL;
@@ -1958,8 +1960,15 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
       let p:any;
       let choices: Awaited<ReturnType<typeof previewDropshipProduct>>["choices"] = [];
       let attributes: {key:string;value:string}[] = [];
+      let listingPostage = postage;
+      let deliveryEstimate: string | undefined;
       if(useDropship) {
-        const details = await previewDropshipProduct(id, market === "uk" ? "GB" : "US", undefined, false);
+        const details = await previewDropshipProduct(id, destination, undefined, quotePostage);
+        const quote = details.shipping;
+        if (quote && quote.amount <= 10000 && (!quote.origin || quote.origin === origin)) {
+          listingPostage = quote.amount;
+          deliveryEstimate = quote.estimate.slice(0, 120) || undefined;
+        }
         p = details.product;
         choices = details.choices;
         attributes = details.attributes;
@@ -1991,13 +2000,13 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
       const bazPrice = options.length ? Math.min(...options.map(option => option.price)) : Math.round((price * listingRate * (1 + markup / 100) + shipping) * 100) / 100;
       const priceGbp = fxRates[listingCurrency] ? Math.round(bazPrice * fxRates[listingCurrency] * 100) / 100 : null;
       const sourceId = useDropship ? p.externalId : id;
-      const specs = JSON.stringify({ details:attributes, admin_gallery_images:p.images?.map((image:{url:string})=>image.url).slice(0,12), aliexpress_options:options.length ? options : undefined, marketplace_region:market, source:"AliExpress", aliexpress_id:sourceId, aliexpress_url:p.sourceUrl,
+      const specs = JSON.stringify({ details:attributes, delivery_estimate:deliveryEstimate, admin_gallery_images:p.images?.map((image:{url:string})=>image.url).slice(0,12), aliexpress_options:options.length ? options : undefined, marketplace_region:market, source:"AliExpress", aliexpress_id:sourceId, aliexpress_url:p.sourceUrl,
         source_price:price, source_currency:currency, exchange_rate_to_gbp:gbpRate, markup_pct:markup, shipping_gbp:market === "uk" ? shipping : undefined, shipping_usd:market === "us" ? shipping : undefined,
         source_sync:!options.length, last_synced_at:new Date().toISOString(), source_availability:p.availability });
       const publicId = "BZK-ALI-" + sourceId;
       await db.execute(sql`INSERT INTO listings
         (public_id,title,price,price_gbp,currency,quantity,ship_origin,ship_zone,shipping_price,category,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
-        VALUES (${publicId},${String(p.title).slice(0,500)},${bazPrice},${priceGbp},${listingCurrency},${stock},${origin},${zone},${postage},'other',
+        VALUES (${publicId},${String(p.title).slice(0,500)},${bazPrice},${priceGbp},${listingCurrency},${stock},${origin},${zone},${listingPostage},'other',
         ${tidyAliExpressDescription(p.description) || String(p.title).slice(0,500)},'new',${p.images?.[0]?.url ?? null},
         ${seller.email},${seller.name ?? seller.email.split("@")[0]},${specs},'active',NOW(),NOW())`);
       results.push({id,status:"imported"});
