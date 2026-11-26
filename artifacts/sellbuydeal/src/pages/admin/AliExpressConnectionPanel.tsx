@@ -13,6 +13,7 @@ type Connection = {
 
 type SearchTest = {
   count: number;
+  counts?: { returned: number; recommendations: number; matching: number; priced: number };
   products: { externalId: string; title: string; price: { amount: number; currency: string } }[];
 };
 
@@ -145,6 +146,14 @@ export function AliExpressConnectionPanel() {
       {test && (
         <div className="text-sm" role="status">
           <p>AliExpress search completed. {test.count} priced products matched.</p>
+          {test.count === 0 && test.counts && (
+            <p>
+              {test.counts.returned === 0 ? "AliExpress returned no products for this search." :
+                test.counts.recommendations === test.counts.returned ? "AliExpress returned only recommended products." :
+                test.counts.matching === 0 ? "The returned products did not match the keywords or had incomplete details." :
+                "Matching products had no usable USD price."}
+            </p>
+          )}
           <ul className="mt-1 list-inside list-disc">
             {test.products.map(product => <li key={product.externalId}>{product.title} ({product.price.currency} {product.price.amount.toFixed(2)})</li>)}
           </ul>

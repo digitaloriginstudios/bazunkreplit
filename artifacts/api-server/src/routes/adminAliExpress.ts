@@ -3,7 +3,9 @@ import {
   aliExpressConnectionStatus, aliExpressErrorMessage, beginAliExpressAuthorization,
   disconnectAliExpress, managedAliExpressAccessToken,
 } from "../lib/aliexpressOAuth.js";
-import { searchDropship } from "../lib/aliexpressDropship.js";
+import { inspectDropshipSearch } from "../lib/aliexpressDropship.js";
+
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 const path = "/admin/aliexpress/connection";
@@ -38,8 +40,9 @@ router.post(path + "/test", action(async (req, res) => {
     res.status(400).json({ error: "Enter 1–120 characters for the product search." });
     return;
   }
-  const products = await searchDropship(query, 1, { requireManaged: true });
-  res.json({ count: products.length, products: products.slice(0, 5) });
+  const { products, counts } = await inspectDropshipSearch(query, 1, { requireManaged: true });
+  logger.info({ counts }, "AliExpress product search test completed");
+  res.json({ count: products.length, products: products.slice(0, 5), counts });
 }));
 
 export default router;
