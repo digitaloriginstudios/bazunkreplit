@@ -130,6 +130,14 @@ export async function inspectDropshipSearch(q: string, page: number, options: { 
   };
 }
 
+export function dropshipSearchDiagnostic(counts: Awaited<ReturnType<typeof inspectDropshipSearch>>["counts"]): string | null {
+  if (counts.priced) return null;
+  if (!counts.returned) return "The official AliExpress API returned no products for these keywords.";
+  if (counts.recommendations === counts.returned) return "The official AliExpress API returned only recommendations for these keywords.";
+  if (!counts.matching) return "The official AliExpress API returned products with unrelated titles or incomplete details.";
+  return "The official AliExpress API returned matching products without a usable USD price.";
+}
+
 export async function searchDropship(q: string, page: number, options: { requireManaged?: boolean } = {}): Promise<Product[]> {
   const { products } = await inspectDropshipSearch(q, page, options);
   return products;
