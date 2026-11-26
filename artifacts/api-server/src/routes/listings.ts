@@ -494,6 +494,29 @@ router.get("/listings/:id", async (req, res) => {
   }
 });
 
+type ListingTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+async function attachListingVideo(tx: ListingTransaction, uploadedVideo: string | null,
+  authenticatedEmail: string, sellerEmail: string, productVideoConfig: Awaited<ReturnType<typeof getPromoConfig>>) {
+    if (uploadedVideo) {
+      const asset = await tx.execute(sql`WITH upload AS (
+        DELETE FROM listing_video_uploads WHERE seller_email=${authenticatedEmail} AND id=${uploadedVideo}
+        RETURNING id,mime,data_base64
+      )
+      INSERT INTO listing_media_assets(id,filename,mime,data_base64)
+      SELECT id::text,'listing-video',mime,data_base64 FROM upload RETURNING id`);
+      if (!asset.rows.length) throw new Error("LISTING_VIDEO_UPLOAD_MISSING");
+    }
+    let videoBalance: number | null = null;
+    if (productVideoConfig) {
+      const { rows: [account] } = await tx.execute(sql`UPDATE users SET credits=credits-${productVideoConfig.cost}
+        WHERE email=${sellerEmail} AND credits>=${productVideoConfig.cost} RETURNING credits`);
+      if (!account) throw new Error("LISTING_VIDEO_CREDITS");
+      videoBalance = Number(account.credits);
+    }
+  return videoBalance;
+}
+
 router.post("/listings", async (req, res) => {
   try {
     const authenticatedEmail = await authenticatedSellerEmail(req, res);
@@ -602,22 +625,7 @@ router.post("/listings", async (req, res) => {
         `);
         if (existing.rows.length) return { listing: null, existingListingId: Number(existing.rows[0].id) };
       }
-    if (uploadedVideo) {
-      const asset = await tx.execute(sql`WITH upload AS (
-        DELETE FROM listing_video_uploads WHERE seller_email=${authenticatedEmail} AND id=${uploadedVideo}
-        RETURNING id,mime,data_base64
-      )
-      INSERT INTO listing_media_assets(id,filename,mime,data_base64)
-      SELECT id::text,'listing-video',mime,data_base64 FROM upload RETURNING id`);
-      if (!asset.rows.length) throw new Error("LISTING_VIDEO_UPLOAD_MISSING");
-    }
-    let videoBalance: number | null = null;
-    if (productVideoConfig) {
-      const { rows: [account] } = await tx.execute(sql`UPDATE users SET credits=credits-${productVideoConfig.cost}
-        WHERE email=${sellerEmail} AND credits>=${productVideoConfig.cost} RETURNING credits`);
-      if (!account) throw new Error("LISTING_VIDEO_CREDITS");
-      videoBalance = Number(account.credits);
-    }
+    const videoBalance = await attachListingVideo(tx, uploadedVideo, authenticatedEmail, sellerEmail, productVideoConfig);
     const [inserted] = await tx
       .insert(listingsTable)
       .values({ 
@@ -776,11 +784,47 @@ router.patch("/listings/:id", async (req, res) => {
       }
     }
 
-    const updated = await db
-      .update(listingsTable)
-      .set(updates)
-      .where(and(eq(listingsTable.id, id), sql`LOWER(${listingsTable.sellerEmail}) = LOWER(${email})`))
-      .returning();
+    const wantsVideo = updates.status === "active" && body.premiumVideo === true;
+    const uploadedVideo = wantsVideo && typeof body.videoUploadId === "string" ? body.videoUploadId : null;
+    const embed = wantsVideo ? listingVideoEmbed(body.videoUrl) : null;
+    if (wantsVideo && (uploadedVideo ? !listingVideoId.test(uploadedVideo) || Boolean(body.videoUrl) : !embed)) {
+      res.status(400).json({ error: "Upload a video or enter a valid YouTube or Vimeo link." }); return;
+    }
+    const config = wantsVideo ? await getPromoConfig("product-video") : null;
+    if (wantsVideo && !config?.enabled) {
+      res.status(400).json({ error: "Product Video is not currently available." }); return;
+    }
+    if (uploadedVideo) await ensureListingVideoTables();
+    const updated = await db.transaction(async tx => {
+      const owned = and(eq(listingsTable.id, id), sql`LOWER(${listingsTable.sellerEmail}) = ${authenticatedEmail}`);
+      const [current] = await tx.select({ specifications: listingsTable.specifications,
+        status: listingsTable.status, sellerEmail: listingsTable.sellerEmail })
+        .from(listingsTable).where(owned).for("update");
+      if (!current) return [];
+      if (wantsVideo && current.status !== "draft") throw new Error("LISTING_VIDEO_ALREADY_PUBLISHED");
+      let existingVideo: unknown;
+      try { existingVideo = JSON.parse(current.specifications || "{}")?.listing_video; } catch { /* Legacy listing details. */ }
+      if (wantsVideo || (existingVideo && updates.specifications !== undefined)) {
+        let specs;
+        try { specs = JSON.parse(updates.specifications ?? current.specifications ?? "{}"); } catch { specs = {}; }
+        updates.specifications = JSON.stringify({
+          ...(Array.isArray(specs) ? { details: specs } : specs),
+          listing_video: wantsVideo ? (uploadedVideo ? { assetId: uploadedVideo } : { embed }) : existingVideo,
+        });
+      }
+      if (wantsVideo) await attachListingVideo(tx, uploadedVideo, authenticatedEmail, current.sellerEmail, config);
+      const rows = await tx.update(listingsTable).set(updates).where(owned).returning();
+      if (config) {
+        const expiresAt = new Date();
+        expiresAt.setFullYear(expiresAt.getFullYear() + 10);
+        await tx.insert(listingPromotionsTable).values({ listingId: id, type: "product-video", expiresAt });
+      }
+      return rows;
+    });
+    if (config && updated.length) {
+      void recordCreditEconomy({ email: authenticatedEmail, kind: "spent", credits: -config.cost, reason: "Product Video", referenceType: "product_video" })
+        .catch(error => console.error("Could not record listing video credit event:", error));
+    }
     if (updated.length === 0) { res.status(404).json({ error: "Listing not found or not yours" }); return; }
     // Proof belongs to the specific photographed item and description. Any
     // material change revokes prior human review and third-party authentication.
@@ -797,6 +841,15 @@ router.patch("/listings/:id", async (req, res) => {
     }
     res.json(updated[0]);
   } catch (err) {
+    if (err instanceof Error && err.message === "LISTING_VIDEO_ALREADY_PUBLISHED") {
+      res.status(409).json({ error: "This draft has already been published." }); return;
+    }
+    if (err instanceof Error && err.message === "LISTING_VIDEO_UPLOAD_MISSING") {
+      res.status(409).json({ error: "That video upload is no longer available. Upload the file again." }); return;
+    }
+    if (err instanceof Error && err.message === "LISTING_VIDEO_CREDITS") {
+      res.status(402).json({ error: "Insufficient credits for Product Video." }); return;
+    }
     console.error("Error updating listing:", err);
     res.status(500).json({ error: "internal_server_error", message: String(err) });
   }
