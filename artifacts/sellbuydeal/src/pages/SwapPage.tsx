@@ -1,3 +1,4 @@
+import {useSeoMetadata} from "@/hooks/useSeoMetadata";
 import { useEffect,useState } from "react";
 import { Link,useLocation } from "wouter";
 import { useAuth } from "@clerk/react";
@@ -13,21 +14,23 @@ export default function SwapPage(){
  const {isLoaded,isSignedIn,getToken}=useAuth();
  const create=path==="/swap/create",mine=path==="/dashboard/swaps";
  const detail=!create&&!mine&&path.startsWith("/swap/")?path.split("/")[2]:null;
- const [items,setItems]=useState<Item[]>([]),[draft,setDraft]=useState(initial),[error,setError]=useState(""),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[offset,setOffset]=useState(0),[search,setSearch]=useState("");
+ const [items,setItems]=useState<Item[]>([]),[draft,setDraft]=useState(initial),[error,setError]=useState(""),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[offset,setOffset]=useState(0),[search,setSearch]=useState(""),[query,setQuery]=useState(""),[category,setCategory]=useState("");
  useEffect(()=>{let cancelled=false;setItems([]);setError("");setLoading(true);
  if(create||!isLoaded||(mine&&!isSignedIn)){setLoading(false);return;}
  void(async()=>{try{const token=mine?await getToken():null;if(mine&&!token)throw Error("Sign in to continue.");
- const r=await fetch(detail?"/api/swaps/"+encodeURIComponent(detail):mine?"/api/swaps/mine":"/api/swaps?offset="+offset,{cache:"no-store",headers:token?{Authorization:"Bearer "+token}:{}});
+ const r=await fetch(detail?"/api/swaps/"+encodeURIComponent(detail):mine?"/api/swaps/mine":"/api/swaps?"+new URLSearchParams({offset:String(offset),q:query,category}).toString(),{cache:"no-store",headers:token?{Authorization:"Bearer "+token}:{}});
  const data=await r.json();if(!r.ok)throw Error(data.error||"Unable to load swaps");if(!cancelled)setItems(detail?[data]:data.items);
  }catch(e){if(!cancelled)setError(e instanceof Error?e.message:"Unable to load swaps");}finally{if(!cancelled)setLoading(false);}})();
- return()=>{cancelled=true;};},[path,create,mine,detail,isLoaded,isSignedIn,getToken,offset]);
+ return()=>{cancelled=true;};},[path,create,mine,detail,isLoaded,isSignedIn,getToken,offset,query,category]);
  async function submit(e:React.FormEvent){e.preventDefault();if(busy)return;setBusy(true);setError("");
  try{const token=await getToken();if(!token)throw Error("Sign in to continue.");
  if(!/^\d+(\.\d{1,2})?$/.test(draft.value))throw Error("Enter a valid GBP value.");
  const r=await fetch("/api/swaps",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({...draft,valueMinor:Math.round(Number(draft.value)*100)})});
  const data=await r.json();if(!r.ok)throw Error(data.error||"Unable to create listing");setDraft(initial);navigate("/dashboard/swaps");
  }catch(e){setError(e instanceof Error?e.message:"Unable to create listing");}finally{setBusy(false);}}
- const visible=items.filter(i=>!search||[i.title,i.category,i.wanted].join(" ").toLowerCase().includes(search.toLowerCase()));
+ const seoItem=detail&&items[0]?.id===detail?items[0]:null;
+ useSeoMetadata(create||mine?null:detail?(seoItem?{title:seoItem.title+" | Bazunk Swap",description:seoItem.description.slice(0,160),url:"https://www.bazunk.com/swap/"+seoItem.id,schema:{"@context":"https://schema.org","@type":"WebPage",name:seoItem.title,description:seoItem.description,url:"https://www.bazunk.com/swap/"+seoItem.id}}:null):{title:"Bazunk Swap | Exchange products",description:"Discover products to exchange and find items matching your wanted list.",url:"https://www.bazunk.com/swap"});
+ const visible=items.filter(i=>!mine||!search||[i.title,i.category,i.wanted].join(" ").toLowerCase().includes(search.toLowerCase()));
  return <><Navbar/><main className="mx-auto max-w-6xl space-y-5 px-4 py-8 pb-24 text-slate-900">
  <section className="rounded-2xl bg-[#123568] p-6 text-white"><ArrowLeftRight size={36}/><h1 className="mt-2 text-3xl font-black">Bazunk Swap</h1><p>Swap what you have. Get what you want.</p><p className="mt-2 text-sm">Preview: negotiate exchanges. Test-mode cash checkout only. Do not dispatch items; live exchange protection is not yet available.</p></section>
  <nav className="flex flex-wrap gap-3"><Link href="/swap" className="rounded-xl border p-3 font-bold">Browse swaps</Link><Link href="/swap/create" className={button}>Create swap</Link><Link href="/dashboard/swaps" className="rounded-xl border p-3 font-bold">My swaps</Link></nav>
@@ -39,10 +42,13 @@ export default function SwapPage(){
  <label className="block font-semibold">Estimated value (GBP)<input className={field} type="number" min="0" max="100000" step=".01" required value={draft.value} onChange={e=>setDraft(d=>({...d,value:e.target.value}))}/></label>
  <button className={button} disabled={busy}>{busy?"Publishing…":"Publish swap listing"}</button></form>:<>
  <h2 className="text-xl font-bold">{mine?"My swap listings":detail?"Swap details":"Discover swaps"}</h2>
- {!detail&&<input aria-label="Filter loaded listings" placeholder="Filter loaded listings…" className={field} value={search} onChange={e=>setSearch(e.target.value)}/>}
- {loading?<p>Loading swaps…</p>:!error&&visible.length===0?<p>No matching swap listings.</p>:<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{visible.map(i=><article key={i.id} className="rounded-2xl border bg-white p-5 shadow-sm"><Package className="mb-3 text-blue-600" size={36}/><p className="text-sm text-slate-600">{i.category} · {i.condition}</p><h3 className="break-words text-xl font-bold">{i.title}</h3><p className="mt-2 break-words">{i.description}</p><p className="mt-3 font-bold text-blue-800">Wants: {i.wanted}</p><p>Estimated value: £{(i.value_minor/100).toFixed(2)}</p>{i.status&&<p>Status: {i.status}</p>}{!detail&&<Link className="mt-3 inline-block font-bold text-orange-700" href={"/swap/"+i.id}>View details</Link>}</article>)}</div>}
+ {mine&&<input aria-label="Filter loaded listings" placeholder="Filter loaded listings…" className={field} value={search} onChange={e=>setSearch(e.target.value)}/>}
+ {!mine&&!detail&&<form className="flex flex-wrap gap-2" onSubmit={e=>{e.preventDefault();setOffset(0);setQuery(search.trim());setCategory(String(new FormData(e.currentTarget).get("category")||"").trim());}}><input className={field} aria-label="Search swaps" placeholder="Search items or wanted products" value={search} onChange={e=>setSearch(e.target.value)}/><input className={field} name="category" aria-label="Category" placeholder="Category (optional)"/><button className={button}>Search marketplace</button></form>}
+ {loading?<p>Loading swaps…</p>:!error&&visible.length===0?<p>No matching swap listings.</p>:<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{visible.map(i=><article key={i.id} className="rounded-2xl border bg-white p-5 shadow-sm"><SwapPhoto id={i.id} gallery={!!detail}/><p className="text-sm text-slate-600">{i.category} · {i.condition}</p><h3 className="break-words text-xl font-bold">{i.title}</h3><p className="mt-2 break-words">{i.description}</p><p className="mt-3 font-bold text-blue-800">Wants: {i.wanted}</p><p>Estimated value: £{(i.value_minor/100).toFixed(2)}</p>{i.status&&<p>Status: {i.status}</p>}{mine&&i.status==="active"&&<SwapPhotoUpload id={i.id}/>}{!detail&&<Link className="mt-3 inline-block font-bold text-orange-700" href={"/swap/"+i.id}>View details</Link>}</article>)}</div>}
  {!mine&&!detail&&<div className="flex gap-3"><button disabled={offset===0||loading} onClick={()=>setOffset(n=>Math.max(0,n-50))}>Previous</button><button disabled={items.length<50||loading||offset>=10000} onClick={()=>setOffset(n=>n+50)}>Next</button></div>}</>}
- {mine&&isSignedIn&&<SwapActivity/>}
+ {isSignedIn&&!create&&!detail&&<SwapDiscovery/>}
+ {isSignedIn&&detail&&items.length>0&&<SwapSave id={detail}/>}
+ {mine&&isSignedIn&&<><SwapNotificationPreferences/><SwapActivity/></>}
  {(mine||detail)&&!create&&<Negotiation key={path} target={detail} mine={mine}/>}
  </main><Footer/></>;
 }
@@ -69,7 +75,7 @@ function Negotiation({target,mine}:{target:string|null;mine:boolean}){
  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">{[["all","All offers"],["incoming","Incoming"],["outgoing","Outgoing"],["accepted","Accepted"]].map(([k,label])=><button key={k} className={"rounded-xl border p-3 "+(filter===k?"bg-blue-100":"bg-white")} onClick={()=>setFilter(k)}>{label}<b className="block text-xl">{offers.filter(o=>k==="all"||k==="incoming"&&!o.is_proposer||k==="outgoing"&&o.is_proposer||k==="accepted"&&o.status==="accepted").length}</b></button>)}</div>
  {offers.filter(o=>filter==="all"||filter==="incoming"&&!o.is_proposer||filter==="outgoing"&&o.is_proposer||filter==="accepted"&&o.status==="accepted").map(o=><article id={"swap-offer-"+o.id} key={o.id} className="space-y-2 rounded-xl border p-4"><h3 className="font-bold">{o.offered_title} ↔ {o.target_title}</h3><p>{o.is_proposer?"Outgoing":"Incoming"} · {o.status} · Revision {o.revision}</p><p>{o.cash_minor===0?"No cash adjustment":((o.cash_minor>0)===o.is_proposer?"You pay ":"You receive ")+"£"+(Math.abs(o.cash_minor)/100).toFixed(2)}</p>
  {o.status==="accepted"&&<p>Items reserved. Do not dispatch or make real payments until exchange protection is available.</p>}
- {o.status==="accepted"&&<><SwapPayment offer={o}/><SwapDelivery offer={o}/></>}
+ {o.status==="accepted"&&<><SwapPayment offer={o}/><SwapDelivery offer={o}/><SwapAddress offer={o}/></>}
  {o.status==="pending"&&<div className="flex flex-wrap gap-2">{(o.is_last_actor?["withdraw"]:["accept","decline","counter"]).map(action=><button key={action} className={button} disabled={busy} onClick={()=>{if(action==="accept"&&!window.confirm("Reserve both items? Payments and dispatch are not available yet."))return;void act(()=>api("/offers/"+o.id+"/action",{action,revision:o.revision,...(action==="counter"?{cashMinor:minor(counter[o.id]??String(o.cash_minor/100))}:{})}),"Offer updated.");}}>{action}</button>)}
  {!o.is_last_actor&&<label className="w-full">Counter amount (positive: original proposer pays; negative: target owner pays)<input className={field} type="number" step=".01" value={counter[o.id]??String(o.cash_minor/100)} onChange={e=>setCounter(v=>({...v,[o.id]:e.target.value}))}/></label>}</div>}
  <SwapMessages offer={o}/>
@@ -153,4 +159,42 @@ function SwapCase({offer,onChange}:{offer:Offer;onChange:()=>Promise<void>}){
  useEffect(()=>{if(open||offer.status==="disputed")void refresh().catch(e=>setError(e.message));},[open,offer.status,offer.id]);
  async function submit(e:React.FormEvent){e.preventDefault();if(busy)return;setBusy(true);setError("");try{await api(path,{kind,reason});setReason("");await refresh();await onChange();}catch(e){setError(e instanceof Error?e.message:"Case failed");}finally{setBusy(false);}}
  return <section className="space-y-2 rounded-xl border p-3"><button className="font-bold text-blue-700" onClick={()=>setOpen(v=>!v)}>{open?"Hide support cases":"Exchange support and cases"}</button>{error&&<p role="alert" className="text-red-700">{error}</p>}{(open||offer.status==="disputed")&&<>{items.map(c=><article key={c.id} className="rounded-lg border p-2"><b>{c.kind} · {c.status}</b><p className="break-words">{c.reason}</p>{c.resolution&&<p className="break-words">Resolution: {c.resolution}</p>}</article>)}{offer.status==="accepted"&&<form className="space-y-2" onSubmit={submit}><p>Opening a case pauses the exchange. It does not automatically refund payments.</p><select aria-label="Case type" className={field} value={kind} onChange={e=>setKind(e.target.value)}><option value="dispute">Report a problem</option><option value="cancellation">Request cancellation</option></select><textarea aria-label="Reason" className={field} minLength={10} maxLength={2000} required value={reason} onChange={e=>setReason(e.target.value)}/><button className={button} disabled={busy}>Submit support case</button></form>}</>}</section>;
+}
+
+function SwapSave({id}:{id:string}){
+ const api=useSwapPrivateApi();const [saved,setSaved]=useState<boolean|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(false);
+ useEffect(()=>{setSaved(null);void api("/saved").then(d=>setSaved(d.items.some((i:Item)=>i.id===id))).catch(e=>setError(e.message));},[id]);
+ return <div>{error&&<p role="alert">{error}</p>}<button className={button} disabled={busy||saved===null} onClick={async()=>{setBusy(true);setError("");try{const d=await api("/saved/"+id,{saved:!saved});setSaved(d.saved);}catch(e){setError(e instanceof Error?e.message:"Save failed");}finally{setBusy(false);}}}>{saved?"Remove from watchlist":"Save to watchlist"}</button></div>;
+}
+type Match=Item&{my_title:string;wanted_score:number;reciprocal_score:number;category_match:number;value_gap:number};
+function SwapDiscovery(){
+ const api=useSwapPrivateApi();const [tab,setTab]=useState<"matches"|"saved">("matches"),[items,setItems]=useState<Match[]>([]),[error,setError]=useState(""),[loading,setLoading]=useState(true);
+ useEffect(()=>{let active=true;setLoading(true);setError("");setItems([]);void api("/"+tab).then(d=>{if(active)setItems(d.items);}).catch(e=>{if(active)setError(e.message);}).finally(()=>{if(active)setLoading(false);});return()=>{active=false;};},[tab]);
+ return <section className="space-y-3 rounded-2xl border bg-white p-5"><h2 className="text-xl font-bold">Your swap discovery</h2><div className="flex gap-3">{(["matches","saved"] as const).map(t=><button key={t} className={"rounded-xl border p-3 "+(tab===t?"bg-blue-100":"")} onClick={()=>setTab(t)}>{t==="matches"?"Recommended for you":"Watchlist"}</button>)}</div>{error&&<p role="alert">{error}</p>}{loading?<p>Loading…</p>:!items.length?<p>{tab==="matches"?"Create an active swap listing with a wanted item to discover matches.":"No saved swaps yet."}</p>:<div className="grid gap-3 sm:grid-cols-2">{items.map(i=><article key={i.id} className="rounded-xl border p-3"><h3 className="font-bold">{i.title}</h3><p>Wants: {i.wanted}</p><p>Estimated value: £{(i.value_minor/100).toFixed(2)}</p>{tab==="matches"&&<><p className="font-bold text-blue-700">{Number(i.wanted_score)>0&&Number(i.reciprocal_score)>0?"Mutual wanted-item match":Number(i.wanted_score)>0?"Matches your wanted item":Number(i.reciprocal_score)>0?"They may want your item":"Similar category"}</p><p>Suggested exchange: {i.my_title}</p></>}{(!i.status||i.status==="active")?<Link href={"/swap/"+i.id}>View swap</Link>:<p>Status: {i.status}</p>}{tab==="saved"&&<button className="ml-3 text-blue-700" onClick={async()=>{try{await api("/saved/"+i.id,{saved:false});setItems(old=>old.filter(x=>x.id!==i.id));}catch(e){setError(e instanceof Error?e.message:"Remove failed");}}}>Remove</button>}</article>)}</div>}</section>;
+}
+
+function SwapPhoto({id,gallery=false}:{id:string;gallery?:boolean}){
+ const [failed,setFailed]=useState<number[]>([]);
+ return <div className="grid gap-2">{failed.includes(0)&&<Package className="mb-3 text-blue-600" size={36}/>} {(gallery?[0,1,2,3]:[0]).filter(n=>!failed.includes(n)).map(n=><img key={n} className="mb-3 h-44 w-full rounded-xl object-contain" loading="lazy" alt={"Swap product photo "+(n+1)} src={"/api/swaps/"+id+"/photos/"+n} onError={()=>setFailed(f=>[...f,n])}/>)}</div>;
+}
+async function prepareSwapPhoto(file:File):Promise<string>{
+ if(!["image/jpeg","image/png","image/webp"].includes(file.type)||file.size>12*1024*1024)throw Error("Choose JPEG, PNG or WebP photos under 12 MB.");
+ const bitmap=await createImageBitmap(file);
+ try{const scale=Math.min(1,1200/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement("canvas");canvas.width=Math.max(1,Math.round(bitmap.width*scale));canvas.height=Math.max(1,Math.round(bitmap.height*scale));const ctx=canvas.getContext("2d");if(!ctx)throw Error("Image processing unavailable");ctx.fillStyle="white";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
+ for(const quality of [.82,.65,.45,.25]){const encoded=canvas.toDataURL("image/jpeg",quality).split(",")[1];if(encoded&&encoded.length<=699048)return encoded;}throw Error("Photo is too large after compression.");
+ }finally{bitmap.close();}
+}
+function SwapPhotoUpload({id}:{id:string}){
+ const api=useSwapPrivateApi();const [files,setFiles]=useState<File[]>([]),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
+ return <div className="space-y-2"><label className="block">Replace product photos (up to four)<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={e=>setFiles(Array.from(e.target.files||[]))}/></label><button className={button} disabled={busy||!files.length||files.length>4} onClick={async()=>{setBusy(true);setNotice("");try{const photos=await Promise.all(files.map(prepareSwapPhoto));await api("/"+id+"/photos",{photos});setNotice("Photos saved. Refresh to view them.");setFiles([]);}catch(e){setNotice(e instanceof Error?e.message:"Upload failed");}finally{setBusy(false);}}}>Upload photos</button>{notice&&<p role="status">{notice}</p>}</div>;
+}
+function SwapAddress({offer}:{offer:Offer}){
+ const api=useSwapPrivateApi();const [open,setOpen]=useState(false),[draft,setDraft]=useState({name:"",line1:"",line2:"",city:"",postcode:"",country:"United Kingdom"}),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
+ return <div className="rounded-xl border p-3"><button onClick={()=>{setOpen(!open);if(!open)void api("/offers/"+offer.id+"/address").then(d=>{if(d.own)setDraft(d.own);}).catch(e=>setNotice(e.message));}}>Private delivery address</button>{open&&<form className="space-y-2" onSubmit={async e=>{e.preventDefault();setBusy(true);try{await api("/offers/"+offer.id+"/address",draft);setNotice("Address stored privately. Sharing is not enabled in this preview.");}catch(e){setNotice(e instanceof Error?e.message:"Save failed");}finally{setBusy(false);}}}><p>Preview only. Do not enter real delivery details or dispatch products.</p>{(Object.keys(draft) as (keyof typeof draft)[]).map(k=><label key={k} className="block capitalize">{k}<input className={field} maxLength={150} required={k!=="line2"} value={draft[k]} onChange={e=>setDraft(d=>({...d,[k]:e.target.value}))}/></label>)}<button className={button} disabled={busy}>Save private address</button></form>}{notice&&<p role="status">{notice}</p>}</div>;
+}
+
+function SwapNotificationPreferences(){
+ const api=useSwapPrivateApi();const [prefs,setPrefs]=useState<{match_email:boolean;activity_email:boolean}|null>(null),[notice,setNotice]=useState(""),[busy,setBusy]=useState(false);
+ useEffect(()=>{void api("/notification-preferences").then(setPrefs).catch(e=>setNotice(e.message));},[]);
+ return <section className="space-y-2 rounded-xl border p-4"><h2 className="font-bold">Swap email preferences</h2>{prefs&&<><label className="block"><input type="checkbox" checked={prefs.match_email} onChange={e=>setPrefs(p=>p&&({...p,match_email:e.target.checked}))}/> Email me about mutual swap matches</label><label className="block"><input type="checkbox" checked={prefs.activity_email} onChange={e=>setPrefs(p=>p&&({...p,activity_email:e.target.checked}))}/> Email me about exchange activity</label><button className={button} disabled={busy} onClick={async()=>{setBusy(true);try{await api("/notification-preferences",prefs);setNotice("Preferences saved.");}catch(e){setNotice(e instanceof Error?e.message:"Save failed");}finally{setBusy(false);}}}>Save preferences</button></>}{notice&&<p role="status">{notice}</p>}</section>;
 }
