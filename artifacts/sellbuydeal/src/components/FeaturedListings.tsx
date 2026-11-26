@@ -1,4 +1,4 @@
-import {RegionalPromotions,useRegionalGrowth} from "@/components/RegionalGrowth";
+import {useRegionalGrowth} from "@/components/RegionalGrowth";
 import { useMarketplaceLoadingDelay } from "@/components/useMarketplaceLoadingDelay";
 import { useEffect, useState, useRef } from "react";
 import { MarketplaceLoader } from "@/components/MarketplaceLoader";
