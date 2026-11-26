@@ -5,6 +5,7 @@ import { ArrowRight, BadgeCheck, Boxes, ChevronRight, CircleHelp, Coins, Film, D
 type ModalKind = "more" | "sell";
 type Tile = { title:string; subtitle:string; href:string; icon:typeof Tag; tone:string };
 const moreTiles:Tile[] = [
+ {title:"Discover & Save",subtitle:"Budget finds, gifts, trending products and more",href:"/under-5",icon:Tag,tone:"gold"},
  {title:"Affiliate Programme",subtitle:"Apply or log in to your affiliate dashboard",href:"/affiliates",icon:Handshake,tone:"blue"},
  {title:"Deals",subtitle:"Today's top offers",href:"/deals",icon:TrendingUp,tone:"pink"},
  {title:"Rewards",subtitle:"Earn credits & perks",href:"/rewards",icon:Gift,tone:"gold"},
