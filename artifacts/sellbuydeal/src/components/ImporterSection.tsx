@@ -34,8 +34,8 @@ interface SupplierImport {
 
 const USD_TO_GBP = 0.79;
 
-function calcBazunkPrice(supplierUsd: number, markupType: string, markupValue: number): number {
-  const gbp = supplierUsd * USD_TO_GBP;
+function calcBazunkPrice(supplierUsd: number, markupType: string, markupValue: number, rate = USD_TO_GBP): number {
+  const gbp = supplierUsd * rate;
   if (markupType === "fixed") return Math.round((gbp + markupValue) * 100) / 100;
   return Math.round(gbp * (1 + markupValue / 100) * 100) / 100;
 }
@@ -90,6 +90,31 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
   const [url, setUrl] = useState(initialUrl);
   const [title, setTitle] = useState("");
   const [supplierPriceUsd, setSupplierPriceUsd] = useState("");
+  const [supplierQuote, setSupplierQuote] = useState<{ amount: number; currency: string } | null>(null);
+  const [usdToGbp, setUsdToGbp] = useState<number | null>(null);
+  const [rateError, setRateError] = useState("");
+  const [rateLoading, setRateLoading] = useState(false);
+  const [savedPrice, setSavedPrice] = useState<number | null>(null);
+  const fetchRef = useRef(authFetch);
+  fetchRef.current = authFetch;
+  const loadRate = useCallback(async () => {
+    setRateLoading(true);
+    setRateError("");
+    try {
+      const response = await fetchRef.current("/api/admin/aliexpress-import-rate");
+      const data = await response.json() as { usdToGbp?: number; error?: string };
+      if (!response.ok || typeof data.usdToGbp !== "number" || !Number.isFinite(data.usdToGbp) || data.usdToGbp <= 0) {
+        throw new Error(data.error || "The USD/GBP rate is unavailable.");
+      }
+      setUsdToGbp(data.usdToGbp);
+    } catch (err) {
+      setUsdToGbp(null);
+      setRateError(err instanceof Error ? err.message : "The USD/GBP rate is unavailable.");
+    } finally {
+      setRateLoading(false);
+    }
+  }, []);
+  useEffect(() => { void loadRate(); }, [loadRate]);
   const [imageUrl, setImageUrl] = useState("");
   const [category, setCategory] = useState("");
   const [subcategory, setSubcategory] = useState("");
@@ -105,6 +130,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
     if (!productUrl.trim()) return;
     setPreviewLoading(true);
     setPreviewNotice("");
+    setSupplierQuote(null);
     try {
       const response = await authFetch("/api/admin/aliexpress-product-preview?url=" + encodeURIComponent(productUrl.trim()));
       const data = await response.json() as {error?:string;title?:string;description?:string;imageUrl?:string;supplierPrice?:number;currency?:string};
@@ -112,9 +138,9 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
       if (data.title) setTitle(data.title);
       if (data.description) setDescription(data.description);
       if (data.imageUrl) setImageUrl(data.imageUrl);
-      // Do not retain a USD price from a previously previewed product.
-      setSupplierPriceUsd(data.supplierPrice && data.currency === "USD" ? String(data.supplierPrice) : "");
-
+      setSupplierQuote(typeof data.supplierPrice === "number" && data.supplierPrice > 0 && data.currency
+        ? { amount: data.supplierPrice, currency: data.currency }
+        : null);
       setSupplierCurrency(data.currency || "USD");
       setLastPreviewUrl(productUrl);
       setPreviewNotice(data.currency && data.currency !== "USD" ? "Supplier price is in " + data.currency + ". Please enter the verified USD equivalent before importing." : "Product details retrieved. Review the information before importing.");
@@ -128,14 +154,18 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
   const [success, setSuccess] = useState(false);
   const [importedTitle, setImportedTitle] = useState("");
 
-  const usd = parseFloat(supplierPriceUsd) || 0;
-  const mv = parseFloat(markupValue) || 0;
-  const bazunkPreview = usd > 0 ? calcBazunkPrice(usd, markupType, mv) : null;
+  const usd = Number(supplierPriceUsd);
+  const mv = Number(markupValue);
+  const bazunkPreview = usdToGbp !== null && Number.isFinite(usd) && usd > 0 &&
+    Number.isFinite(mv) && mv >= 0 && mv <= 1000
+    ? calcBazunkPrice(usd, markupType, mv, usdToGbp)
+    : null;
 
   const subcategories = SITE_CATEGORIES.find(c => c.slug === category)?.subcategories ?? [];
-  const canSubmit = url.trim() && title.trim() && usd > 0 && !!category && !loading && !previewLoading;
+  const canSubmit = url.trim() && title.trim() && bazunkPreview !== null && bazunkPreview > 0 && !!category && !loading && !previewLoading && !rateLoading;
 
   async function handleImport() {
+    if (!canSubmit) return;
     setError("");
     setLoading(true);
     try {
@@ -146,6 +176,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           sellerEmail: userEmail,
           title: title.trim(),
           supplierPriceUsd: usd,
+          expectedSellingPrice: bazunkPreview,
           imageUrl: imageUrl.trim() || null,
           ...resolveCategory(category, subcategory),
           condition,
@@ -156,9 +187,11 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
       });
       const data = await r.json() as Record<string, unknown>;
       if (!r.ok) {
+        if (r.status === 409 && typeof data.usdToGbp === "number") setUsdToGbp(data.usdToGbp);
         setError((data.error as string) ?? "Import failed");
       } else {
         setImportedTitle(title.trim());
+        setSavedPrice(typeof data.sellingPrice === "number" ? data.sellingPrice : null);
         setSuccess(true);
         onSuccess();
       }
@@ -210,10 +243,10 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-7 h-7 text-emerald-600" />
           </div>
-          <p className="font-bold text-gray-900 text-lg">Imported!</p>
+          <p className="font-bold text-gray-900 text-lg">{savedPrice === null ? "Imported!" : `Imported at £${savedPrice.toFixed(2)}`}</p>
           <p className="text-sm text-gray-400 mt-1 mb-6 truncate px-4">{importedTitle}</p>
           <div className="flex gap-3">
-            <button onClick={() => { setSuccess(false); setUrl(""); setTitle(""); setSupplierPriceUsd(""); setImageUrl(""); setDescription(""); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+            <button onClick={() => { setSuccess(false); setUrl(""); setTitle(""); setSupplierPriceUsd(""); setSupplierQuote(null); setImageUrl(""); setDescription(""); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
               Import Another
             </button>
             <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-gray-800 transition-colors">
@@ -232,7 +265,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           {/* AliExpress URL */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">AliExpress Product URL <span className="text-red-400">*</span></label>
-            <input value={url} onChange={e => setUrl(e.target.value)} placeholder="https://www.aliexpress.com/item/1005007123456789.html" className={inputCls} />
+            <input value={url} onChange={e => { setUrl(e.target.value); setSupplierPriceUsd(""); setSupplierQuote(null); }} placeholder="https://www.aliexpress.com/item/1005007123456789.html" className={inputCls} />
             <button type="button" disabled={previewLoading || !url.trim()} onClick={() => void fetchPreview(url)} className="mt-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{previewLoading ? "Fetching product details…" : lastPreviewUrl === url ? "Refresh product details" : "Fetch product details"}</button>
             {previewNotice && <p role="status" className="mt-2 text-xs text-gray-600">{previewNotice}</p>}
             {imageUrl && <img src={imageUrl} alt="Supplier product preview" className="mt-2 h-28 w-28 rounded-lg border object-contain" />}
@@ -251,8 +284,11 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Supplier Price (USD) <span className="text-red-400">*</span></label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">$</span>
-                <input type="number" min="0.01" step="0.01" value={supplierPriceUsd} onChange={e => setSupplierPriceUsd(e.target.value)} placeholder="4.99" className={`${inputCls} pl-7`} />
+                <input type="number" min="0.01" step="0.01" value={supplierPriceUsd} onChange={e => setSupplierPriceUsd(e.target.value)} placeholder="e.g. 38.00" className={`${inputCls} pl-7`} />
               </div>
+              <p className="mt-1 text-xs text-gray-600">Enter the USD price of the exact option you’re importing.
+                {supplierQuote && ` API quote: ${supplierQuote.amount.toFixed(2)} ${supplierQuote.currency}.`}
+              </p>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Category <span className="text-red-400">*</span></label>
@@ -309,11 +345,16 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
             </div>
           </div>
 
+          {rateLoading && <p role="status" className="text-xs text-gray-600">Checking the USD/GBP rate…</p>}
+          {rateError && <p role="alert" className="text-sm text-red-700">{rateError}{" "}
+            <button type="button" onClick={loadRate} className="font-semibold underline">Retry rate check</button>
+          </p>}
+
           {/* Live price preview */}
           {bazunkPreview !== null && (
             <div className="bg-[#F26B21]/8 rounded-xl px-4 py-3 flex items-center justify-between text-sm">
               <span className="text-gray-500 text-xs">
-                ${usd.toFixed(2)} USD → £{(usd * 0.79).toFixed(2)} GBP
+                ${usd.toFixed(2)} USD → £{(usd * (usdToGbp ?? 0)).toFixed(2)} GBP
                 {markupType === "percentage" ? ` +${mv}%` : ` +£${mv.toFixed(2)}`}
               </span>
               <span className="font-black text-[#F26B21] text-base">£{bazunkPreview.toFixed(2)}</span>
