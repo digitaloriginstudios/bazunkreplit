@@ -3,6 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import router from "./routes/index.js";
+import { handleSwapWebhook } from "./routes/swaps.js";
 import { logger } from "./lib/logger.js";
 import { WebhookHandlers } from "./webhookHandlers.js";
 import { handleDiditWebhook } from "./routes/verification.js";
@@ -20,6 +21,8 @@ app.post(
   express.raw({ type: "application/json" }),
   handleDiditWebhook,
 );
+
+app.post("/api/swaps/stripe/webhook", express.raw({type:"application/json"}), handleSwapWebhook);
 
 // Stripe webhook — must come before express.json() so body stays as a Buffer
 app.post(
