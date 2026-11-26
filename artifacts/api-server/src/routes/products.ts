@@ -1,6 +1,6 @@
 import { listingShipping, shippingCountry, shippingZone } from "../lib/listingShipping.js";
 import { COMPLETE_THIRD_LEVEL_LIBRARY } from "../data/thirdLevelLibrary.js";
-import { Router } from "express";
+import { Router, raw } from "express";
 import { sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { db } from "@workspace/db";
@@ -8,7 +8,38 @@ import { requireAdmin } from "../middlewares/adminAuth.js";
 import { logger } from "../lib/logger.js";
 import { authenticatedSellerEmail } from "../lib/authenticatedSeller.js";
 
+import { ensureListingVideoTables, listingVideoLimit } from "../lib/listingVideo.js";
+import { isBanned } from "../lib/banned.js";
+
 const router = Router();
+
+router.post("/seller/products/video-upload", async (req, res, next) => {
+  const sellerEmail = await authenticatedSellerEmail(req, res);
+  if (!sellerEmail) return;
+  if (await isBanned(sellerEmail)) { res.status(403).json({ error: "This account cannot upload videos." }); return; }
+  res.locals.videoSeller = sellerEmail;
+  next();
+}, raw({ type: ["video/mp4", "video/webm"], limit: listingVideoLimit, inflate: false }), async (req, res) => {
+  const mime = req.is("video/mp4") || req.is("video/webm");
+  const bytes = req.body;
+  if (!Buffer.isBuffer(bytes) || bytes.length < 16 ||
+      (mime === "video/mp4" ? bytes.toString("ascii", 4, 8) !== "ftyp" :
+        mime !== "video/webm" || bytes.readUInt32BE(0) !== 0x1a45dfa3)) {
+    res.status(400).json({ error: "Choose a valid MP4 or WebM video up to 8 MB." }); return;
+  }
+  try {
+    await ensureListingVideoTables();
+    const id = randomUUID();
+    await db.execute(sql`INSERT INTO listing_video_uploads (seller_email,id,mime,data_base64)
+      VALUES (${res.locals.videoSeller},${id},${mime},${bytes.toString("base64")})
+      ON CONFLICT (seller_email) DO UPDATE SET id=EXCLUDED.id,mime=EXCLUDED.mime,
+        data_base64=EXCLUDED.data_base64,created_at=NOW()`);
+    res.status(201).json({ id });
+  } catch (err) {
+    logger.error({ err }, "Listing video upload failed");
+    res.status(503).json({ error: "Could not store video. Try again." });
+  }
+});
 
 // Persistent listing image uploads. Stored in PostgreSQL rather than ephemeral Render files.
 router.get("/listing-media/:id", async (req,res)=>{
@@ -19,7 +50,24 @@ router.get("/listing-media/:id", async (req,res)=>{
    if(!rows.length){res.status(404).end();return;}
    res.setHeader("Content-Type",String(rows[0].mime));
    res.setHeader("Cache-Control","public,max-age=31536000,immutable");
-   res.send(Buffer.from(String(rows[0].data_base64),"base64"));
+   const bytes = Buffer.from(String(rows[0].data_base64), "base64");
+   res.setHeader("X-Content-Type-Options", "nosniff");
+   if (String(rows[0].mime).startsWith("video/")) {
+     res.setHeader("Accept-Ranges", "bytes");
+     const range = req.range(bytes.length);
+     if (range === -1) {
+       res.setHeader("Content-Range", `bytes */${bytes.length}`);
+       res.status(416).end();
+       return;
+     }
+     if (Array.isArray(range) && range.type === "bytes" && range.length === 1) {
+       const [{ start, end }] = range;
+       res.setHeader("Content-Range", `bytes ${start}-${end}/${bytes.length}`);
+       res.status(206).send(bytes.subarray(start, end + 1));
+       return;
+     }
+   }
+   res.send(bytes);
  } catch(err){logger.warn({err},"Listing media unavailable");res.status(404).end();}
 });
 router.post("/admin/products/media-upload",requireAdmin,async(req,res)=>{

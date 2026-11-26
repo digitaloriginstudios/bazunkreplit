@@ -1,3 +1,4 @@
+import { useMarketplaceRegion } from "@/hooks/useMarketplaceRegion";
 import { useAuth as useClerkAuth } from "@clerk/react";
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
@@ -162,7 +163,11 @@ export function QuickSellPage() {
   const [specifications, setSpecifications] = useState<{ key: string; value: string }[]>([]);
   const [newSpecKey, setNewSpecKey] = useState("");
   const [newSpecValue, setNewSpecValue] = useState("");
-  const [premiumVideo, setPremiumVideo] = useState(false);
+  const [marketplaceRegion] = useMarketplaceRegion();
+  const [videoUpload, setVideoUpload] = useState<{ id: string; name: string } | null>(null);
+  const [videoUrl, setVideoUrl] = useState("");
+  const [videoProgress, setVideoProgress] = useState<number | null>(null);
+  const [videoError, setVideoError] = useState("");
   const [productVideoCredits, setProductVideoCredits] = useState(149);
   const [published, setPublished] = useState(false);
   const [draftSaved, setDraftSaved] = useState(false);
@@ -208,8 +213,46 @@ export function QuickSellPage() {
     ).then((dataUrls) => setPhotos((p) => [...p, ...dataUrls]));
   }
 
+  async function uploadVideo(file: File) {
+    setVideoError("");
+    if (!["video/mp4", "video/webm"].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      setVideoError("Choose an MP4 or WebM video up to 8 MB.");
+      return;
+    }
+    setVideoProgress(0);
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Sign in to upload a video.");
+      const base = (import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "https://bazunk-api-ifqs.onrender.com").replace(/\/$/, "");
+      const id = await new Promise<string>((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open("POST", base + "/api/seller/products/video-upload");
+        request.responseType = "json";
+        request.timeout = 120_000;
+        request.setRequestHeader("Authorization", `Bearer ${token}`);
+        request.setRequestHeader("Content-Type", file.type);
+        request.upload.onprogress = event => {
+          if (event.lengthComputable) setVideoProgress(Math.floor(event.loaded / event.total * 100));
+        };
+        request.onload = () => {
+          if (request.status === 201 && typeof request.response?.id === "string") resolve(request.response.id);
+          else reject(new Error(request.response?.error || "Could not upload the video. Try again."));
+        };
+        request.onerror = request.ontimeout = () => reject(new Error("Video upload interrupted. Try again."));
+        request.send(file);
+      });
+      setVideoUpload({ id, name: file.name });
+      setVideoUrl("");
+    } catch (error) {
+      setVideoError(error instanceof Error ? error.message : "Video upload failed.");
+    } finally {
+      setVideoProgress(null);
+    }
+  }
+
   async function handlePublish(e: React.FormEvent) {
     e.preventDefault();
+    if (videoProgress !== null || publishing) return;
     const errors: string[] = [];
     if (!title.trim()) errors.push("Title is required");
     if (!price || parseFloat(price) <= 0) errors.push("Price must be greater than 0");
@@ -248,7 +291,10 @@ export function QuickSellPage() {
           sellerUsername: user?.username ?? null,
           tags: [tags.trim(), ...(ecoFriendly ? ["eco-friendly"] : [])].filter(Boolean).join(", ") || undefined,
           specifications: specifications.length > 0 ? specifications : undefined,
-          premiumVideo,
+          marketplaceRegion,
+          premiumVideo: Boolean(videoUpload || videoUrl.trim()),
+          videoUploadId: videoUpload?.id,
+          videoUrl: videoUrl.trim() || undefined,
         }),
       });
       if (!res.ok) {
@@ -1072,90 +1118,41 @@ export function QuickSellPage() {
             </div>
           </section>
 
-          {/* Premium Video */}
-          <section className="bg-[#FFFBEB] px-7 py-7 border-x border-b border-yellow-100">
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-yellow-400 flex items-center justify-center">
-                  <Video className="w-3.5 h-3.5 text-white" />
-                </div>
-                <span className="font-bold text-gray-900">Premium Video</span>
-              </div>
-              <span className="text-xs font-bold bg-[#F26B21] text-white px-3 py-1 rounded-full">{productVideoCredits} credits</span>
-            </div>
-            <p className="text-sm text-gray-500 mb-5">
-              Add a video to showcase your item in action. Videos increase engagement by 300%!
-            </p>
-            <p className="text-xs text-gray-500 mt-1">{productVideoCredits} credits are deducted only when the listing is successfully published.</p>
-
-            <div className="bg-white rounded-xl border border-yellow-100 p-4 mb-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-gray-900 text-sm">Product Video</p>
-                  <p className="text-xs text-gray-400">Videos get 5x more engagement</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setPremiumVideo(!premiumVideo)}
-                  className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                    premiumVideo
-                      ? "bg-green-500 text-white"
-                      : "bg-gradient-to-r from-[#F26B21] to-[#F59E0B] text-white"
-                  }`}
-                  data-testid="button-premium-video"
-                >
-                  {premiumVideo ? `Added ✓ · ${productVideoCredits} credits` : `Add · ${productVideoCredits} credits`}
-                </button>
-              </div>
-            </div>
-
-            {/* Upload area */}
-            <div
-              className="rounded-xl bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-dashed border-purple-200 p-10 flex flex-col items-center text-center cursor-pointer hover:border-purple-400 transition-colors mb-4"
-              onClick={() => premiumVideo && videoInputRef.current?.click()}
-              data-testid="dropzone-video"
-            >
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#EC4899] flex items-center justify-center mb-4 shadow-md">
-                <Video className="w-7 h-7 text-white" />
-              </div>
-              <p className="font-bold text-gray-800 text-lg mb-1">Add Product Video</p>
-              <p className="text-sm text-gray-500 mb-1">Show your item in action</p>
-              <p className="text-xs text-gray-400 mb-5">MP4, MOV, AVI • Max 100MB • Premium feature</p>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); if (premiumVideo) videoInputRef.current?.click(); }}
-                className={`px-8 py-2.5 rounded-xl text-sm font-semibold text-white transition-opacity flex items-center gap-2 ${
-                  premiumVideo
-                    ? "bg-gradient-to-r from-[#7C3AED] to-[#EC4899] hover:opacity-90"
-                    : "bg-gray-300 cursor-not-allowed"
-                }`}
-                data-testid="button-select-video"
-              >
-                <Upload className="w-4 h-4" />
-                Select Video File
-              </button>
-              <input ref={videoInputRef} type="file" accept="video/*" className="hidden" />
-            </div>
-
-            {/* Benefits */}
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { icon: Eye, label: "5x More Views", desc: "Videos dramatically increase engagement" },
-                { icon: Zap, label: "Sell 3x Faster", desc: "Videos build trust and confidence" },
-                { icon: Star, label: "Premium Badge", desc: "Stand out from other listings" },
-              ].map((b) => {
-                const Icon = b.icon;
-                return (
-                  <div key={b.label} className="bg-white rounded-xl p-4 border border-gray-100 text-center">
-                    <div className="w-9 h-9 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-2">
-                      <Icon className="w-4 h-4 text-green-500" />
-                    </div>
-                    <p className="text-xs font-bold text-gray-800 mb-1">{b.label}</p>
-                    <p className="text-[10px] text-gray-400">{b.desc}</p>
-                  </div>
-                );
-              })}
-            </div>
+          <section className="space-y-3 border-x border-b border-yellow-100 bg-[#FFFBEB] px-7 py-7" aria-labelledby="listing-video-heading">
+            <h2 id="listing-video-heading" className="flex items-center gap-2 font-bold text-gray-900">
+              <Video className="h-4 w-4" /> Product video <span className="text-sm font-normal">(optional)</span>
+            </h2>
+            <p className="text-sm text-gray-600">{productVideoCredits} credits when you publish with a video.</p>
+            <input ref={videoInputRef} type="file" accept="video/mp4,video/webm,.mp4,.webm" className="hidden"
+              onChange={event => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file) void uploadVideo(file);
+              }} />
+            <button type="button" onClick={() => videoInputRef.current?.click()} disabled={videoProgress !== null || publishing}
+              className="inline-flex items-center gap-2 rounded-lg bg-orange-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+              <Upload className="h-4 w-4" /> {videoUpload ? "Replace video" : "Upload video"}
+            </button>
+            <p className="text-sm text-gray-600">MP4 or WebM, up to 8 MB.</p>
+            {videoProgress !== null && <div role="status" className="flex items-center gap-2 text-sm">
+              <progress aria-label="Video upload progress" value={videoProgress} max={100} />
+              {videoProgress === 100 ? "Saving video…" : `Uploading ${videoProgress}%`}
+            </div>}
+            {videoUpload && <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span>{videoUpload.name} uploaded</span>
+              <button type="button" className="underline" disabled={videoProgress !== null || publishing} onClick={() => setVideoUpload(null)}>Remove video</button>
+            </div>}
+            {videoError && <p role="alert" className="text-sm text-red-700">{videoError}</p>}
+            <label className="block text-sm font-semibold text-gray-800">
+              Or use a YouTube or Vimeo URL
+              <input type="url" value={videoUrl} disabled={videoProgress !== null || publishing}
+                onChange={event => {
+                  setVideoUrl(event.target.value);
+                  setVideoError("");
+                  if (event.target.value.trim()) setVideoUpload(null);
+                }}
+                placeholder="https://…" className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2" />
+            </label>
           </section>
 
           {/* Ready to List */}
@@ -1213,7 +1210,7 @@ export function QuickSellPage() {
               </button>
               <button
                 type="submit"
-                disabled={published || publishing}
+                disabled={published || publishing || videoProgress !== null}
                 className="flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#3B4FD8] to-[#1E3A8A] text-white font-semibold text-sm hover:opacity-90 transition-opacity shadow-md disabled:opacity-70"
                 data-testid="button-publish-listing"
               >

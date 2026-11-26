@@ -14,6 +14,7 @@ import { refreshSellerMilestones } from "../lib/milestones.js";
 import { sendSystemMessage } from "../lib/systemMessages.js";
 
 import { awardReferralMilestone } from "../lib/referrals.js";
+import { ensureListingVideoTables, listingVideoEmbed, listingVideoId } from "../lib/listingVideo.js";
 import { getPromoConfig } from "../lib/promoConfig.js";
 
 const router = Router();
@@ -535,13 +536,24 @@ router.post("/listings", async (req, res) => {
     const region = body.marketplaceRegion ?? body.marketplace_region;
     if (region !== "uk" && region !== "us") { res.status(400).json({ error: "Select UK or USA marketplace region" }); return; }
     const gallery = Array.isArray(body.photos) ? body.photos.filter((p): p is string => typeof p === "string" && p.length > 0).slice(0, 10) : [];
-    const specifications = JSON.stringify({ marketplace_region: region, details: Array.isArray(body.specifications) ? body.specifications : [], photos: gallery, draftForm: body.draftForm && typeof body.draftForm === "object" ? body.draftForm : undefined });
     const extraCategories = Array.isArray(body.extra_categories) && body.extra_categories.length
       ? JSON.stringify(body.extra_categories)
       : null;
     const currency = typeof body.currency === "string" && body.currency ? body.currency.toUpperCase() : "GBP";
     const status = body.status === "draft" ? "draft" : "active";
-    const premiumVideo = body.premiumVideo === true;
+    const premiumVideo = body.premiumVideo === true && status === "active";
+    const videoUploadId = typeof body.videoUploadId === "string" ? body.videoUploadId : "";
+    const videoLink = typeof body.videoUrl === "string" ? body.videoUrl.trim() : "";
+    const embed = videoLink ? listingVideoEmbed(videoLink) : null;
+    if (premiumVideo && (videoUploadId ? !listingVideoId.test(videoUploadId) || !!videoLink : !embed)) {
+      res.status(400).json({ error: "Upload a video or enter a valid YouTube or Vimeo link." }); return;
+    }
+    const uploadedVideo = premiumVideo && videoUploadId ? videoUploadId : null;
+    const specifications = JSON.stringify({
+      marketplace_region: region, details: Array.isArray(body.specifications) ? body.specifications : [], photos: gallery,
+      draftForm: body.draftForm && typeof body.draftForm === "object" ? body.draftForm : undefined,
+      listing_video: premiumVideo ? (uploadedVideo ? { assetId: uploadedVideo } : { embed }) : undefined,
+    });
     const shipOrigin = typeof body.shipOrigin === "string" ? body.shipOrigin.slice(0, 80) : null;
     const shipOriginOther = typeof body.shipOriginOther === "string" ? body.shipOriginOther.slice(0, 120) : null;
     const shipZone = typeof body.shipZone === "string" ? body.shipZone.slice(0, 80) : null;
@@ -578,6 +590,7 @@ router.post("/listings", async (req, res) => {
     // Keep the check and insert inside one transaction. The per-seller/SKU
     // transaction lock makes simultaneous retries of this API endpoint serial,
     // preventing both requests from passing the duplicate check.
+    if (uploadedVideo) await ensureListingVideoTables();
     const created = await db.transaction(async (tx) => {
       if (sku) {
         await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${authenticatedEmail}), hashtext(${sku.toLowerCase()}))`);
@@ -589,6 +602,22 @@ router.post("/listings", async (req, res) => {
         `);
         if (existing.rows.length) return { listing: null, existingListingId: Number(existing.rows[0].id) };
       }
+    if (uploadedVideo) {
+      const asset = await tx.execute(sql`WITH upload AS (
+        DELETE FROM listing_video_uploads WHERE seller_email=${authenticatedEmail} AND id=${uploadedVideo}
+        RETURNING id,mime,data_base64
+      )
+      INSERT INTO listing_media_assets(id,filename,mime,data_base64)
+      SELECT id::text,'listing-video',mime,data_base64 FROM upload RETURNING id`);
+      if (!asset.rows.length) throw new Error("LISTING_VIDEO_UPLOAD_MISSING");
+    }
+    let videoBalance: number | null = null;
+    if (productVideoConfig) {
+      const { rows: [account] } = await tx.execute(sql`UPDATE users SET credits=credits-${productVideoConfig.cost}
+        WHERE email=${sellerEmail} AND credits>=${productVideoConfig.cost} RETURNING credits`);
+      if (!account) throw new Error("LISTING_VIDEO_CREDITS");
+      videoBalance = Number(account.credits);
+    }
     const [inserted] = await tx
       .insert(listingsTable)
       .values({ 
@@ -627,7 +656,12 @@ router.post("/listings", async (req, res) => {
       .where(eq(listingsTable.id, inserted.id))
       .returning();
 
-      return { listing, existingListingId: null };
+      if (productVideoConfig) {
+        const expiresAt = new Date();
+        expiresAt.setFullYear(expiresAt.getFullYear() + 10);
+        await tx.insert(listingPromotionsTable).values({ listingId: listing.id, type: "product-video", expiresAt });
+      }
+      return { listing, existingListingId: null, videoBalance };
     });
     if (created.existingListingId !== null) {
       res.status(409).json({
@@ -643,11 +677,9 @@ router.post("/listings", async (req, res) => {
     console.log("Listing successfully created:", listing.id);
 
     if (status === "active" && premiumVideo && productVideoConfig) {
-      const newBalance = await storage.addCredits(sellerEmail, -productVideoConfig.cost);
-      await recordCreditEconomy({ email: sellerEmail, kind: "spent", credits: -productVideoConfig.cost, reason: "Product Video", referenceType: "product_video" });
-      const expiresAt = new Date();
-      expiresAt.setFullYear(expiresAt.getFullYear() + 10);
-      await db.insert(listingPromotionsTable).values({ listingId: listing.id, type: "product-video", expiresAt });
+      const newBalance = created.videoBalance ?? 0;
+      void recordCreditEconomy({ email: sellerEmail, kind: "spent", credits: -productVideoConfig.cost, reason: "Product Video", referenceType: "product_video" })
+        .catch(error => console.error("Could not record listing video credit event:", error));
       void sendSystemMessage(sellerEmail, { category: "Listings", subject: "Product Video added", body: `Product Video was added to “${listing.title}” for ${Math.round(productVideoConfig.cost * 100)} credits. Your new balance is ${Math.round(Number(newBalance) * 100)} credits.` });
     }
 
@@ -672,6 +704,12 @@ router.post("/listings", async (req, res) => {
     res.status(201).json({ ...listing, promotions: [] });
 
   } catch (err) {
+    if (err instanceof Error && err.message === "LISTING_VIDEO_UPLOAD_MISSING") {
+      res.status(409).json({ error: "That video upload is no longer available. Upload the file again." }); return;
+    }
+    if (err instanceof Error && err.message === "LISTING_VIDEO_CREDITS") {
+      res.status(402).json({ error: "Insufficient credits for Product Video." }); return;
+    }
     console.error("Error creating listing:", err);
     res.status(500).json({ error: "internal_server_error", message: String(err) });
   }
