@@ -1,3 +1,4 @@
+import { featureEnabled } from "../lib/featureFlags.js";
 import { minimumBid, canAcceptBid } from "../lib/auctionRules.js";
 import { recordCreditEconomy } from "../lib/creditEconomy.js";
 import { Router } from "express";
@@ -92,7 +93,7 @@ router.get("/auctions", async (req, res) => {
     res.status(400).json({ error: "Invalid marketplace region; use uk or us" });
     return;
   }
-  const regionClause = region === "uk" || region === "us"
+  const regionClause = !(await featureEnabled("global_marketplace")) && (region === "uk" || region === "us")
     ? sql`marketplace_region = ${region}`
     : sql`TRUE`;
   let rows;

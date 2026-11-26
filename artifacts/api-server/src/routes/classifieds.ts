@@ -1,3 +1,4 @@
+import { featureEnabled } from "../lib/featureFlags.js";
 import { validateClassifiedBatch } from "./classifiedImportValidation.mjs";
 import { Router } from "express";
 import { db, classifiedAdsTable } from "@workspace/db";
@@ -16,7 +17,7 @@ router.get("/classifieds", async (req, res) => {
   }
 
   const conditions = [eq(classifiedAdsTable.status, "active"), sql`(${classifiedAdsTable.expiresAt} IS NULL OR ${classifiedAdsTable.expiresAt} > NOW())`, sql`NOT EXISTS (SELECT 1 FROM site_settings cv WHERE cv.value='false' AND (cv.key='category_visible_' || ${classifiedAdsTable.category} OR cv.key='category_visible_' || ${classifiedAdsTable.category} || '__' || COALESCE(${classifiedAdsTable.subcategory},'')))`];
-  if (region === "uk" || region === "us") conditions.push(eq(classifiedAdsTable.marketplaceRegion, region));
+  if ((region === "uk" || region === "us") && !(await featureEnabled("global_marketplace"))) conditions.push(eq(classifiedAdsTable.marketplaceRegion, region));
   if (category && category !== "all") conditions.push(eq(classifiedAdsTable.category, category));
   if (subcategory) conditions.push(eq(classifiedAdsTable.subcategory, subcategory));
   if (type && type !== "all") conditions.push(eq(classifiedAdsTable.type, type));

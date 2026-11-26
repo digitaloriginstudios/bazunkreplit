@@ -1,3 +1,4 @@
+import { featureEnabled } from "../lib/featureFlags.js";
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
@@ -34,7 +35,7 @@ router.get("/flash-sales", async (req, res) => {
     return;
   }
   await syncStatuses();
-  const regionClause = region === "uk" || region === "us"
+  const regionClause = !(await featureEnabled("global_marketplace")) && (region === "uk" || region === "us")
     ? sql`marketplace_region = ${region}`
     : sql`TRUE`;
   let rows;

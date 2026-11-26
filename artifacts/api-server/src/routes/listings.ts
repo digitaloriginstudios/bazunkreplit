@@ -1,3 +1,4 @@
+import { featureEnabled } from "../lib/featureFlags.js";
 import { recordCreditEconomy } from "../lib/creditEconomy.js";
 import { isBanned } from "../lib/banned.js";
 import { Router } from "express";
@@ -112,7 +113,7 @@ router.get("/listings/search-suggestions", async (req, res) => {
       res.status(400).json({ error: "Invalid region" }); return;
     }
     const visible = await categoryVisibility();
-    const region = listingRegionFilter(req.query.region);
+    const region = listingRegionFilter(await featureEnabled("global_marketplace") ? undefined : req.query.region);
     const rows = await db.select({ title: listingsTable.title })
       .from(listingsTable)
       .where(and(eq(listingsTable.status, "active"), visible, region,
@@ -166,7 +167,7 @@ router.get("/listings", async (req, res) => {
     const { category, sub, subsub, sellerEmail, limit = "40", offset = "0", ids, q, conditions, categories, subcategories, thirdLevels, minPrice, maxPrice, sort, shipFrom, shipTo, freeShipping, listedWithin, collection } = req.query as Record<string, string>;
 
     if (ids) {
-      const regionalVisibility = listingRegionFilter(req.query.region);
+      const regionalVisibility = listingRegionFilter(await featureEnabled("global_marketplace") ? undefined : req.query.region);
       const idList = ids.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
       if (idList.length === 0) { res.json([]); return; }
       const visible = await categoryVisibility();
@@ -178,7 +179,7 @@ router.get("/listings", async (req, res) => {
     const visible = await categoryVisibility();
     const parsedLimit = Math.min(isNaN(parseInt(limit)) ? 40 : parseInt(limit), 100);
     const parsedOffset = isNaN(parseInt(offset)) ? 0 : parseInt(offset);
-    const regionalVisibility = listingRegionFilter(req.query.region);
+    const regionalVisibility = listingRegionFilter(await featureEnabled("global_marketplace") ? undefined : req.query.region);
 
     // Apply browsing criteria before LIMIT/OFFSET, across the complete database.
     const clauses: any[] = [visible, regionalVisibility, eq(listingsTable.status, "active")];
@@ -272,7 +273,7 @@ router.get("/listings/category-counts", async (req, res) => {
       return;
     }
     res.setHeader("Cache-Control", "public, max-age=120");
-    const regionFilter = listingRegionFilter(req.query.region);
+    const regionFilter = listingRegionFilter(await featureEnabled("global_marketplace") ? undefined : req.query.region);
     const demoVisibility = await categoryVisibility();
     const rows = await db.execute(sql`
       SELECT category, subcategory, COUNT(*)::int AS count
@@ -294,7 +295,7 @@ router.get("/listings/spotlight", async (req, res) => {
       return;
     }
     const visible = await categoryVisibility();
-    const regionFilter = listingRegionFilter(req.query.region);
+    const regionFilter = listingRegionFilter(await featureEnabled("global_marketplace") ? undefined : req.query.region);
     const now = new Date();
     const spotlightTypes = ["homepage-spotlight", "spotlight", "featured-badge", "featured", "premium-placement"];
 
