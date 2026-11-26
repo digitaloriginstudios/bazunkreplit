@@ -32,12 +32,15 @@ export async function syncImport(importId: number): Promise<{ ok: boolean; error
     if(Number.isInteger(parsed.syncDays)&&parsed.syncDays>=1&&parsed.syncDays<=90) ebayDays=parsed.syncDays;
   } catch { /* default to seven days */ }
   const rows = await db.execute(sql`
-    SELECT si.id, si.listing_id AS "listingId", si.supplier_id AS "supplierId", si.supplier_source AS "supplierSource", si.markup_type AS "markupType", si.markup_value AS "markupValue", si.supplier_url AS "supplierUrl", si.supplier_data AS "supplierData", l.seller_email AS "sellerEmail", CASE WHEN COALESCE(l.specifications, '') ~ '^\\s*\\{' THEN l.specifications::jsonb->>'marketplace_region' END AS market
+    SELECT si.id, si.listing_id AS "listingId", si.supplier_id AS "supplierId", si.supplier_source AS "supplierSource", si.sync_status AS "syncStatus", si.markup_type AS "markupType", si.markup_value AS "markupValue", si.supplier_url AS "supplierUrl", si.supplier_data AS "supplierData", l.seller_email AS "sellerEmail", CASE WHEN COALESCE(l.specifications, '') ~ '^\\s*\\{' THEN l.specifications::jsonb->>'marketplace_region' END AS market
     FROM supplier_imports si JOIN listings l ON l.id=si.listing_id WHERE si.id = ${importId}
   `);
 
   const row = rows.rows[0] as unknown as ImportRow | undefined;
   if (!row) return { ok: false, error: "Import not found" };
+  if (row.supplierSource === "aliexpress" && (row as ImportRow & { syncStatus?: string }).syncStatus === "disabled") {
+    return { ok: false, error: "Update this supplier option from the listing editor. Product-level sync does not have option-specific pricing." };
+  }
 
   return syncRow(row);
 }

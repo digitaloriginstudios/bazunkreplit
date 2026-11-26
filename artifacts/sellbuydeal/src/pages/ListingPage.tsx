@@ -74,7 +74,7 @@ function normaliseCondition(raw: unknown): string {
 }
 
 type SpecRow = { key: string; value: string };
-type ApiListingExtra = { _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string; isAliExpress?: boolean; dispatchTime?: string; deliveryEstimate?: string };
+type ApiListingExtra = { _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string; isAliExpress?: boolean; aliExpressOptions?: { token: string; label: string; quantity: number | null }[]; dispatchTime?: string; deliveryEstimate?: string };
 
 const TAG_COLORS = [
   "bg-[#4A5CE8]/10 text-[#4A5CE8]",
@@ -126,6 +126,7 @@ function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & A
     _specifications: parsedSpecs,
     _gallery: gallery,
     isAliExpress, dispatchTime, deliveryEstimate,
+    aliExpressOptions: Array.isArray(l.aliExpressOptions) ? l.aliExpressOptions : [],
     shipOrigin: (l.shipOrigin as string) ?? undefined,
     shipOriginOther: (l.shipOriginOther as string) ?? undefined,
     shipZone: (l.shipZone as string) ?? undefined,
@@ -758,6 +759,21 @@ export function ListingPage() {
                 </div>
               </div>
 
+              {apiProduct?.aliExpressOptions && apiProduct.aliExpressOptions.length > 1 && (
+                <div className="mb-5 space-y-2">
+                  <h3 className="text-sm font-bold">Product options</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {apiProduct.aliExpressOptions.map(option => (
+                      <Link key={option.token} href={`/listing/${option.token}`}
+                        aria-current={option.token === apiProduct._publicUrlToken ? "page" : undefined}
+                        className="rounded-lg border px-3 py-2 text-sm aria-[current=page]:border-orange-500 aria-[current=page]:font-bold">
+                        {option.label}{option.quantity === 0 ? " (out of stock)" : ""}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Variants */}
               {product.variants && product.variants.length > 0 && (
                 <div className="mb-5 pb-5 border-b border-gray-100">
@@ -777,7 +793,7 @@ export function ListingPage() {
               {/* Buy Now */}
               <button
                 onClick={handleBuyNow}
-                disabled={isDemoListing}
+                disabled={isDemoListing || apiProduct?.quantity === 0}
                 className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all mb-2.5 shadow-sm bg-gradient-to-r from-[#F26B21] to-[#D97706] text-white hover:opacity-90"
                 data-testid="button-buy-now"
               >

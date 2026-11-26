@@ -1764,7 +1764,7 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
   const description = tidyAliExpressDescription(body.description);
   const market = body.market ?? "uk";
   const quantity = Number(body.quantity ?? 1);
-  if (!["uk", "us"].includes(market) || !Number.isInteger(quantity) || quantity < 1 || quantity > 2147483647) {
+  if (!["uk", "us"].includes(market) || !Number.isInteger(quantity) || quantity < (body.variants === undefined ? 1 : 0) || quantity > 2147483647) {
     res.status(400).json({ error: "Select UK or USA and enter a positive whole-number quantity." }); return;
   }
   const currency = market === "uk" ? "GBP" : "USD";
@@ -1789,7 +1789,7 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
   const subcategory = String(body.subcategory ?? "").trim();
   const condition = String(body.condition ?? "new");
   const sellerEmail = String(body.sellerEmail ?? "").trim();
-  if (!title || !category || !Number.isFinite(priceUsd) || priceUsd <= 0 ||
+  if (!title || !category || (body.variants === undefined && (!Number.isFinite(priceUsd) || priceUsd <= 0)) ||
       !Number.isFinite(markupValue) || markupValue < 0 || markupValue > 1000 ||
       !["percentage", "fixed"].includes(markupType) || !["new","like new","good","fair","poor"].includes(condition)) {
     res.status(400).json({ error: "Check title, category, USD supplier price, markup and condition" }); return;
@@ -1807,41 +1807,68 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
   } catch {
     if (market === "uk") { res.status(503).json({ error: "Verified USD/GBP rate unavailable. No listing created." }); return; }
   }
-  const basePrice = priceUsd * (market === "uk" ? rate! : 1);
-  const sellingPrice = Math.round((markupType === "fixed" ? basePrice + markupValue : basePrice * (1 + markupValue / 100)) * 100) / 100;
-  if (body.expectedSellingPrice !== undefined && body.expectedSellingPrice !== sellingPrice) {
-    res.status(409).json({
-      error: "The listing price changed. Review the updated price before creating the listing.",
-      usdToGbp: rate,
-    });
+  const inputs = body.variants === undefined ? [{ priceUsd, quantity, expectedSellingPrice: body.expectedSellingPrice }] : body.variants;
+  if (!Array.isArray(inputs) || !inputs.length || inputs.length > 200 ||
+      (body.variants !== undefined && !inputs.every(item => item && /^\d{1,24}$/.test(String(item.sku)) &&
+        typeof item.label === "string" && item.label.trim() && Number.isFinite(item.priceUsd) && item.priceUsd > 0 &&
+        Number.isInteger(item.quantity) && item.quantity >= 0 && item.quantity <= 2147483647 &&
+        Number.isFinite(item.expectedSellingPrice))) ||
+      body.variants !== undefined && new Set(inputs.map(item => String(item.sku))).size !== inputs.length) {
+    res.status(400).json({ error: "Provide a valid price and whole-number stock for each selected supplier option." }); return;
+  }
+  const rows = inputs.map(input => {
+    const basePrice = input.priceUsd * (market === "uk" ? rate! : 1);
+    const sellingPrice = Math.round((markupType === "fixed" ? basePrice + markupValue : basePrice * (1 + markupValue / 100)) * 100) / 100;
+    return { ...input, sellingPrice, priceGbp: market === "uk" ? sellingPrice : rate === null ? null : Math.round(sellingPrice * rate * 100) / 100 };
+  });
+  if (rows.some(row => !Number.isFinite(row.sellingPrice) || row.sellingPrice <= 0 || row.expectedSellingPrice !== undefined && row.expectedSellingPrice !== row.sellingPrice)) {
+    res.status(409).json({ error: "The listing price changed. Review the updated prices before importing.", usdToGbp: rate });
     return;
   }
-  const priceGbp = market === "uk" ? sellingPrice : rate === null ? null : Math.round(sellingPrice * rate * 100) / 100;
   const images = [...new Set([imageUrl, ...gallery].filter(Boolean))].slice(0, 12);
-  const specs = JSON.stringify({admin_gallery_images:images,details,delivery_estimate:deliveryEstimate,
-    ships_from:origin, ships_to:shipZone, shipping_price:shippingPrice, marketplace_region:market,source:"AliExpress",aliexpress_id:id,aliexpress_url:rawUrl,source_price:priceUsd,source_currency:"USD",exchange_rate_to_gbp:rate,markup_type:markupType,markup_value:markupValue,source_sync:true});
   try {
-    const listingId = await db.transaction(async (tx) => {
-      // Serialise imports of this supplier product for this seller, even across requests.
+    const imported = await db.transaction(async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${sellerEmail}), hashtext(${id}))`);
-      const duplicate = await tx.execute(sql`SELECT si.id FROM supplier_imports si
+      const existing = await tx.execute(sql`SELECT l.specifications FROM supplier_imports si
         JOIN listings l ON l.id = si.listing_id
-        WHERE si.supplier_source = 'aliexpress' AND si.supplier_id = ${id}
-          AND l.seller_email = ${sellerEmail} LIMIT 1`);
-      if (duplicate.rows.length) {
-        throw new Error("ALIEXPRESS_ALREADY_IMPORTED");
+        WHERE si.supplier_source = 'aliexpress' AND si.supplier_id = ${id} AND l.seller_email = ${sellerEmail}`);
+      const keys = new Set(existing.rows.map(row => {
+        try {
+          const meta = JSON.parse(String(row.specifications));
+          return (meta.marketplace_region ?? "uk") + ":" + (meta.aliexpress_sku ?? "");
+        } catch { return "uk:"; }
+      }));
+      const result: { listingId: number; sellingPrice: number; quantity: number; supplierPriceUsd: number }[] = [];
+      for (const row of rows) {
+        if (keys.has(market + ":" + (row.sku ?? ""))) continue;
+        // A freight quote applies to the reviewed SKU, never to sibling options by default.
+        const reviewed = !row.sku || String(row.sku) === String(body.shippingSku ?? "");
+        const listingOrigin = reviewed ? origin : shippingCountry(row.origin);
+        const listingZone = reviewed ? shipZone : null;
+        const postage = reviewed ? shippingPrice : null;
+        const label = row.sku ? row.label.trim().slice(0, 140) : undefined;
+        const listingTitle = label ? title.slice(0, 497 - label.length) + " · " + label : title;
+        const cover = typeof row.image === "string" && row.image.length <= 4000 && /^https:\/\//i.test(row.image) ? row.image : images[0];
+        const variantImages = [...new Set([cover, ...images].filter(Boolean))].slice(0, 12);
+        const specs = JSON.stringify({ admin_gallery_images:variantImages, details, delivery_estimate:reviewed ? deliveryEstimate : "",
+          ships_from:listingOrigin, ships_to:listingZone, shipping_price:postage, marketplace_region:market,
+          source:"AliExpress", aliexpress_id:id, aliexpress_url:rawUrl, aliexpress_sku:row.sku, aliexpress_option:label,
+          source_price:row.priceUsd, source_currency:"USD", exchange_rate_to_gbp:rate,
+          markup_type:markupType, markup_value:markupValue, source_sync:!row.sku });
+        const inserted = await tx.execute(sql`INSERT INTO listings
+          (title,price,price_gbp,currency,quantity,ship_origin,ship_zone,shipping_price,category,subcategory,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
+          VALUES (${listingTitle},${row.sellingPrice},${row.priceGbp},${currency},${row.quantity},${listingOrigin},${listingZone},${postage},${category},${subcategory || null},${description || title},${condition},${cover ?? null},${seller.email},${seller.name ?? seller.email.split("@")[0]},${specs},'active',NOW(),NOW()) RETURNING id`);
+        const listingId = Number(inserted.rows[0].id);
+        await tx.execute(sql`UPDATE listings SET public_id = ${"BZL-" + listingId} WHERE id = ${listingId}`);
+        await tx.execute(sql`INSERT INTO supplier_imports
+          (listing_id,supplier_source,supplier_id,supplier_url,supplier_price,supplier_currency,markup_type,markup_value,last_synced_at,sync_status)
+          VALUES (${listingId},'aliexpress',${id},${rawUrl},${row.priceUsd},'USD',${markupType},${markupValue},NOW(),${row.sku ? "disabled" : "ok"})`);
+        result.push({ listingId, sellingPrice:row.sellingPrice, quantity:row.quantity, supplierPriceUsd:row.priceUsd });
       }
-      const inserted = await tx.execute(sql`INSERT INTO listings
-        (title,price,price_gbp,currency,quantity,ship_origin,ship_zone,shipping_price,category,subcategory,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
-        VALUES (${title},${sellingPrice},${priceGbp},${currency},${quantity},${origin},${shipZone},${shippingPrice},${category},${subcategory || null},${description || title},${condition},${images[0] ?? null},${seller.email},${seller.name ?? seller.email.split("@")[0]},${specs},'active',NOW(),NOW()) RETURNING id`);
-      const newId = Number((inserted.rows[0] as {id:number}).id);
-      await tx.execute(sql`UPDATE listings SET public_id = ${"BZL-" + newId} WHERE id = ${newId}`);
-      await tx.execute(sql`INSERT INTO supplier_imports
-        (listing_id,supplier_source,supplier_id,supplier_url,supplier_price,supplier_currency,markup_type,markup_value,last_synced_at,sync_status)
-        VALUES (${newId},'aliexpress',${id},${rawUrl},${priceUsd},'USD',${markupType},${markupValue},NOW(),'ok')`);
-      return newId;
+      if (!result.length) throw new Error("ALIEXPRESS_ALREADY_IMPORTED");
+      return result;
     });
-    res.status(201).json({ listingId, sellingPrice, currency, quantity, supplierPriceUsd:priceUsd });
+    res.status(201).json({ ...imported[0], currency, imported: imported.length, skipped: rows.length - imported.length });
   } catch (error) {
     if (error instanceof Error && error.message === "ALIEXPRESS_ALREADY_IMPORTED") {
       res.status(409).json({ error: "Product already imported for this seller" });

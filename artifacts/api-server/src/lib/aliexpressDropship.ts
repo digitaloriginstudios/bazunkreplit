@@ -169,13 +169,18 @@ export async function previewDropshipProduct(id: string, destination: "GB" | "US
   const base = raw.ae_item_base_info_dto;
   const productOrigin = shippingCountry(raw.ship_from_country ?? base?.ship_from_country);
   const choices = members(raw.ae_item_sku_info_dtos, "ae_item_sku_info_d_t_o")
-    .filter(sku => /^\d{1,24}$/.test(String(sku.sku_id ?? "")) && Number(sku.sku_available_stock) !== 0)
+    .filter(sku => /^\d{1,24}$/.test(String(sku.sku_id ?? "")))
     .map(sku => {
       const properties = members(sku.ae_sku_property_dtos, "ae_sku_property_d_t_o");
       const propertyValue = (p: any) => String(p.property_value_definition_name ?? p.sku_property_value ?? "").trim();
       const warehouse = properties.find(p => String(p.sku_property_name ?? "").trim().toLowerCase() === "ships from");
+      const amount = Number(sku.offer_sale_price ?? sku.sku_price);
+      const stock = sku.sku_available_stock == null || sku.sku_available_stock === "" ? null : Number(sku.sku_available_stock);
       return {
         id: String(sku.sku_id),
+        image: properties.map(p => absolute(p.sku_image)).find(Boolean) ?? null,
+        priceUsd: String(sku.currency_code ?? "").toUpperCase() === "USD" && Number.isFinite(amount) && amount > 0 ? amount : null,
+        quantity: stock !== null && Number.isInteger(stock) && stock >= 0 && stock <= 2147483647 ? stock : null,
         origin: shippingCountry(sku.ship_from_country ?? propertyValue(warehouse ?? {})) ?? productOrigin,
         label: properties.map(propertyValue).filter(Boolean).join(" · ").slice(0, 140) || "SKU " + sku.sku_id,
       };
