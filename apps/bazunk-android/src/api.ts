@@ -38,7 +38,9 @@ export function parseListings(value: unknown): Listing[] {
   return value.map(parseListing);
 }
 export function price(item: Listing): string {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency: /^[A-Z]{3}$/.test(item.currency || '') ? item.currency! : 'GBP' }).format(Number(item.price));
+  const currency=item.currency?.toUpperCase();
+  if(!currency||!/^(GBP|USD|EUR|AUD|CAD|NZD|CHF)$/.test(currency))return `${Number(item.price).toFixed(2)} (currency unverified)`;
+  return new Intl.NumberFormat('en-GB', { style: 'currency', currency, currencyDisplay:'code' }).format(Number(item.price));
 }
 
 export type Account = { email: string; name: string; username: string | null };
