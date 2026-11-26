@@ -1,7 +1,7 @@
 import { shippingCountry, shippingZone } from "../lib/listingShipping.js";
 import { getAliExpressUsdToGbpRate, tidyAliExpressDescription } from "../lib/aliExpressImportDetails.js";
 import { randomUUID } from "node:crypto";
-import { dropshipConfigured, dropshipSearchDiagnostic, inspectDropshipSearch, searchDropship, getDropshipProduct, previewDropshipProduct, aliExpressProductId } from "../lib/aliexpressDropship.js";
+import { dropshipConfigured, dropshipSearchDiagnostic, inspectDropshipSearch, searchDropship, getDropshipProduct, previewDropshipProduct, aliExpressProductId, aliExpressAlternateProductId } from "../lib/aliexpressDropship.js";
 import { Router } from "express";
 import adminNavigationRouter from "./adminNavigation.js";
 import {publicThemeStudioRouter,adminThemeStudioRouter} from "./themeStudio.js";
@@ -1948,7 +1948,12 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
   const results: {id:string;status:string;reason?:string}[] = [];
   for (const id of ids) {
     try {
-      const exists = await db.execute(sql`SELECT id FROM listings WHERE specifications LIKE ${'%"aliexpress_id":"' + id + '"%'} LIMIT 1`);
+      const alternateId = aliExpressAlternateProductId(id);
+      const exists = await db.execute(sql`
+        SELECT id FROM listings WHERE specifications LIKE ${'%"aliexpress_id":"' + id + '"%'}
+          ${alternateId ? sql`OR specifications LIKE ${'%"aliexpress_id":"' + alternateId + '"%'}` : sql``}
+        LIMIT 1
+      `);
       if (exists.rows.length) { results.push({id,status:"skipped",reason:"Already imported"}); continue; }
       let p:any;
       let choices: Awaited<ReturnType<typeof previewDropshipProduct>>["choices"] = [];
@@ -1985,10 +1990,11 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
       const stock = options.length ? Math.min(2147483647, options.reduce((sum, option) => sum + option.quantity, 0)) : choices[0]?.quantity ?? quantity;
       const bazPrice = options.length ? Math.min(...options.map(option => option.price)) : Math.round((price * listingRate * (1 + markup / 100) + shipping) * 100) / 100;
       const priceGbp = fxRates[listingCurrency] ? Math.round(bazPrice * fxRates[listingCurrency] * 100) / 100 : null;
-      const specs = JSON.stringify({ details:attributes, admin_gallery_images:p.images?.map((image:{url:string})=>image.url).slice(0,12), aliexpress_options:options.length ? options : undefined, marketplace_region:market, source:"AliExpress", aliexpress_id:id, aliexpress_url:p.sourceUrl,
+      const sourceId = useDropship ? p.externalId : id;
+      const specs = JSON.stringify({ details:attributes, admin_gallery_images:p.images?.map((image:{url:string})=>image.url).slice(0,12), aliexpress_options:options.length ? options : undefined, marketplace_region:market, source:"AliExpress", aliexpress_id:sourceId, aliexpress_url:p.sourceUrl,
         source_price:price, source_currency:currency, exchange_rate_to_gbp:gbpRate, markup_pct:markup, shipping_gbp:market === "uk" ? shipping : undefined, shipping_usd:market === "us" ? shipping : undefined,
         source_sync:!options.length, last_synced_at:new Date().toISOString(), source_availability:p.availability });
-      const publicId = "BZK-ALI-" + id;
+      const publicId = "BZK-ALI-" + sourceId;
       await db.execute(sql`INSERT INTO listings
         (public_id,title,price,price_gbp,currency,quantity,ship_origin,ship_zone,shipping_price,category,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
         VALUES (${publicId},${String(p.title).slice(0,500)},${bazPrice},${priceGbp},${listingCurrency},${stock},${origin},${zone},${postage},'other',
