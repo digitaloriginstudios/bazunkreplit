@@ -712,7 +712,7 @@ function ProductDrawer({
                 <label className="block"><span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Ships to</span>
                   <select value={form.shipZone} onChange={e => set("shipZone", e.target.value)} className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm">
                     <option value="">Select destination</option>
-                    {(form.shipZone === "domestic" || (form.shipZone.startsWith("country:") && !shippingCountries.some(country => "country:" + country.code === form.shipZone))) &&
+                    {(form.shipZone === "domestic" || form.shipZone.startsWith("regions:") || (form.shipZone.startsWith("country:") && !shippingCountries.some(country => "country:" + country.code === form.shipZone))) &&
                       <option value={form.shipZone}>{shippingZoneLabel(form.shipZone, form.shipOrigin)}</option>}
                     <optgroup label="Countries">
                       {shippingCountries.map(country => <option key={country.code} value={`country:${country.code}`}>{country.name} only</option>)}

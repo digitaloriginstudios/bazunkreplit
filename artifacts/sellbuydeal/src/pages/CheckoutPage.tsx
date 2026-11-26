@@ -69,7 +69,7 @@ export function CheckoutPage() {
   const [quoteError,setQuoteError]=useState("");
   const [quoteLoading,setQuoteLoading]=useState(true);
   const [quoteRevision,setQuoteRevision]=useState(0);
-  const cartKey=JSON.stringify(items.map(item=>({id:item.product.id,quantity:item.quantity})));
+  const cartKey=JSON.stringify(items.map(item=>({id:item.product.id,quantity:item.quantity,variantSku:item.product.variantSku})));
   const [quotedKey,setQuotedKey]=useState("");
   useEffect(()=>{
     const controller=new AbortController();setQuoteLoading(true);setQuoteError("");setQuote(null);
@@ -153,6 +153,7 @@ export function CheckoutPage() {
             title: i.product.title,
             price: i.product.price,
             quantity: i.quantity,
+            variantSku: i.product.variantSku,
             currency: i.product.currency ?? "GBP",
             priceGbp: i.product.priceGbp,
           })),
@@ -290,7 +291,7 @@ export function CheckoutPage() {
                   </div>
                   <div className="space-y-3">
                     {items.map((item) => (
-                      <div key={item.product.id} className="flex gap-3 items-center">
+                      <div key={item.product.id + ":" + (item.product.variantSku ?? "")} className="flex gap-3 items-center">
                         <div className="w-14 h-14 rounded-xl bg-gray-50 border border-gray-100 flex-shrink-0 overflow-hidden">
                           <img src={item.product.image} alt={item.product.title} loading="lazy" decoding="async" className="w-full h-full object-contain p-1.5" />
                         </div>
@@ -299,15 +300,15 @@ export function CheckoutPage() {
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full capitalize ${CONDITION_COLORS[item.product.condition]}`}>{item.product.condition}</span>
                             <div className="flex items-center gap-1 rounded-lg border border-slate-300 bg-white text-slate-950">
-                              <button type="button" onClick={()=>{if(item.quantity>1){editCart();updateQuantity(item.product.id,item.quantity-1);}}} disabled={item.quantity<=1} aria-label={`Decrease quantity of ${item.product.title}`} className="flex min-h-11 min-w-11 items-center justify-center hover:bg-slate-100 rounded-l-lg disabled:cursor-not-allowed disabled:opacity-40"><Minus className="h-3 w-3"/></button>
+                              <button type="button" onClick={()=>{if(item.quantity>1){editCart();updateQuantity(item.product.id,item.quantity-1,item.product.variantSku);}}} disabled={item.quantity<=1} aria-label={`Decrease quantity of ${item.product.title}`} className="flex min-h-11 min-w-11 items-center justify-center hover:bg-slate-100 rounded-l-lg disabled:cursor-not-allowed disabled:opacity-40"><Minus className="h-3 w-3"/></button>
                               <span className="min-w-5 text-center text-xs font-bold" aria-label={`Quantity: ${item.quantity}`}>{item.quantity}</span>
-                              <button type="button" onClick={()=>{editCart();updateQuantity(item.product.id,item.quantity+1);}} aria-label={`Increase quantity of ${item.product.title}`} className="flex min-h-11 min-w-11 items-center justify-center hover:bg-slate-100 rounded-r-lg"><Plus className="h-3 w-3"/></button>
+                              <button type="button" onClick={()=>{editCart();updateQuantity(item.product.id,item.quantity+1,item.product.variantSku);}} aria-label={`Increase quantity of ${item.product.title}`} className="flex min-h-11 min-w-11 items-center justify-center hover:bg-slate-100 rounded-r-lg"><Plus className="h-3 w-3"/></button>
                             </div>
                           </div>
                         </div>
                         <div className="flex flex-col items-end gap-2">
                           <span className="font-bold text-gray-900 text-sm">{formatPrice((quote?.items.find(row=>row.id===item.product.id)?.price ?? item.product.priceGbp ?? item.product.price) * item.quantity)}</span>
-                          <button type="button" onClick={()=>{editCart();removeFromCart(item.product.id);}} aria-label={`Remove ${item.product.title} from basket`} title="Remove item" className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-xs font-bold text-red-700 hover:bg-red-50 hover:text-red-900" data-testid={`checkout-remove-${item.product.id}`}><Trash2 className="h-3.5 w-3.5"/> Remove</button>
+                          <button type="button" onClick={()=>{editCart();removeFromCart(item.product.id, item.product.variantSku);}} aria-label={`Remove ${item.product.title} from basket`} title="Remove item" className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-xs font-bold text-red-700 hover:bg-red-50 hover:text-red-900" data-testid={`checkout-remove-${item.product.id}`}><Trash2 className="h-3.5 w-3.5"/> Remove</button>
                         </div>
                       </div>
                     ))}

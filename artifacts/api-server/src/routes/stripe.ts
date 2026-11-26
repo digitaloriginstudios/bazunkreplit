@@ -308,7 +308,7 @@ router.post("/stripe/checkout-cart", async (req, res) => {
     // Group by listing AND final discounted unit price to match the frozen quote.
     const grouped=new Map<string,{title:string;priceMinor:number;quantity:number}>();
     for(const unit of quote.units) {
-      const key=unit.id+":"+unit.priceMinor;
+      const key=unit.id+":"+(unit.variantSku??"")+":"+unit.priceMinor;
       const prev=grouped.get(key);
       if(prev)prev.quantity++;
       else grouped.set(key,{title:unit.title,priceMinor:unit.priceMinor,quantity:1});

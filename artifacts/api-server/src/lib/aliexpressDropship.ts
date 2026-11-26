@@ -164,7 +164,7 @@ function members(value: unknown, key: string): any[] {
   return Array.isArray(entries) ? entries.filter(Boolean) : [];
 }
 
-export async function previewDropshipProduct(id: string, destination: "GB" | "US", skuId?: string) {
+export async function previewDropshipProduct(id: string, destination: "GB" | "US", skuId?: string, includeFreight = true) {
   const { raw, product } = await fetchDropshipProduct(id, destination);
   const base = raw.ae_item_base_info_dto;
   const productOrigin = shippingCountry(raw.ship_from_country ?? base?.ship_from_country);
@@ -195,7 +195,7 @@ export async function previewDropshipProduct(id: string, destination: "GB" | "US
     .map(p => ({ key: String(p.attr_name).slice(0, 80), value: String(p.attr_value).slice(0, 240) }));
   let shipping: { origin: string | null; destination: string; amount: number; currency: string; estimate: string } | null = null;
 
-  if (selected) {
+  if (includeFreight && selected) {
     try {
       const freight = await call("aliexpress.ds.freight.query", {
         queryDeliveryReq: JSON.stringify({
@@ -227,7 +227,7 @@ export async function previewDropshipProduct(id: string, destination: "GB" | "US
   }
   // The older freight operation requires a known dispatch country and
   // has no SKU selector, so use it only for an unambiguous product.
-  if (!shipping && origin && choices.length <= 1 && Number.isSafeInteger(Number(id))) {
+  if (includeFreight && !shipping && origin && choices.length <= 1 && Number.isSafeInteger(Number(id))) {
     try {
       const freight = await call("aliexpress.logistics.buyer.freight.calculate", {
         param_aeop_freight_calculate_for_buyer_d_t_o: JSON.stringify({

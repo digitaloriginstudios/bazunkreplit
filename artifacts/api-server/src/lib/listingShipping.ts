@@ -26,6 +26,10 @@ export function shippingZone(raw: unknown): string | null {
     "asia pacific": "asia", international: "worldwide",
   };
   const zone = aliases[value] ?? value;
+  if (/^regions:(?:gb|eu|us)(?:,(?:gb|eu|us))*$/.test(zone)) {
+    const tokens = zone.slice(8).split(",");
+    return "regions:" + ["GB", "EU", "US"].filter(code => tokens.includes(code.toLowerCase())).join(",");
+  }
   if (["domestic", "worldwide", ...Object.keys(regions)].includes(zone)) return zone;
   const country = shippingCountry(zone.replace(/^country:/, ""));
   return country === "EU" ? "eu-only" : country ? "country:" + country : null;
@@ -49,6 +53,10 @@ export function shipsToCountry(zone: string | null, origin: string | null, desti
   if (!coverage) return false;
   if (coverage === "worldwide") return true;
   if (coverage === "domestic") return shippingCountry(origin) === destination;
+  if (coverage.startsWith("regions:")) {
+    const codes = coverage.slice(8).split(",");
+    return codes.includes(destination) || codes.includes("EU") && regions["eu-only"].includes(destination);
+  }
   if (coverage.startsWith("country:")) return coverage.slice(8) === destination;
   return regions[coverage]?.includes(destination) ?? false;
 }

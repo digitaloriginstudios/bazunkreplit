@@ -26,6 +26,7 @@ export function shippingZoneLabel(zone?: string, origin?: string): string {
   if (!zone) return "";
   if (zone === "domestic") return shippingCountryLabel(origin) || "Domestic only";
   if (zone.startsWith("country:")) return shippingCountryLabel(zone.slice(8));
+  if (zone.startsWith("regions:")) return zone.slice(8).split(",").map(shippingCountryLabel).join(", ");
   return shippingZones[zone] ?? "";
 }
 
@@ -33,6 +34,10 @@ export function shipsToCountry(zone: string, origin: string, country: string): b
   if (zone === "worldwide" || zone === "international") return true;
   if (zone === "domestic") return (origin === "UK" ? "GB" : origin === "China" ? "CN" : origin) === country;
   if (zone.startsWith("country:")) return zone.slice(8) === country;
+  if (zone.startsWith("regions:")) {
+    const codes = zone.slice(8).split(",");
+    return codes.includes(country) || codes.includes("EU") && eu.includes(country);
+  }
   if (zone === "eu-only") return eu.includes(country);
   if (zone === "eu") return country === "GB" || eu.includes(country);
   if (zone === "europe") return ["GB", "NO", "CH", "IS", "LI", ...eu].includes(country);
