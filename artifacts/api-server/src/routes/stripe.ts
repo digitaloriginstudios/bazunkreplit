@@ -1,4 +1,4 @@
-import { listingShipping, shipsToCountry } from "../lib/listingShipping.js";
+import { shipsToCountry } from "../lib/listingShipping.js";
 import { startSpecialCheckout, fulfillSpecialCheckout } from "../lib/specialCheckout.js";
 import { authenticatedSellerEmail } from "../lib/authenticatedSeller.js";
 import { getAuth, clerkClient } from "@clerk/express";
@@ -293,11 +293,10 @@ router.post("/stripe/checkout-cart", async (req, res) => {
       throw new QuoteError("Your basket contains invalid items or quantities.", 400);
     }
     const cartIds=(body.items as Array<{id:number}>).map(x=>Number(x.id));
-    const shippingRows=(await db.execute(sql`SELECT id,ship_origin,ship_zone,specifications FROM listings WHERE id IN (${sql.join(cartIds.map(id=>sql`${id}`),sql`, `)})`)).rows as Array<Record<string,unknown>>;
+    const shippingRows=(await db.execute(sql`SELECT id,ship_origin,ship_zone FROM listings WHERE id IN (${sql.join(cartIds.map(id=>sql`${id}`),sql`, `)})`)).rows as Array<Record<string,unknown>>;
     if(shippingRows.length!==new Set(cartIds).size)throw new QuoteError("A listing is no longer available.",409);
     for(const row of shippingRows){
-      const { shipZone, shipOrigin } = listingShipping(row.ship_origin, row.ship_zone, null, row.specifications);
-      if (!shipsToCountry(shipZone, shipOrigin, shippingCountry))
+      if (!shipsToCountry(String(row.ship_zone ?? ""), String(row.ship_origin ?? ""), shippingCountry))
         throw new QuoteError("One or more sellers have not enabled delivery to this destination. Please update your basket or delivery address.",409);
     }
     const quote=await quoteCart(body.items);

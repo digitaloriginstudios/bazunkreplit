@@ -1,4 +1,3 @@
-import { listingShipping } from "../lib/listingShipping.js";
 import { recordCreditEconomy } from "../lib/creditEconomy.js";
 import { isBanned } from "../lib/banned.js";
 import { Router } from "express";
@@ -454,7 +453,7 @@ router.get("/listings/:id", async (req, res) => {
     }
 
     const tokenResult=await db.execute(sql`SELECT public_url_token FROM listings WHERE id=${row.id}`);
-    res.json(normalizeListingMedia({ ...withPromo, ...listingShipping(withPromo.shipOrigin, withPromo.shipZone, withPromo.shipOriginOther, withPromo.specifications), publicUrlToken:tokenResult.rows[0]?.public_url_token ?? null, sellerVerified }));
+    res.json(normalizeListingMedia({ ...withPromo, publicUrlToken:tokenResult.rows[0]?.public_url_token ?? null, sellerVerified }));
   } catch (err) {
     console.error("Error fetching listing:", err);
     res.status(500).json({ error: "internal_server_error", message: String(err) });
