@@ -1,3 +1,4 @@
+import { featureEnabled } from "../lib/featureFlags.js";
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
@@ -11,10 +12,11 @@ router.get("/discovery/recommendations", async (req, res) => {
   const ids = String(req.query.viewed ?? "").split(",").slice(0, 20)
     .map(Number).filter((id) => Number.isSafeInteger(id) && id > 0);
   const unique = [...new Set(ids)];
-  const region = String(req.query.region ?? "").toLowerCase();
-  if (region && !["uk", "us"].includes(region)) {
+  const requestedRegion = String(req.query.region ?? "").toLowerCase();
+  if (requestedRegion && !["uk", "us"].includes(requestedRegion)) {
     res.status(400).json({ error: "Invalid region" }); return;
   }
+  const region = await featureEnabled("global_marketplace") ? "" : requestedRegion;
   try {
     const history = unique.length ? (await db.execute(sql`
       SELECT category FROM listings
