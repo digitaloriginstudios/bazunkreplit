@@ -2,39 +2,11 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Globe, ChevronDown, CheckCircle2, X } from "lucide-react";
 import { useCurrency } from "@/context/CurrencyContext";
-import { countryToCurrency } from "@/context/CurrencyContext";
+import { countryToCurrency, MARKET_COUNTRIES } from "@/context/CurrencyContext";
 
 export const COUNTRY_STORAGE_KEY = (email: string) => `sbd_country_v1_${email}`;
 
-const COUNTRIES: { code: string; name: string; flag: string }[] = [
-  { code: "US", name: "United States",      flag: "🇺🇸" },
-  { code: "GB", name: "United Kingdom",     flag: "🇬🇧" },
-  { code: "AU", name: "Australia",          flag: "🇦🇺" },
-  { code: "CA", name: "Canada",             flag: "🇨🇦" },
-  { code: "IE", name: "Ireland",            flag: "🇮🇪" },
-  { code: "NZ", name: "New Zealand",        flag: "🇳🇿" },
-  { code: "DE", name: "Germany",            flag: "🇩🇪" },
-  { code: "FR", name: "France",             flag: "🇫🇷" },
-  { code: "IT", name: "Italy",              flag: "🇮🇹" },
-  { code: "ES", name: "Spain",              flag: "🇪🇸" },
-  { code: "NL", name: "Netherlands",        flag: "🇳🇱" },
-  { code: "BE", name: "Belgium",            flag: "🇧🇪" },
-  { code: "PT", name: "Portugal",           flag: "🇵🇹" },
-  { code: "AT", name: "Austria",            flag: "🇦🇹" },
-  { code: "CH", name: "Switzerland",        flag: "🇨🇭" },
-  { code: "SE", name: "Sweden",             flag: "🇸🇪" },
-  { code: "NO", name: "Norway",             flag: "🇳🇴" },
-  { code: "DK", name: "Denmark",            flag: "🇩🇰" },
-  { code: "FI", name: "Finland",            flag: "🇫🇮" },
-  { code: "JP", name: "Japan",              flag: "🇯🇵" },
-  { code: "IN", name: "India",              flag: "🇮🇳" },
-  { code: "SG", name: "Singapore",          flag: "🇸🇬" },
-  { code: "AE", name: "UAE",                flag: "🇦🇪" },
-  { code: "ZA", name: "South Africa",       flag: "🇿🇦" },
-  { code: "BR", name: "Brazil",             flag: "🇧🇷" },
-  { code: "MX", name: "Mexico",             flag: "🇲🇽" },
-  { code: "OTHER", name: "Other",           flag: "🌍" },
-];
+const COUNTRIES = MARKET_COUNTRIES;
 
 interface CountrySetupModalProps {
   email: string;
@@ -60,7 +32,7 @@ export function CountrySetupModal({ email, onDone }: CountrySetupModalProps) {
       localStorage.setItem(COUNTRY_STORAGE_KEY(email), selected);
     } catch {}
     const currency = countryToCurrency(selected);
-    if (selected !== "OTHER") setCountry(selected);
+    setCountry(selected);
     try {
       localStorage.setItem("sbd_currency", currency);
     } catch {}
@@ -90,7 +62,7 @@ export function CountrySetupModal({ email, onDone }: CountrySetupModalProps) {
           </div>
           <h2 className="text-lg font-black">Where are you based?</h2>
           <p className="text-sm text-orange-100 mt-1">
-            This sets your default listing currency and how fees are calculated.
+            Choose your delivery country and default display currency. Payments settle in GBP.
           </p>
         </div>
 
@@ -171,8 +143,8 @@ export function CountrySetupModal({ email, onDone }: CountrySetupModalProps) {
             >
               <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
               <p className="text-xs text-emerald-700">
-                Your listings and fees will use{" "}
-                <strong>{countryToCurrency(selected === "OTHER" ? "US" : selected)}</strong>{" "}
+                Your estimated display prices will use{" "}
+                <strong>{countryToCurrency(selected)}</strong>{" "}
                 — you can still change currency anytime from the top bar.
               </p>
             </motion.div>
