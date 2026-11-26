@@ -147,7 +147,7 @@ export async function fulfillSpecialCheckout(sessionId:string) {
       VALUES(${id},${m.buyerEmail},${m.sellerEmail},${String(titleRow?.title??m.source)},${titleRow?.image??null},
       ${Number(m.priceMinor)/100},'confirmed',${sessionId},1,${Number(m.protectionMinor??0)/100},
       ${Number(m.sellerFeeMinor??0)/100},${Number(m.sellerNetMinor??0)/100},${Number(m.deliveryMinor??0)/100},
-      ${Number(m.totalMinor)/100},${m.feePolicy??"special-v1"} ,${session.currency.toUpperCase()},NOW(),NOW())
+      ${Number(m.totalMinor)/100},${m.feePolicy??"special-v1"} ,${"GBP"},NOW(),NOW())
       ON CONFLICT(stripe_session_id,line_no) DO NOTHING`);
     // A paid flash-sale checkout must remove the item from active sale discovery.
     // Auction checkout already requires status='ended'; retain that status so
