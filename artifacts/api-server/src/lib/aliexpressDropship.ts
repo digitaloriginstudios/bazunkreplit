@@ -105,18 +105,34 @@ async function call(method: string, extra: Record<string, string>, requireManage
   return result;
 }
 
-export async function searchDropship(q: string, page: number, options: { requireManaged?: boolean } = {}): Promise<Product[]> {
+export async function inspectDropshipSearch(q: string, page: number, options: { requireManaged?: boolean } = {}) {
   const result = await call("aliexpress.ds.text.search", {
     keyword: q, countryCode: "GB", currency: "USD", local: "en_US", page_index: String(Math.trunc(page)), page_size: "20",
   }, options.requireManaged);
-  const products = result.data?.products;
-  const list = Array.isArray(products) ? products : products?.selection_search_product ?? [];
+  const payload = result.data ?? result.result;
+  const entries = payload?.products;
+  const list: unknown = Array.isArray(entries) ? entries : entries?.selection_search_product ?? [];
   if (!Array.isArray(list)) throw new AliExpressConnectionError("AliExpress search returned an unexpected product list.");
+
   const keywords = q.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-  return list.filter(p => String(p?.type ?? "").toLowerCase() !== "recommend")
-    .filter(Boolean).map(normalize)
-    .filter(p => /^\d{10,20}$/.test(p.externalId) && p.title && p.price.amount > 0 &&
-      p.price.currency === "USD" && keywords.every(keyword => p.title.toLowerCase().includes(keyword)));
+  const candidates = list.filter(item => item && String(item.type ?? "").toLowerCase() !== "recommend").map(normalize);
+  const matching = candidates.filter(p => /^\d{10,20}$/.test(p.externalId) && p.title &&
+    keywords.every(keyword => p.title.toLowerCase().includes(keyword)));
+  const products = matching.filter(p => p.price.amount > 0 && p.price.currency === "USD");
+  return {
+    products,
+    counts: {
+      returned: list.length,
+      recommendations: list.filter(item => String(item?.type ?? "").toLowerCase() === "recommend").length,
+      matching: matching.length,
+      priced: products.length,
+    },
+  };
+}
+
+export async function searchDropship(q: string, page: number, options: { requireManaged?: boolean } = {}): Promise<Product[]> {
+  const { products } = await inspectDropshipSearch(q, page, options);
+  return products;
 }
 
 export async function getDropshipProduct(id: string): Promise<Product> {
