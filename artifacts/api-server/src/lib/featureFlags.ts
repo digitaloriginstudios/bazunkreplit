@@ -2,6 +2,7 @@ import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
 export const FEATURE_DEFINITIONS = [
+  ["global_marketplace","Global marketplace catalogue (preview)","Buying"],
   ["quick_sell","Direct Sale","Selling"],["offers","Make an Offer","Selling"],["auctions","Auctions","Selling"],["flash_sales","Flash Sales","Selling"],["classifieds","Classifieds","Selling"],["live","Live selling","Selling"],["product_video","Product Video","Selling"],
   ["snap_sell","Snap & Sell","Tools"],["snap_barcode","Barcode & ISBN Scanning","Tools"],["snap_ai_writing","AI Photo & Writing","Tools"],["snap_background","Photo Background Cleanup","Tools"],["snap_pricing","Seller Pricing & Performance","Tools"],["importers","Importers","Tools"],["promotions","Promotions","Tools"],["watchers","Watch / Watcher offers","Tools"],["messaging","Messaging","Community"],["reviews","Reviews & reputation","Community"],["referrals","Referrals","Rewards"],["games","Rewards Arcade / Games","Rewards"],["credits","Credits","Rewards"],["cashback","Cashback","Rewards"],
   ["chatwoot_support","Chatwoot Live Support","Support"],["homepage_intro","Homepage Intro GIF","Appearance"],
@@ -12,6 +13,7 @@ export async function featureEnabled(key:string):Promise<boolean>{
   try {
     const r=await db.execute(sql`SELECT value FROM site_settings WHERE key=${`feature_${key}`} LIMIT 1`);
     const v=(r.rows[0] as any)?.value;
+    if (key === "global_marketplace") return String(v).toLowerCase() === "true";
     return v == null ? true : String(v).toLowerCase() !== "false";
   } catch (error) {
     // Fail closed if feature settings cannot be read. An absent setting still
