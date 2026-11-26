@@ -38,7 +38,7 @@ router.put("/admin/international-growth",requireAdmin,async(req,res)=>{try{
 export const publicInternationalRouter=Router();
 publicInternationalRouter.get("/public/international-growth",async(req,res)=>{try{const country=shippingCountry(req.query.country);if(!country||!countries.includes(country))return void res.status(400).json({error:"Invalid country"});const config=await regionalConfig();res.setHeader("Cache-Control","no-store");res.json({promotions:config.promotions.filter((p:any)=>p.country===country&&p.enabled),controls:config.controls[country]||{}});}catch{res.status(503).json({error:"Regional settings unavailable"});}});
 router.get("/admin/international-sales",requireAdmin,async(_req,res)=>{try{
- const rows=await db.execute(sql`SELECT CASE WHEN upper(trim(split_part(reverse(coalesce(address,'')),chr(10),1)))='' THEN 'Unknown' WHEN upper(trim(reverse(split_part(reverse(coalesce(address,'')),chr(10),1)))) ~ '^[A-Z]{2}
+ const rows=await db.execute(sql`SELECT CASE WHEN trim(coalesce(address,''))='' THEN 'Unknown' WHEN upper(trim(reverse(split_part(reverse(coalesce(address,'')),chr(10),1)))) ~ '^[A-Z]{2}
  THEN upper(trim(reverse(split_part(reverse(address),chr(10),1)))) ELSE 'Unknown' END AS country, count(*)::int AS order_lines, count(*) FILTER (WHERE transaction_currency='GBP')::int AS verified_gbp_lines, coalesce(sum(buyer_total) FILTER (WHERE transaction_currency='GBP'),0)::text AS recorded_gbp_total FROM orders WHERE created_at >= NOW()-interval '30 days' GROUP BY 1 ORDER BY 2 DESC`);
  res.json({days:30,rows:rows.rows});}catch{res.status(503).json({error:"Sales analytics unavailable"});}});
 export default router;
