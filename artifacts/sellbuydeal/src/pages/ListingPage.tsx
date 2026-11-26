@@ -307,8 +307,9 @@ export function ListingPage() {
   }
 
   const availableOptions = apiProduct?.supplierOptions ?? [];
-  const option = availableOptions.find(entry => entry.sku === supplierSku);
-  const needsOption = availableOptions.length > 0 && !option;
+  const hasOptionChoice = availableOptions.length > 1;
+  const option = hasOptionChoice ? availableOptions.find(entry => entry.sku === supplierSku) : availableOptions[0];
+  const needsOption = hasOptionChoice && !option;
   const shownQuantity = option?.quantity ?? apiProduct?.quantity;
   const isDemoListing = ((product as typeof product & ApiListingExtra)._specifications as unknown as { demo_creator?: boolean } | undefined)?.demo_creator === true;
   const images = getProductImages(product.image, (product as typeof product & ApiListingExtra)._gallery);
@@ -787,7 +788,7 @@ export function ListingPage() {
                 </div>
               )}
 
-              {availableOptions.length > 0 && <fieldset className="mb-5 space-y-2">
+              {hasOptionChoice && <fieldset className="mb-5 space-y-2">
                 <legend className="text-sm font-bold">Product options</legend>
                 {availableOptions.map(entry => <label key={entry.sku} className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-sm">
                   <input type="radio" name="supplier-option" checked={supplierSku === entry.sku}
