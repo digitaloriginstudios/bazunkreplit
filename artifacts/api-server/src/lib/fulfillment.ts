@@ -111,9 +111,9 @@ export async function fulfillCartSession(sessionId: string, expectedEmail?: stri
         await db.transaction(async tx => {
           const inserted = await tx.execute(sql`
           INSERT INTO orders (id, buyer_email, seller_email, item_title, item_image, price, status,
-                              stripe_session_id, line_no, buyer_protection_fee, seller_fee, seller_type, seller_fee_rate, seller_net, delivery_fee, buyer_total, fee_policy, address, created_at, updated_at)
+                              stripe_session_id, line_no, buyer_protection_fee, seller_fee, seller_type, seller_fee_rate, seller_net, delivery_fee, buyer_total, fee_policy, transaction_currency, address, created_at, updated_at)
           VALUES (${orderId}, ${buyerEmail}, ${seller}, ${frozen?.title ?? String(row.title)}, ${frozen?.image ?? (row.image as string | null) ?? null},
-                  ${unitPrice}, 'confirmed', ${sessionId}, ${lineNo}, ${protectionShare}, ${sellerFee}, ${sellerType}, ${businessRate}, ${net}, ${deliveryShare}, ${buyerTotal}, ${feeSnapshot?.policy ?? "legacy"}, ${deliveryAddress}, NOW(), NOW())
+                  ${unitPrice}, 'confirmed', ${sessionId}, ${lineNo}, ${protectionShare}, ${sellerFee}, ${sellerType}, ${businessRate}, ${net}, ${deliveryShare}, ${buyerTotal}, ${feeSnapshot?.policy ?? "legacy"}, ${session.currency?.toUpperCase() ?? null}, ${deliveryAddress}, NOW(), NOW())
           ON CONFLICT (stripe_session_id, line_no) DO NOTHING RETURNING id
           `);
           if (inserted.rows.length && frozen?.variantSku) {
