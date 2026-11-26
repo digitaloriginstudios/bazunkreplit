@@ -1,3 +1,4 @@
+import {RegionalMarketplacePage,regionalMarkets} from "@/pages/RegionalMarketplacePage";
 import SwapPage from "@/pages/SwapPage";
 import AffiliatesPage,{AffiliateTracking} from "@/pages/AffiliatesPage";
 import {AdminAffiliatesPage} from "@/pages/admin/AdminAffiliatesPage";
@@ -461,6 +462,7 @@ function Router() {
       <Route path="/my-store">{() => <Redirect to="/dashboard?section=my-store" />}</Route>
       <Route path="/importers/:source">{() => <FeatureGate feature="importers" name="Importers"><ImporterWorkspacePage /></FeatureGate>}</Route>
       <Route path="/importers">{() => <FeatureGate feature="importers" name="Importers"><ImportersPage /></FeatureGate>}</Route>
+      {regionalMarkets.map(([slug])=><Route key={slug} path={"/marketplace/"+slug}>{()=> <RegionalMarketplacePage slug={slug}/>}</Route>)}
       <Route path="/browse">{() => <BrowsePage />}</Route>
       <Route path="/deals">{()=><BrowsePage collection="deals" />}</Route>
       {discoveryPages.filter(([slug])=>slug!=="deals").map(([slug])=><Route key={slug} path={"/"+slug}>{()=>slug==="99p-auctions"||slug==="ending-soon"?<FeatureGate feature="auctions" name="Auctions"><DiscoveryPage key={slug} slug={slug}/></FeatureGate>:<DiscoveryPage key={slug} slug={slug}/>}</Route>)}
