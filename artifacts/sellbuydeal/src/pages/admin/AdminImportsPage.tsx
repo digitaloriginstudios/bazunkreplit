@@ -1507,9 +1507,9 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
               <AliExpressShippingDefaults origin={aliOrigin} destinations={aliDestinations} setOrigin={setAliOrigin} setDestinations={setAliDestinations} />
               <label className="block text-sm font-semibold">General postage ({aliMarket === "uk" ? "GBP" : "USD"})
                 <input type="number" min="0" step="0.01" value={aliShipping} onChange={e => setAliShipping(e.target.value)}
-                  className={inputCls + " mt-1 block w-full"} placeholder="Leave blank if unconfirmed" />
+                  className={inputCls + " mt-1 block w-full"} placeholder="Use AliExpress quote when available" />
               </label>
-              <p className="text-xs text-gray-500">These settings apply to bulk imports and are the defaults for products you review individually.</p>
+              <p className="text-xs text-gray-500">Leave postage blank to use a one-item AliExpress quote to the selected marketplace when available. Enter a rate to apply it to the whole batch.</p>
               {aliBatchActions}
               {aliQueued.length > 0 && aliNotice && <p role="status" className="whitespace-pre-line text-sm text-gray-600">{aliNotice}</p>}
               {!aliQueued.length && <button disabled={aliBulkImporting} onClick={()=>{setAliActiveUrl(aliQueued.find(u=>aliSelected.has(u))??"");setAliModalOpen(true)}} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-white font-bold text-sm hover:bg-orange-600"><Plus className="w-4 h-4"/>Import a product</button>}

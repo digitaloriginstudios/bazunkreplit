@@ -143,15 +143,24 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
   const [sku, setSku] = useState("");
   const [shipOrigin, setShipOrigin] = useState(initialOrigin);
   const [destinations, setDestinations] = useState(initialDestinations);
-  const [shippingPrice, setShippingPrice] = useState(initialPostage);
+  type ShippingQuote = { origin: string | null; destination: string; amount: number; estimate: string };
+  const [freightQuote, setFreightQuote] = useState<ShippingQuote | null>(null);
+  const [postageOverride, setPostageOverride] = useState<string | null>(initialPostage || null);
+  const [estimateOverride, setEstimateOverride] = useState<string | null>(null);
   const shipZone = aliExpressShipZone(destinations);
-  const [deliveryEstimate, setDeliveryEstimate] = useState("");
+  const marketCountry = market === "uk" ? "GB" : "US";
+  const applicableQuote = freightQuote?.destination === marketCountry &&
+    (!freightQuote.origin || freightQuote.origin === shipOrigin) &&
+    (destinations.includes("worldwide") || destinations.includes(marketCountry)) ? freightQuote : null;
+  const shippingPrice = postageOverride ?? applicableQuote?.amount.toFixed(2) ?? "";
+  const deliveryEstimate = estimateOverride ?? (postageOverride === null ? applicableQuote?.estimate : undefined) ?? "";
   const [gallery, setGallery] = useState<string[]>([]);
   const [attributes, setAttributes] = useState<{ key: string; value: string }[]>([]);
   const previewSequence = useRef(0);
-  function clearShipping() {
-
-    setDeliveryEstimate("");
+  function resetShipping(targetMarket: "uk" | "us") {
+    setFreightQuote(null);
+    setEstimateOverride(null);
+    setPostageOverride(targetMarket === initialMarket ? initialPostage || null : null);
   }
   const fetchPreview = useCallback(async (productUrl: string, targetMarket: "uk" | "us", selectedSku = "") => {
     if (!productUrl.trim()) return;
@@ -159,14 +168,14 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
     setPreviewLoading(true);
     setPreviewNotice("");
     setSupplierQuote(null);
-    clearShipping();
+    setFreightQuote(null);
     try {
       const query = new URLSearchParams({ url: productUrl.trim(), market: targetMarket, sku: selectedSku });
       const response = await fetchRef.current("/api/admin/aliexpress-product-preview?" + query);
       const data = await response.json() as {
         error?: string; title?: string; description?: string; imageUrl?: string; supplierPrice?: number; currency?: string;
         origin?: string; selectedSku?: string; choices?: Choice[];
-        shipping?: { origin: string | null; destination: string; amount: number; estimate: string };
+        shipping?: ShippingQuote;
         images?: string[]; attributes?: { key: string; value: string }[];
       };
       if (sequence !== previewSequence.current) return;
@@ -195,9 +204,9 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
       if (typeof fetchedPrice === "number" && Number.isFinite(fetchedPrice) && fetchedPrice > 0)
         setSupplierPriceUsd(previous => previous || String(fetchedPrice));
       if (selected?.quantity != null) setQuantity(String(selected.quantity));
-      setPreviewNotice(data.shipping
-        ? `AliExpress quoted ${data.shipping.amount.toFixed(2)} ${targetMarket === "uk" ? "GBP" : "USD"} for one item to the selected marketplace. Set your own general postage rule below.`
-        : "Product details retrieved. Review the general shipping settings before importing.");
+      if (data.shipping && Number.isFinite(data.shipping.amount) && data.shipping.amount >= 0 && data.shipping.amount <= 10000)
+        setFreightQuote(data.shipping);
+      setPreviewNotice("Product details retrieved. Review shipping before importing.");
     } catch (error) {
       if (sequence === previewSequence.current)
         setPreviewNotice((error instanceof Error ? error.message : "Preview unavailable") + " Enter missing fields manually.");
@@ -327,7 +336,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           <p className="font-bold text-gray-900 text-lg">{savedCount > 1 ? `${savedCount} options imported` : savedPrice === null ? "Imported!" : `Imported at ${currencySymbol}${savedPrice.toFixed(2)}`}</p>
           <p className="text-sm text-gray-400 mt-1 mb-6 truncate px-4">{importedTitle}</p>
           <div className="flex gap-3">
-            <button onClick={() => { setSuccess(false); clearShipping(); setChoices([]); setVariantEdits({}); setSku(""); setGallery([]); setAttributes([]); setUrl(""); setTitle(""); setSupplierPriceUsd(""); setSupplierQuote(null); setImageUrl(""); setDescription(""); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+            <button onClick={() => { setSuccess(false); resetShipping(market); setChoices([]); setVariantEdits({}); setSku(""); setGallery([]); setAttributes([]); setUrl(""); setTitle(""); setSupplierPriceUsd(""); setSupplierQuote(null); setImageUrl(""); setDescription(""); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
               Import Another
             </button>
             <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-gray-800 transition-colors">
@@ -348,7 +357,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">AliExpress Product URL <span className="text-red-400">*</span></label>
             <input value={url} onChange={e => { previewSequence.current++;
               setPreviewLoading(false); setPreviewNotice(""); setLastPreviewUrl(""); setUrl(e.target.value);
-              setSupplierPriceUsd(""); setSupplierQuote(null); clearShipping(); setChoices([]); setVariantEdits({}); setSku("");
+              setSupplierPriceUsd(""); setSupplierQuote(null); resetShipping(market); setChoices([]); setVariantEdits({}); setSku("");
               setTitle(""); setDescription(""); setImageUrl(""); setGallery([]); setAttributes([]); }} placeholder="https://www.aliexpress.com/item/1005007123456789.html" className={inputCls} />
             <button type="button" disabled={previewLoading || !url.trim()} onClick={() => void fetchPreview(url, market, sku)} className="mt-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{previewLoading ? "Fetching product details…" : lastPreviewUrl === url ? "Refresh product details" : "Fetch product details"}</button>
             {previewNotice && <p role="status" className="mt-2 text-xs text-gray-600">{previewNotice}</p>}
@@ -417,7 +426,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
                 setVariantEdits({});
                 setSupplierPriceUsd("");
                 void fetchPreview(url, next, sku);
-                if (!url.trim()) clearShipping();
+                resetShipping(next);
               }} className={`${inputCls} mt-1.5 bg-white`} disabled={loading || success}>
                 <option value="uk">UK · GBP</option>
                 <option value="us">USA · USD</option>
@@ -457,11 +466,14 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
             <h3 className="text-sm font-bold">Shipping</h3>
             <AliExpressShippingDefaults origin={shipOrigin} destinations={destinations} setOrigin={setShipOrigin} setDestinations={setDestinations} />
             <label className="block text-xs font-semibold">General postage ({market === "uk" ? "GBP" : "USD"})
-              <input type="number" min="0" step="0.01" value={shippingPrice} onChange={e => setShippingPrice(e.target.value)}
+              <input type="number" min="0" step="0.01" value={shippingPrice} onChange={e => setPostageOverride(e.target.value)}
                 disabled={!shipZone} placeholder="Unconfirmed" className={inputCls} />
             </label>
+            {postageOverride === null && (applicableQuote
+              ? <p className="text-xs text-gray-600">Based on AliExpress’s one-item quote to the {market === "uk" ? "UK" : "USA"}. Check the rate for other destinations or variations.</p>
+              : <p className="text-xs text-gray-600">Enter a general rate if AliExpress has no matching quote.</p>)}
             <label className="block text-xs font-semibold">Estimated delivery (optional)
-              <input value={deliveryEstimate} onChange={e => setDeliveryEstimate(e.target.value)}
+              <input value={deliveryEstimate} onChange={e => setEstimateOverride(e.target.value)}
                 disabled={!shipZone} placeholder="e.g. 5–8 days" className={inputCls} />
             </label>
             {(gallery.length > 1 || attributes.length > 0) && <p className="text-xs text-gray-600">
