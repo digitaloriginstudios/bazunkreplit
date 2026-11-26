@@ -1,3 +1,5 @@
+import AffiliatesPage,{AffiliateTracking} from "@/pages/AffiliatesPage";
+import {AdminAffiliatesPage} from "@/pages/admin/AdminAffiliatesPage";
 import BulkImportPage from "@/pages/BulkImportPage";
 import { Switch, Route, Router as WouterRouter, useLocation, Redirect } from "wouter";
 const AdminGoLivePage = React.lazy(() => import("@/pages/admin/AdminGoLivePage").then(module => ({ default: module.AdminGoLivePage })));
@@ -377,7 +379,7 @@ function Home() {
           </HomeSectionBoundary>
         )}
       </main>
-      <Footer />
+      <AffiliateTracking /><Footer />
     </div>
   );
 }
@@ -481,6 +483,8 @@ function Router() {
       <Route path="/admin/live-commerce" component={AdminLiveCommercePage} />
       <Route path="/admin/demo-creator" component={AdminDemoCreatorPage} />
       <Route path="/admin/dashboard" component={AdminWordPressDashboard} />
+      <Route path="/admin/affiliates" component={AdminAffiliatesPage} />
+      <Route path="/affiliates" component={AffiliatesPage} />
       <Route path="/admin/marketing/images" component={AdminPromoImagesPage} />
       <Route path="/admin/marketing" component={AdminMarketingOverviewPage} />
       <Route path="/admin/importer-overview" component={AdminImporterOverviewPage} />
