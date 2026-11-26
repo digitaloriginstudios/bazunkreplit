@@ -25,10 +25,10 @@ test("feature changes confirm database persistence and refresh public site setti
   assert.match(admin, /persisted\.enabled!==nextEnabled/);
   assert.match(admin, /cache:"no-store"/);
   assert.match(admin, /bazunk-settings-updated/);
-  assert.match(siteSettings, /window\.addEventListener\("bazunk-settings-updated", loadSettings\)/);
+  assert.match(siteSettings, /window\.addEventListener\("bazunk-settings-updated", onUpdate\)/);
   assert.match(api, /feature_toggle_changes/);
   assert.match(api, /pg_advisory_xact_lock/);
-  assert.match(api, /const before=row\?\.value==null\?true/);
+  assert.match(api, /const before=resolveFeatureValue\(key,row\?\.value\)/);
   assert.match(api, /"production"/);
 });
 
@@ -50,4 +50,17 @@ test("dashboard sidebar never reveals account email; email still available for a
   assert.doesNotMatch(sidebar, /user\.email/);
   assert.doesNotMatch(sidebar, /savedProfile\.email/);
   assert.match(dashboard, /savedProfile\.email/);
+});
+
+test("optional feature visibility fails closed and refreshes across tabs",()=>{
+ const gate=read("artifacts/sellbuydeal/src/components/FeatureGate.tsx");
+ assert.match(gate,/=== "true"/);
+ assert.match(siteSettings,/bazunk-settings-revision/);
+ assert.match(siteSettings,/setSettingsLoaded\(false\)/);
+ const flags=read("artifacts/api-server/src/lib/featureFlags.ts");
+ assert.match(flags,/key!=="global_marketplace" && key!=="swaps"/);
+ const listing=read("artifacts/sellbuydeal/src/pages/ListingPage.tsx");
+ for(const key of ["offers","messaging","watchers","buyer_protection","verification","recently_viewed"]) assert.ok(listing.includes('useFeature("'+key+'")'));
+ const discovery=read("artifacts/sellbuydeal/src/components/ProductDiscovery.tsx");
+ assert.match(discovery,/if\(!wishlistEnabled&&!recentEnabled&&!recommendationsEnabled\)return null/);
 });
