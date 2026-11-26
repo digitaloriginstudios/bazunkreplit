@@ -273,6 +273,14 @@ export function ListingPage() {
   const [selectedVariants, setSelectedVariants] = useState<Record<string, string>>({});
   const [activeImg, setActiveImg] = useState(0);
   const [offerOpen, setOfferOpen] = useState(false);
+  useEffect(() => {
+    if (!offerOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setOfferOpen(false); };
+    document.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = previous; document.removeEventListener("keydown", onKey); };
+  }, [offerOpen]);
   const [offerPreset, setOfferPreset] = useState<number | null>(null);
   const [offerCustom, setOfferCustom] = useState("");
   const [offerMsg, setOfferMsg] = useState("");
@@ -977,27 +985,27 @@ export function ListingPage() {
           <>
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/70 z-[200]"
+              style={{position:"fixed",inset:0,backgroundColor:"rgba(15,23,42,.65)",zIndex:10000}}
               onClick={resetOfferModal}
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="fixed z-[201] inset-0 flex items-center justify-center p-4 pointer-events-none"
+              style={{position:"fixed",inset:0,zIndex:10001,display:"flex",alignItems:"center",justifyContent:"center",padding:16,pointerEvents:"none"}}
             >
-              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm max-h-[90dvh] pointer-events-auto overflow-y-auto">
+              <div role="dialog" aria-modal="true" aria-label="Make an offer" style={{backgroundColor:"#fff",color:"#0f172a",borderRadius:16,boxShadow:"0 20px 60px rgba(0,0,0,.25)",width:"100%",maxWidth:520,maxHeight:"90dvh",pointerEvents:"auto",overflowY:"auto",boxSizing:"border-box"}}>
                 {/* Header */}
-                <div className="bg-gradient-to-r from-[#3B4FD8] to-[#4A5CE8] px-5 py-4 flex items-center gap-3">
+                <div className="px-5 py-4 flex items-center gap-3" style={{background:"#f8fafc",borderBottom:"1px solid #e2e8f0"}}>
                   <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
                     <img src={product.image} alt="" className="w-8 h-8 object-contain" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-bold text-white line-clamp-1">{product.title}</h3>
-                    <p className="text-blue-200 text-xs mt-0.5">Asking price: <span className="font-bold">£{product.price.toFixed(2)}</span></p>
+                    <h3 className="text-sm font-bold text-slate-900 line-clamp-2">{product.title}</h3>
+                    <p className="text-slate-600 text-xs mt-0.5">Asking price: <span className="font-bold">{offerCurrency} {product.price.toFixed(2)}</span></p>
                   </div>
-                  <button onClick={resetOfferModal} className="text-white/60 hover:text-white transition-colors">
-                    <Star className="w-4 h-4 rotate-45" style={{ transform: "rotate(45deg)" }} />
+                  <button onClick={resetOfferModal} aria-label="Close offer window" style={{color:"#334155",fontSize:24,padding:8}}>
+                    ×
                   </button>
                 </div>
 
@@ -1013,7 +1021,7 @@ export function ListingPage() {
                       <div className="flex gap-2 justify-center">
                         <button
                           onClick={resetOfferModal}
-                          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#4A5CE8] text-white font-bold text-sm hover:opacity-90 transition-opacity"
+                          className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#ea580c] text-white font-bold text-sm hover:opacity-90 transition-opacity"
                         >
                           <CheckCircle2 className="w-4 h-4" /> Done
                         </button>
@@ -1039,11 +1047,11 @@ export function ListingPage() {
                               key={ratio}
                               onClick={() => { setOfferPreset(active ? null : price); setOfferCustom(""); }}
                               className={`flex flex-col items-center py-2 rounded-xl border-2 transition-colors text-center ${
-                                active ? "border-[#4A5CE8] bg-[#4A5CE8]/5" : "border-gray-200 hover:border-gray-300"
+                                active ? "border-[#ea580c] bg-[#ea580c]/5" : "border-gray-200 hover:border-gray-300"
                               }`}
                             >
-                              <span className={`text-xs font-bold ${active ? "text-[#4A5CE8]" : "text-gray-800"}`}>
-                                £{price.toFixed(0)}
+                              <span className={`text-xs font-bold ${active ? "text-[#ea580c]" : "text-gray-800"}`}>
+                                {offerCurrency} {price.toFixed(2)}
                               </span>
                               <span className="text-[9px] text-slate-600 mt-0.5">−{pct}%</span>
                             </button>
@@ -1057,12 +1065,13 @@ export function ListingPage() {
                         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500 font-bold">{offerCurrency}</span>
                         <input
                           type="number"
+                          step="0.01"
                           min="1"
                           max={product.price * 2}
                           value={offerCustom}
                           onChange={(e) => { setOfferCustom(e.target.value); setOfferPreset(null); }}
                           placeholder="Custom amount"
-                          className="w-full border border-gray-200 rounded-xl pl-8 pr-4 py-3 text-base font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#4A5CE8]/30 focus:border-[#4A5CE8]"
+                          className="w-full border border-gray-200 rounded-xl pl-16 pr-4 py-3 text-base font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#ea580c]/30 focus:border-[#ea580c]"
                           data-testid="input-offer-amount"
                         />
                       </div>
@@ -1091,7 +1100,7 @@ export function ListingPage() {
                         placeholder="Add a message to the seller (optional)"
                         rows={2}
                         maxLength={200}
-                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#4A5CE8]/30 focus:border-[#4A5CE8] resize-none mb-1"
+                        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#ea580c]/30 focus:border-[#ea580c] resize-none mb-1"
                       />
                       <p className="text-right text-xs text-slate-600 mb-4">{offerMsg.length}/200</p>
 
@@ -1104,7 +1113,7 @@ export function ListingPage() {
                         <button
                           onClick={handleSendOffer}
                           disabled={!offerPrice || offerPrice <= 0 || offerSending}
-                          className="flex-[2] py-3 rounded-xl bg-gradient-to-r from-[#3B4FD8] to-[#4A5CE8] text-white font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-40 shadow-sm"
+                          style={{flex:2,backgroundColor:"#ea580c",color:"#fff",borderRadius:12,padding:"12px 8px",fontWeight:700,opacity:(!offerPrice || offerPrice <= 0 || offerSending)?0.5:1}}
                           data-testid="button-send-offer">
                           {offerSending ? "Sending offer…" : offerPrice > 0 ? `Send Offer · ${offerCurrency} ${offerPrice.toFixed(2)}` : "Send Offer"}
                         </button>
