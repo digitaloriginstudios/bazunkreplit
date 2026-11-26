@@ -1,3 +1,4 @@
+import { shippingCountries, shippingCountryLabel } from "@/lib/listingShipping";
 import { useState, useEffect, useCallback, useLayoutEffect, useRef, useId } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -132,29 +133,69 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
   const [previewNotice, setPreviewNotice] = useState("");
   const [supplierCurrency, setSupplierCurrency] = useState("USD");
   const [lastPreviewUrl, setLastPreviewUrl] = useState("");
-  const fetchPreview = useCallback(async (productUrl: string) => {
+  const [choices, setChoices] = useState<{ id: string; label: string }[]>([]);
+  const [sku, setSku] = useState("");
+  const [shipOrigin, setShipOrigin] = useState("");
+  const [deliversToMarket, setDeliversToMarket] = useState(false);
+  const [shippingPrice, setShippingPrice] = useState("");
+  const [deliveryEstimate, setDeliveryEstimate] = useState("");
+  const [gallery, setGallery] = useState<string[]>([]);
+  const [attributes, setAttributes] = useState<{ key: string; value: string }[]>([]);
+  const previewSequence = useRef(0);
+  function clearShipping() {
+    setShipOrigin("");
+    setDeliversToMarket(false);
+    setShippingPrice("");
+    setDeliveryEstimate("");
+  }
+  const fetchPreview = useCallback(async (productUrl: string, targetMarket: "uk" | "us", selectedSku = "") => {
     if (!productUrl.trim()) return;
+    const sequence = ++previewSequence.current;
     setPreviewLoading(true);
     setPreviewNotice("");
     setSupplierQuote(null);
+    clearShipping();
     try {
-      const response = await authFetch("/api/admin/aliexpress-product-preview?url=" + encodeURIComponent(productUrl.trim()));
-      const data = await response.json() as {error?:string;title?:string;description?:string;imageUrl?:string;supplierPrice?:number;currency?:string};
+      const query = new URLSearchParams({ url: productUrl.trim(), market: targetMarket, sku: selectedSku });
+      const response = await fetchRef.current("/api/admin/aliexpress-product-preview?" + query);
+      const data = await response.json() as {
+        error?: string; title?: string; description?: string; imageUrl?: string; supplierPrice?: number; currency?: string;
+        origin?: string; selectedSku?: string; choices?: { id: string; label: string }[];
+        shipping?: { origin: string | null; destination: string; amount: number; estimate: string };
+        images?: string[]; attributes?: { key: string; value: string }[];
+      };
+      if (sequence !== previewSequence.current) return;
       if (!response.ok) throw new Error(data.error || "Product details unavailable");
-      if (data.title) setTitle(data.title);
-      if (data.description) setDescription(data.description);
-      if (data.imageUrl) setImageUrl(data.imageUrl);
+      if (!selectedSku) {
+        if (data.title) setTitle(data.title);
+        if (data.description) setDescription(data.description);
+        if (data.imageUrl) setImageUrl(data.imageUrl);
+        setGallery(data.images ?? []);
+        setAttributes(data.attributes ?? []);
+      }
       setSupplierQuote(typeof data.supplierPrice === "number" && data.supplierPrice > 0 && data.currency
         ? { amount: data.supplierPrice, currency: data.currency }
         : null);
       setSupplierCurrency(data.currency || "USD");
       setLastPreviewUrl(productUrl);
-      setPreviewNotice(data.currency && data.currency !== "USD" ? "Supplier price is in " + data.currency + ". Please enter the verified USD equivalent before importing." : "Product details retrieved. Review the information before importing.");
+      setChoices(data.choices ?? []);
+      setSku(data.selectedSku ?? "");
+      setShipOrigin(data.shipping?.origin ?? data.origin ?? "");
+      if (data.shipping) {
+        setDeliversToMarket(true);
+        setShippingPrice(String(data.shipping.amount));
+        setDeliveryEstimate(data.shipping.estimate);
+      }
+      setPreviewNotice(data.shipping ? "AliExpress supplied an estimated delivery cost for one item. Review it before importing."
+        : "Product details retrieved. Review the product and confirm any missing shipping details before importing.");
     } catch (error) {
-      setPreviewNotice((error instanceof Error ? error.message : "Preview unavailable") + " Enter missing fields manually.");
-    } finally { setPreviewLoading(false); }
-  }, [authFetch]);
-  useEffect(() => { if (initialUrl) void fetchPreview(initialUrl); }, [initialUrl]);
+      if (sequence === previewSequence.current)
+        setPreviewNotice((error instanceof Error ? error.message : "Preview unavailable") + " Enter missing fields manually.");
+    } finally {
+      if (sequence === previewSequence.current) setPreviewLoading(false);
+    }
+  }, []);
+  useEffect(() => { if (initialUrl) void fetchPreview(initialUrl, initialMarket); }, [initialUrl, initialMarket, fetchPreview]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -186,6 +227,12 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           supplierPriceUsd: usd,
           market,
           quantity: stock,
+          shipOrigin: shipOrigin || null,
+          deliversToMarket,
+          shippingPrice: deliversToMarket ? shippingPrice : null,
+          deliveryEstimate,
+          images: gallery,
+          attributes,
           expectedSellingPrice: bazunkPreview,
           imageUrl: imageUrl.trim() || null,
           ...resolveCategory(category, subcategory),
@@ -256,7 +303,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           <p className="font-bold text-gray-900 text-lg">{savedPrice === null ? "Imported!" : `Imported at ${currencySymbol}${savedPrice.toFixed(2)}`}</p>
           <p className="text-sm text-gray-400 mt-1 mb-6 truncate px-4">{importedTitle}</p>
           <div className="flex gap-3">
-            <button onClick={() => { setSuccess(false); setUrl(""); setTitle(""); setSupplierPriceUsd(""); setSupplierQuote(null); setImageUrl(""); setDescription(""); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+            <button onClick={() => { setSuccess(false); clearShipping(); setChoices([]); setSku(""); setGallery([]); setAttributes([]); setUrl(""); setTitle(""); setSupplierPriceUsd(""); setSupplierQuote(null); setImageUrl(""); setDescription(""); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
               Import Another
             </button>
             <button onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-gray-800 transition-colors">
@@ -275,8 +322,11 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           {/* AliExpress URL */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">AliExpress Product URL <span className="text-red-400">*</span></label>
-            <input value={url} onChange={e => { setUrl(e.target.value); setSupplierPriceUsd(""); setSupplierQuote(null); }} placeholder="https://www.aliexpress.com/item/1005007123456789.html" className={inputCls} />
-            <button type="button" disabled={previewLoading || !url.trim()} onClick={() => void fetchPreview(url)} className="mt-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{previewLoading ? "Fetching product details…" : lastPreviewUrl === url ? "Refresh product details" : "Fetch product details"}</button>
+            <input value={url} onChange={e => { previewSequence.current++;
+              setPreviewLoading(false); setPreviewNotice(""); setLastPreviewUrl(""); setUrl(e.target.value);
+              setSupplierPriceUsd(""); setSupplierQuote(null); clearShipping(); setChoices([]); setSku("");
+              setTitle(""); setDescription(""); setImageUrl(""); setGallery([]); setAttributes([]); }} placeholder="https://www.aliexpress.com/item/1005007123456789.html" className={inputCls} />
+            <button type="button" disabled={previewLoading || !url.trim()} onClick={() => void fetchPreview(url, market, sku)} className="mt-2 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">{previewLoading ? "Fetching product details…" : lastPreviewUrl === url ? "Refresh product details" : "Fetch product details"}</button>
             {previewNotice && <p role="status" className="mt-2 text-xs text-gray-600">{previewNotice}</p>}
             {imageUrl && <img src={imageUrl} alt="Supplier product preview" className="mt-2 h-28 w-28 rounded-lg border object-contain" />}
 
@@ -337,7 +387,13 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-xs font-semibold text-gray-600">
               Marketplace
-              <select value={market} onChange={e => setMarket(e.target.value === "us" ? "us" : "uk")} className={`${inputCls} mt-1.5 bg-white`} disabled={loading || success}>
+              <select value={market} onChange={e => {
+                const next = e.target.value === "us" ? "us" : "uk";
+                setMarket(next);
+                setSupplierPriceUsd("");
+                void fetchPreview(url, next, sku);
+                if (!url.trim()) clearShipping();
+              }} className={`${inputCls} mt-1.5 bg-white`} disabled={loading || success}>
                 <option value="uk">UK · GBP</option>
                 <option value="us">USA · USD</option>
               </select>
@@ -347,6 +403,42 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
               <input type="number" min="1" max="2147483647" step="1" value={quantity} onChange={e => setQuantity(e.target.value)} className={`${inputCls} mt-1.5`} />
             </label>
           </div>
+
+          <section className="space-y-2 rounded-xl border border-gray-200 p-3" aria-label="Shipping details">
+            <h3 className="text-sm font-bold">Shipping</h3>
+            {choices.length > 1 && <label className="block text-xs font-semibold">
+              Supplier option for delivery quote
+              <select value={sku} onChange={e => { setSupplierPriceUsd(""); void fetchPreview(url, market, e.target.value); }} className={inputCls} disabled={previewLoading}>
+                <option value="">Select an option</option>
+                {choices.map(choice => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+              </select>
+            </label>}
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-xs font-semibold">Ships from
+                <select value={shipOrigin} onChange={e => setShipOrigin(e.target.value)} className={inputCls}>
+                  <option value="">Unconfirmed</option>
+                  {shipOrigin && !shippingCountries.some(country => country.code === shipOrigin) &&
+                    <option value={shipOrigin}>{shippingCountryLabel(shipOrigin)}</option>}
+                  {shippingCountries.map(country => <option key={country.code} value={country.code}>{country.name}</option>)}
+                </select>
+              </label>
+              <label className="block text-xs font-semibold">Delivery cost ({market === "uk" ? "GBP" : "USD"})
+                <input type="number" min="0" step="0.01" value={shippingPrice} onChange={e => setShippingPrice(e.target.value)}
+                  disabled={!deliversToMarket} placeholder="Unconfirmed" className={inputCls} />
+              </label>
+            </div>
+            <label className="flex items-center gap-2 text-xs font-semibold">
+              <input type="checkbox" checked={deliversToMarket} onChange={e => setDeliversToMarket(e.target.checked)} />
+              Delivery confirmed to {market === "uk" ? "the United Kingdom" : "the United States"}
+            </label>
+            <label className="block text-xs font-semibold">Estimated delivery (optional)
+              <input value={deliveryEstimate} onChange={e => setDeliveryEstimate(e.target.value)}
+                disabled={!deliversToMarket} placeholder="e.g. 5–8 days" className={inputCls} />
+            </label>
+            {(gallery.length > 1 || attributes.length > 0) && <p className="text-xs text-gray-600">
+              Additional supplier photos and product specifications will be saved with the listing.
+            </p>}
+          </section>
 
           {/* Description */}
           <div>

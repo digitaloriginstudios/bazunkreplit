@@ -1,6 +1,7 @@
+import { shippingCountry } from "../lib/listingShipping.js";
 import { getAliExpressUsdToGbpRate, tidyAliExpressDescription } from "../lib/aliExpressImportDetails.js";
 import { randomUUID } from "node:crypto";
-import { dropshipConfigured, dropshipSearchDiagnostic, inspectDropshipSearch, searchDropship, getDropshipProduct, aliExpressProductId } from "../lib/aliexpressDropship.js";
+import { dropshipConfigured, dropshipSearchDiagnostic, inspectDropshipSearch, searchDropship, getDropshipProduct, previewDropshipProduct, aliExpressProductId } from "../lib/aliexpressDropship.js";
 import { Router } from "express";
 import adminNavigationRouter from "./adminNavigation.js";
 import {publicThemeStudioRouter,adminThemeStudioRouter} from "./themeStudio.js";
@@ -1683,7 +1684,15 @@ router.get("/admin/aliexpress-product-preview", async (req, res) => {
   if(await dropshipConfigured()){
     const id=aliExpressProductId(String(req.query.url??""));
     if(!id){res.status(400).json({error:"Enter a supported AliExpress product URL or product ID"});return;}
-    try{const p=await getDropshipProduct(id);res.setHeader("Cache-Control","no-store");res.json({id,title:p.title,description:tidyAliExpressDescription(p.description),imageUrl:p.images[0]?.url??"",supplierPrice:p.price.amount||null,currency:p.price.currency,sourceUrl:p.sourceUrl});}
+    try {
+      const destination = req.query.market === "us" ? "US" : "GB";
+      const sku = typeof req.query.sku === "string" ? req.query.sku : undefined;
+      const { product: p, ...details } = await previewDropshipProduct(id, destination, sku);
+      res.setHeader("Cache-Control", "no-store");
+      res.json({ ...details, id, title: p.title, description: tidyAliExpressDescription(p.description),
+        imageUrl: p.images[0]?.url ?? "", images: [...new Set(p.images.map(image => image.url))].slice(0, 12),
+        supplierPrice: p.price.amount || null, currency: p.price.currency, sourceUrl: p.sourceUrl });
+    }
     catch(error){logger.warn({error},"AliExpress Dropshipping preview failed");res.status(502).json({error:error instanceof Error?error.message:"AliExpress product lookup failed"});}return;
   }
   const raw = String(req.query.url ?? "");
@@ -1759,6 +1768,19 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
     res.status(400).json({ error: "Select UK or USA and enter a positive whole-number quantity." }); return;
   }
   const currency = market === "uk" ? "GBP" : "USD";
+  const destination = market === "uk" ? "GB" : "US";
+  const origin = shippingCountry(body.shipOrigin);
+  const shipZone = body.deliversToMarket === true ? "country:" + destination : null;
+  const shippingPrice = body.shippingPrice === null || body.shippingPrice === undefined || body.shippingPrice === "" ? null : Number(body.shippingPrice);
+  if ((body.shipOrigin && !origin) || (shippingPrice !== null && (!shipZone || !Number.isFinite(shippingPrice) || shippingPrice < 0 || shippingPrice > 10000))) {
+    res.status(400).json({ error: "Check the ship-from country and the delivery cost for the selected marketplace." }); return;
+  }
+  const deliveryEstimate = shipZone ? String(body.deliveryEstimate ?? "").trim().slice(0, 120) : "";
+  const gallery = Array.isArray(body.images) ? body.images.filter((value: unknown): value is string =>
+    typeof value === "string" && value.length <= 4000 && /^https:\/\//i.test(value)).slice(0, 12) : [];
+  const details = Array.isArray(body.attributes) ? body.attributes
+    .filter((row: any) => typeof row?.key === "string" && typeof row?.value === "string")
+    .slice(0, 24).map((row: {key: string; value: string}) => ({ key: row.key.slice(0, 80), value: row.value.slice(0, 240) })) : [];
   const imageUrl = String(body.imageUrl ?? "").trim();
   const priceUsd = Number(body.supplierPriceUsd);
   const markupType = String(body.markupType ?? "percentage");
@@ -1795,7 +1817,9 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
     return;
   }
   const priceGbp = market === "uk" ? sellingPrice : rate === null ? null : Math.round(sellingPrice * rate * 100) / 100;
-  const specs = JSON.stringify({marketplace_region:market,source:"AliExpress",aliexpress_id:id,aliexpress_url:rawUrl,source_price:priceUsd,source_currency:"USD",exchange_rate_to_gbp:rate,markup_type:markupType,markup_value:markupValue,source_sync:true});
+  const images = [...new Set([imageUrl, ...gallery].filter(Boolean))].slice(0, 12);
+  const specs = JSON.stringify({admin_gallery_images:images,details,delivery_estimate:deliveryEstimate,
+    ships_from:origin, ships_to:shipZone, shipping_price:shippingPrice, marketplace_region:market,source:"AliExpress",aliexpress_id:id,aliexpress_url:rawUrl,source_price:priceUsd,source_currency:"USD",exchange_rate_to_gbp:rate,markup_type:markupType,markup_value:markupValue,source_sync:true});
   try {
     const listingId = await db.transaction(async (tx) => {
       // Serialise imports of this supplier product for this seller, even across requests.
@@ -1808,8 +1832,8 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
         throw new Error("ALIEXPRESS_ALREADY_IMPORTED");
       }
       const inserted = await tx.execute(sql`INSERT INTO listings
-        (title,price,price_gbp,currency,quantity,category,subcategory,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
-        VALUES (${title},${sellingPrice},${priceGbp},${currency},${quantity},${category},${subcategory || null},${description || title},${condition},${imageUrl || null},${seller.email},${seller.name ?? seller.email.split("@")[0]},${specs},'active',NOW(),NOW()) RETURNING id`);
+        (title,price,price_gbp,currency,quantity,ship_origin,ship_zone,shipping_price,category,subcategory,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
+        VALUES (${title},${sellingPrice},${priceGbp},${currency},${quantity},${origin},${shipZone},${shippingPrice},${category},${subcategory || null},${description || title},${condition},${images[0] ?? null},${seller.email},${seller.name ?? seller.email.split("@")[0]},${specs},'active',NOW(),NOW()) RETURNING id`);
       const newId = Number((inserted.rows[0] as {id:number}).id);
       await tx.execute(sql`UPDATE listings SET public_id = ${"BZL-" + newId} WHERE id = ${newId}`);
       await tx.execute(sql`INSERT INTO supplier_imports

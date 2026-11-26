@@ -1,3 +1,4 @@
+import { shippingCountry } from "./listingShipping.js";
 import { createHmac } from "node:crypto";
 import {
   aliExpressCredentials, AliExpressConnectionError, hasManagedAliExpressConnection, managedAliExpressAccessToken,
@@ -53,7 +54,7 @@ function normalize(p: any): Product {
   };
 }
 
-async function call(method: string, extra: Record<string, string>, requireManaged = false): Promise<any> {
+async function call(method: string, extra: Record<string, string>, requireManaged = false, timeout = 20_000): Promise<any> {
   const credentials = aliExpressCredentials();
   if (!credentials) throw new AliExpressConnectionError("AliExpress app credentials are missing.");
   const managed = await managedAliExpressAccessToken();
@@ -79,7 +80,7 @@ async function call(method: string, extra: Record<string, string>, requireManage
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams(params),
       redirect: "error",
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(timeout),
     });
     if (!response.ok) throw new AliExpressConnectionError("AliExpress API returned HTTP " + response.status + ".");
     return await response.json() as Record<string, any>;
@@ -143,15 +144,108 @@ export async function searchDropship(q: string, page: number, options: { require
   return products;
 }
 
-export async function getDropshipProduct(id: string): Promise<Product> {
+export async function getDropshipProduct(id: string, destination: "GB" | "US" = "GB"): Promise<Product> {
+  return (await fetchDropshipProduct(id, destination)).product;
+}
+
+async function fetchDropshipProduct(id: string, destination: "GB" | "US") {
   if (!/^\d{10,20}$/.test(id)) throw new AliExpressConnectionError("Invalid AliExpress product ID.");
   const result = await call("aliexpress.ds.product.get", {
-    product_id: id, ship_to_country: "GB", target_currency: "USD", target_language: "en", remove_personal_benefit: "true",
+    product_id: id, ship_to_country: destination, target_currency: "USD", target_language: "en", remove_personal_benefit: "true",
   });
   const raw = result.result ?? result.data ?? result;
   const product = normalize({ ...raw, product_id: id });
   if (!product.title) throw new AliExpressConnectionError("AliExpress returned no product title. Check product availability.");
-  return product;
+  return { raw, product };
+}
+
+function members(value: unknown, key: string): any[] {
+  const entries = Array.isArray(value) ? value : (value as Record<string, unknown> | null)?.[key];
+  return Array.isArray(entries) ? entries.filter(Boolean) : [];
+}
+
+export async function previewDropshipProduct(id: string, destination: "GB" | "US", skuId?: string) {
+  const { raw, product } = await fetchDropshipProduct(id, destination);
+  const base = raw.ae_item_base_info_dto;
+  const productOrigin = shippingCountry(raw.ship_from_country ?? base?.ship_from_country);
+  const choices = members(raw.ae_item_sku_info_dtos, "ae_item_sku_info_d_t_o")
+    .filter(sku => /^\d{1,24}$/.test(String(sku.sku_id ?? "")) && Number(sku.sku_available_stock) !== 0)
+    .map(sku => {
+      const properties = members(sku.ae_sku_property_dtos, "ae_sku_property_d_t_o");
+      const propertyValue = (p: any) => String(p.property_value_definition_name ?? p.sku_property_value ?? "").trim();
+      const warehouse = properties.find(p => String(p.sku_property_name ?? "").trim().toLowerCase() === "ships from");
+      return {
+        id: String(sku.sku_id),
+        origin: shippingCountry(sku.ship_from_country ?? propertyValue(warehouse ?? {})) ?? productOrigin,
+        label: properties.map(propertyValue).filter(Boolean).join(" · ").slice(0, 140) || "SKU " + sku.sku_id,
+      };
+    });
+  const selected = skuId ? choices.find(choice => choice.id === skuId) : choices.length === 1 ? choices[0] : undefined;
+  const origins = new Set(choices.map(choice => choice.origin));
+  const origin = selected?.origin ?? (origins.size <= 1 ? choices[0]?.origin ?? productOrigin : null);
+  const marketCurrency = destination === "GB" ? "GBP" : "USD";
+  const attributes = members(raw.ae_item_properties, "ae_item_property")
+    .filter(p => p.attr_name && p.attr_value)
+    .slice(0, 24)
+    .map(p => ({ key: String(p.attr_name).slice(0, 80), value: String(p.attr_value).slice(0, 240) }));
+  let shipping: { origin: string | null; destination: string; amount: number; currency: string; estimate: string } | null = null;
+
+  if (selected) {
+    try {
+      const freight = await call("aliexpress.ds.freight.query", {
+        queryDeliveryReq: JSON.stringify({
+          productId: id, selectedSkuId: selected.id, shipToCountry: destination,
+          quantity: 1, currency: marketCurrency, locale: "en_US", language: "en_US",
+        }),
+      }, false, 8_000);
+      const data = freight.result ?? freight.data ?? freight;
+      if (data.success !== false && data.success !== "false") {
+        const options = members(data.delivery_options ?? data.deliveryOptions, "delivery_option")
+          .flatMap(option => {
+            const value = option.shipping_fee ?? option.shippingFee ?? option.freight;
+            const fee = typeof value === "object" && value !== null ? value.amount : value;
+            const currency = String(value?.currency_code ?? value?.currency ?? option.currency ?? option.currency_code ?? "").toUpperCase();
+            const amount = Number(fee);
+            if (fee == null || fee === "" || !Number.isFinite(amount) || amount < 0 || currency !== marketCurrency) return [];
+            const min = Number(option.min_delivery_days ?? option.minDeliveryDays);
+            const max = Number(option.max_delivery_days ?? option.maxDeliveryDays);
+            const estimate = Number.isInteger(min) && Number.isInteger(max) && min > 0 && max >= min
+              ? (min === max ? String(min) : min + "–" + max) + " days" : "";
+            return [{ origin: shippingCountry(option.ship_from_country ?? option.shipFromCountry) ?? selected.origin,
+              destination, amount, currency, estimate }];
+          });
+        shipping = options.sort((a, b) => a.amount - b.amount)[0] ?? null;
+      }
+    } catch {
+      // Product details remain usable when the app lacks freight permission or no quote is available.
+    }
+  }
+  // The older freight operation requires a known dispatch country and
+  // has no SKU selector, so use it only for an unambiguous product.
+  if (!shipping && origin && choices.length <= 1 && Number.isSafeInteger(Number(id))) {
+    try {
+      const freight = await call("aliexpress.logistics.buyer.freight.calculate", {
+        param_aeop_freight_calculate_for_buyer_d_t_o: JSON.stringify({
+          product_id: Number(id), product_num: 1, country_code: destination,
+          send_goods_country_code: origin, price_currency: marketCurrency,
+        }),
+      }, false, 8_000);
+      const result = freight.result ?? freight.data ?? freight;
+      const options = members(result.aeop_freight_calculate_result_for_buyer_d_t_o_list, "aeop_freight_calculate_result_for_buyer_dto")
+        .flatMap(option => {
+          const fee = option.freight?.amount;
+          const currency = String(option.freight?.currency_code ?? "").toUpperCase();
+          const amount = Number(fee);
+          if ((option.success !== true && option.success !== "true") || fee == null || fee === "" ||
+              !Number.isFinite(amount) || amount < 0 || currency !== marketCurrency) return [];
+          return [{ origin, destination, amount, currency, estimate: String(option.estimated_delivery_time ?? "").slice(0, 120) }];
+        });
+      shipping = options.sort((a, b) => a.amount - b.amount)[0] ?? null;
+    } catch {
+      // A missing freight quote must not become a zero postage charge.
+    }
+  }
+  return { product, choices, selectedSku: selected?.id ?? null, origin, shipping, attributes };
 }
 
 export function aliExpressProductId(raw: string): string | null {
