@@ -5,6 +5,11 @@ import assert from "node:assert/strict";
 const dist=resolve(dirname(fileURLToPath(import.meta.url)),"../dist");
 const origin="https://www.bazunk.com";
 const pages=[
+["marketplace/uk","Shop online in United Kingdom","Browse marketplace products for UK shoppers, compare domestic delivery options and check postage before buying."],
+["marketplace/us","Shop online in United States","Discover marketplace products for US shoppers, check international shipping eligibility and review estimated dollar prices."],
+["marketplace/ireland","Shop online in Ireland","Explore marketplace shopping for Ireland, check delivery from overseas sellers and review estimated euro prices."],
+["marketplace/canada","Shop online in Canada","Discover marketplace listings for Canadian shoppers and check shipping eligibility and estimated Canadian dollar prices."],
+["marketplace/australia","Shop online in Australia","Explore marketplace listings for Australian shoppers, compare overseas delivery options and estimated Australian dollar prices."],
 ["","Buy, sell and bid online","Discover new and used products, auctions and deals from independent sellers on Bazunk."],
 ["browse","Browse marketplace listings","Explore new and used products from independent marketplace sellers."],
 ["deals","Latest deals and offers","Explore promoted listings and limited-time offers on Bazunk."],
