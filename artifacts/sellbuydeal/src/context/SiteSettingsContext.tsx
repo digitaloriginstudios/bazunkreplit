@@ -121,15 +121,18 @@ export function SiteSettingsProvider({ children }: { children: React.ReactNode }
         failures = 0;
         setSettings({ ...DEFAULTS, ...data });
         setRawSettings(data);
+        setSettingsLoaded(true);
       } catch {
         if (disposed || currentRequest !== requestId) return;
-        // Retain last-known-good settings (or built-in defaults), never blank the homepage.
+        // Preserve branding, but hide optional features until settings are verified again.
+        setRawSettings(prev=>Object.fromEntries(Object.entries(prev).filter(([key])=>!key.startsWith("feature_"))));
+        setSettingsLoaded(false);
         failures += 1;
         const delay = Math.min(60000, 1500 * 2 ** Math.min(failures - 1, 5));
         retryTimer = setTimeout(loadSettings, delay);
       } finally {
         clearTimeout(timeout);
-        if (!disposed && currentRequest === requestId) setSettingsLoaded(true);
+
       }
     };
 
