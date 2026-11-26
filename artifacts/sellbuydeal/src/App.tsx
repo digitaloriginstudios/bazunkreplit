@@ -458,7 +458,7 @@ function Router() {
       <Route path="/importers">{() => <FeatureGate feature="importers" name="Importers"><ImportersPage /></FeatureGate>}</Route>
       <Route path="/browse">{() => <BrowsePage />}</Route>
       <Route path="/deals">{()=><BrowsePage collection="deals" />}</Route>
-      {discoveryPages.filter(([slug])=>slug!=="deals").map(([slug])=><Route key={slug} path={"/"+slug}>{()=><DiscoveryPage key={slug} slug={slug}/>}</Route>)}
+      {discoveryPages.filter(([slug])=>slug!=="deals").map(([slug])=><Route key={slug} path={"/"+slug}>{()=>slug==="99p-auctions"||slug==="ending-soon"?<FeatureGate feature="auctions" name="Auctions"><DiscoveryPage key={slug} slug={slug}/></FeatureGate>:<DiscoveryPage key={slug} slug={slug}/>}</Route>)}
       <Route path="/eco">{()=><BrowsePage collection="eco" />}</Route>
       <Route path="/search">{() => <BrowsePage />}</Route>
       <Route path="/listing/:id">{()=><ListingErrorBoundary><ListingPage /></ListingErrorBoundary>}</Route>
