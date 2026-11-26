@@ -221,18 +221,18 @@ function FeeCalculator() {
 
 const SELL_HUB_OPTIONS = [
  {id:"swap",title:"Bazunk Swap",desc:"List an item and describe what you want in return.",href:"/swap/create",icon:ArrowLeftRight,colors:"from-blue-500 to-blue-700",border:"border-blue-600",label:"Create swap"},
- {id:"direct",title:"Direct Sale",desc:"Create a detailed listing with pricing, shipping and offers.",href:"/sell/direct",icon:ShoppingCart,colors:"from-orange-600 to-orange-700",border:"border-[#ff9500]",label:"List item"},
- {id:"quick",title:"Quick Sale",desc:"Get your item listed quickly with the essentials.",href:"/sell/quick",icon:Zap,colors:"from-blue-600 to-blue-700",border:"border-[#087cff]",label:"List now"},
- {id:"auction",title:"List an Auction",desc:"Set a starting bid and let buyers compete.",href:"/auctions/create",icon:Gavel,colors:"from-[#0f766e] to-[#115e59]",border:"border-teal-500",label:"Create auction"},
- {id:"flash",title:"Run a Flash Sale",desc:"Create a limited-time offer for your products.",href:"/flash-sales",icon:Percent,colors:"from-rose-500 to-rose-700",border:"border-rose-400",label:"Create deal"},
- {id:"classified",title:"List a Classified",desc:"Post a local listing, service or wanted ad.",href:"/classifieds/post",icon:Newspaper,colors:"from-emerald-600 to-emerald-700",border:"border-[#00bf69]",label:"Post ad"},
+ {id:"direct",title:"Direct Sale",desc:"Create a detailed listing with pricing, shipping and offers.",href:"/sell/direct",icon:ShoppingCart,colors:"from-amber-500 to-orange-700",border:"border-[#ff9500]",label:"List item"},
+ {id:"quick",title:"Quick Sale",desc:"Get your item listed quickly with the essentials.",href:"/sell/quick",icon:Zap,colors:"from-sky-400 to-blue-700",border:"border-[#087cff]",label:"List now"},
+ {id:"auction",title:"List an Auction",desc:"Set a starting bid and let buyers compete.",href:"/auctions/create",icon:Gavel,colors:"from-teal-400 to-teal-700",border:"border-teal-500",label:"Create auction"},
+ {id:"flash",title:"Run a Flash Sale",desc:"Create a limited-time offer for your products.",href:"/flash-sales",icon:Percent,colors:"from-pink-500 to-rose-700",border:"border-rose-400",label:"Create deal"},
+ {id:"classified",title:"List a Classified",desc:"Post a local listing, service or wanted ad.",href:"/classifieds/post",icon:Newspaper,colors:"from-lime-500 to-emerald-700",border:"border-[#00bf69]",label:"Post ad"},
  {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/live",icon:Video,colors:"from-[#14c7f4] to-[#006dce]",border:"border-[#04aeed]",label:"Start live"}
 ] as const;
 function SellHubArtwork({kind}:{kind:string}) {
  const option=SELL_HUB_OPTIONS.find(o=>o.id===kind);
  if(!option)return null;
  const Icon=option.icon;
- return <div aria-hidden="true" className="mb-4 flex w-full items-center justify-start"><span className={`flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br ${option.colors} text-white shadow-sm`}><Icon size={32} strokeWidth={2.2}/></span></div>;
+ return <div aria-hidden="true" className="relative mb-4 flex w-full items-center justify-center"><span className={`relative flex h-28 w-28 sm:h-36 sm:w-36 items-center justify-center rounded-full bg-gradient-to-br ${option.colors} text-white shadow-lg ring-8 ring-white transition-transform group-hover:scale-105 group-hover:-rotate-6`}><Icon className="h-14 w-14 sm:h-16 sm:w-16" strokeWidth={2.3}/><Sparkles className="absolute right-3 top-3 h-5 w-5 text-white/80"/></span></div>;
 }
 const NativeDirectSeller = lazy(() => import("@/pages/DirectSalePage").then(m => ({default:m.DirectSalePage})));
 const NativeAuctionSeller = lazy(() => import("@/pages/CreateAuctionPage").then(m => ({default:m.CreateAuctionPage})));
@@ -289,13 +289,13 @@ export function SellPage() {
               </div>
 
             </div>
-            <div className="relative flex flex-wrap justify-center gap-4">
-              {SELL_HUB_OPTIONS.filter(option => !featureForHref(option.href) || isFeatureEnabled(rawSettings,featureForHref(option.href)!)).map(option => {const Icon=option.icon;return <button type="button" key={option.id} onClick={()=>setSelectedSellOption(option)} data-testid={`sell-hub-${option.id}`} className={`group relative flex min-w-0 flex-[1_1_250px] max-w-[440px] flex-col items-start overflow-hidden rounded-2xl border ${option.border} bg-white p-5 text-left shadow-[0_7px_18px_rgba(12,58,116,.14)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_14px_26px_rgba(12,58,116,.2)] focus-visible:outline focus-visible:outline-4 focus-visible:outline-orange-500 sm:p-6`}>
-                <span aria-hidden="true" className={`absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${option.colors}`}/>
+            <div className="relative flex flex-wrap justify-center gap-4 sm:gap-6">
+              {SELL_HUB_OPTIONS.filter(option => !featureForHref(option.href) || isFeatureEnabled(rawSettings,featureForHref(option.href)!)).map(option => {const Icon=option.icon;return <button type="button" key={option.id} onClick={()=>setSelectedSellOption(option)} data-testid={`sell-hub-${option.id}`} className={`group relative flex min-w-0 flex-[1_1_210px] max-w-[340px] flex-col items-center overflow-hidden rounded-[32px] border-2 ${option.border} bg-white p-5 text-center shadow-[0_7px_18px_rgba(12,58,116,.14)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_14px_26px_rgba(12,58,116,.2)] focus-visible:outline focus-visible:outline-4 focus-visible:outline-orange-500 sm:p-6`}>
+                <span aria-hidden="true" className={`absolute inset-0 bg-gradient-to-br ${option.colors} opacity-[.13]`}/>
                 <SellHubArtwork kind={option.id}/>
                 <h3 className="relative text-xl font-black tracking-tight text-[#092b68] sm:text-[25px]">{option.title}</h3>
                 <p className="relative mt-2 min-h-14 text-sm font-medium leading-relaxed text-[#173c71]">{option.desc}</p>
-                <span className={`relative mt-auto inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r ${option.colors} px-4 py-2 text-sm font-black text-white shadow-sm`}>{option.label}<ArrowRight className="h-4 w-4"/></span>
+                <span className={`relative mt-auto inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r ${option.colors} px-5 py-3 text-base font-black text-white shadow-md`}>{option.label}<ArrowRight className="h-4 w-4"/></span>
               </button>})}
             </div>
             <div className="relative mt-7 grid grid-cols-2 gap-3 rounded-2xl border border-[#c3d8ff] bg-white p-4 shadow-[0_6px_18px_rgba(10,61,133,.12)] md:grid-cols-4">
