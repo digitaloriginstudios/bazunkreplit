@@ -43,6 +43,6 @@ export function Footer() {
         </div>
         <div className="bz-compact-footer-wave" aria-hidden="true"><span/></div>
       </div>
-    </footer>
+    <div className="py-3 text-center"><a href="/affiliates" className="underline">Bazunk Affiliate Programme</a></div></footer>
   );
 }
