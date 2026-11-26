@@ -41,9 +41,9 @@ function StatusBadge({ status }: { status: OfferStatus }) {
   );
 }
 
-type RemoteOffer = Offer & { buyerEmail?: string; sellerEmail?: string; publicId?: string | null; fromServer?: boolean };
+type RemoteOffer = Offer & { buyerEmail?: string; sellerEmail?: string; publicId?: string | null; fromServer?: boolean; originalCurrency?: string };
 function OfferCard({ offer, currentEmail, onRespond }: { offer: RemoteOffer; currentEmail?: string; onRespond: (id:string, action:string, counterPrice?:number)=>Promise<void> }) {
-  const { formatPrice } = useCurrency();
+  const formatPrice = (amount:number) => `${offer.originalCurrency || "Currency unverified"} ${amount.toFixed(2)}`;
   const { respondToCounter } = useOffers();
   const isSeller = !!offer.sellerEmail && offer.sellerEmail.toLowerCase() === currentEmail?.toLowerCase();
   const [counterInput,setCounterInput] = useState("");
@@ -111,7 +111,7 @@ function OfferCard({ offer, currentEmail, onRespond }: { offer: RemoteOffer; cur
           <div className="flex flex-wrap gap-2">
             <button onClick={() => void onRespond(offer.id,"accept")} className="rounded-lg bg-gradient-to-r from-[#065f46] to-emerald-700 px-3 py-2 text-sm font-bold text-white">Accept</button>
             <button onClick={() => void onRespond(offer.id,"decline")} className="rounded-lg bg-gradient-to-r from-[#9a3412] to-red-800 px-3 py-2 text-sm font-bold text-white">Decline</button>
-            <input aria-label="Counter-offer price" type="number" min="0.01" step="0.01" value={counterInput} onChange={e=>setCounterInput(e.target.value)} placeholder="Counter price" className="w-32 rounded-lg border border-slate-400 bg-white px-3 py-2 text-sm text-slate-900"/>
+            <input aria-label="Counter-offer price" type="number" min="0.01" step="0.01" value={counterInput} onChange={e=>setCounterInput(e.target.value)} placeholder={`Counter (${offer.originalCurrency || "unverified"})`} className="w-32 rounded-lg border border-slate-400 bg-white px-3 py-2 text-sm text-slate-900"/>
             <button disabled={Number(counterInput)<=0} onClick={() => void onRespond(offer.id,"counter",Number(counterInput))}
               className="rounded-lg bg-blue-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-40">Counter</button>
           </div>
@@ -181,7 +181,7 @@ export function OffersPage() {
       message:o.message||undefined, status:o.status as OfferStatus, counterPrice:o.counter_price?Number(o.counter_price):undefined,
       counterMessage:o.counter_message||undefined, createdAt:String(o.created_at),
       respondedAt:o.updated_at, buyerEmail:String(o.buyer_email),sellerEmail:String(o.seller_email),
-      publicId:o.public_id,fromServer:true
+      publicId:o.public_id,fromServer:true,originalCurrency:o.currency || undefined
     })));
     setOfferApiError("");setLoaded(true);
   },[getToken]);
@@ -195,14 +195,14 @@ export function OffersPage() {
       if(!token)throw new Error("Please sign in");
       const response=await fetch(`/api/offers/${encodeURIComponent(id)}`,{
         method:"PATCH",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},
-        body:JSON.stringify({action,counterPrice})
+        body:JSON.stringify({action,counterPrice,currency:remoteOffers.find(o=>o.id===id)?.originalCurrency})
       });
       const data=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(data.error||"Could not respond to offer");
       await refreshOffers();
     }catch(e){setOfferApiError(e instanceof Error?e.message:"Could not respond to offer");}
   }
-  const offers = loaded ? remoteOffers : localOffers;
+  const offers: RemoteOffer[] = loaded ? remoteOffers : [];
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<TabKey>("all");
 
