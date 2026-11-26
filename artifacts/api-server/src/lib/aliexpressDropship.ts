@@ -99,7 +99,10 @@ async function call(method: string, extra: Record<string, string>, requireManage
   const responseCode = String(result?.rsp_code ?? "");
   if (json.error_response || (code && !["00", "0", "200"].includes(code)) ||
       (responseCode && !["0", "200"].includes(responseCode))) {
-    const reference = /^[a-z0-9_.-]{1,48}$/i.test(code) ? " (" + code + ")" : "";
+    const codes = [...new Set([json.error_response?.sub_code, code, responseCode]
+      .map(value => String(value ?? ""))
+      .filter(value => /^[a-z0-9_.-]{1,48}$/i.test(value) && !["00", "0", "200"].includes(value)))];
+    const reference = codes.length ? " (" + codes.join(", ") + ")" : "";
     throw new AliExpressConnectionError("AliExpress rejected the API request" + reference + ".");
   }
   if (!result) throw new AliExpressConnectionError("AliExpress returned an unexpected API response.");
@@ -148,13 +151,24 @@ export async function getDropshipProduct(id: string, destination: "GB" | "US" = 
   return (await fetchDropshipProduct(id, destination)).product;
 }
 
+// AliExpress storefront links may set bit 51 on a global product ID.
+const storefrontProductIdFlag = 1n << 51n;
+
+export function aliExpressAlternateProductId(id: string): string | null {
+  if (/^1005\d{12}$/.test(id)) return String(BigInt(id) + storefrontProductIdFlag);
+  if (!/^3256\d{12}$/.test(id)) return null;
+  const globalId = String(BigInt(id) - storefrontProductIdFlag);
+  return /^1005\d{12}$/.test(globalId) ? globalId : null;
+}
+
 async function fetchDropshipProduct(id: string, destination: "GB" | "US") {
   if (!/^\d{10,20}$/.test(id)) throw new AliExpressConnectionError("Invalid AliExpress product ID.");
+  const globalId = id.startsWith("3256") ? aliExpressAlternateProductId(id) ?? id : id;
   const result = await call("aliexpress.ds.product.get", {
-    product_id: id, ship_to_country: destination, target_currency: "USD", target_language: "en", remove_personal_benefit: "true",
+    product_id: globalId, ship_to_country: destination, target_currency: "USD", target_language: "en", remove_personal_benefit: "true",
   });
   const raw = result.result ?? result.data ?? result;
-  const product = normalize({ ...raw, product_id: id });
+  const product = normalize({ ...raw, product_id: globalId });
   if (!product.title) throw new AliExpressConnectionError("AliExpress returned no product title. Check product availability.");
   return { raw, product };
 }
@@ -199,7 +213,7 @@ export async function previewDropshipProduct(id: string, destination: "GB" | "US
     try {
       const freight = await call("aliexpress.ds.freight.query", {
         queryDeliveryReq: JSON.stringify({
-          productId: id, selectedSkuId: selected.id, shipToCountry: destination,
+          productId: product.externalId, selectedSkuId: selected.id, shipToCountry: destination,
           quantity: 1, currency: marketCurrency, locale: "en_US", language: "en_US",
         }),
       }, false, 8_000);
@@ -231,7 +245,7 @@ export async function previewDropshipProduct(id: string, destination: "GB" | "US
     try {
       const freight = await call("aliexpress.logistics.buyer.freight.calculate", {
         param_aeop_freight_calculate_for_buyer_d_t_o: JSON.stringify({
-          product_id: Number(id), product_num: 1, country_code: destination,
+          product_id: Number(product.externalId), product_num: 1, country_code: destination,
           send_goods_country_code: origin, price_currency: marketCurrency,
         }),
       }, false, 8_000);
