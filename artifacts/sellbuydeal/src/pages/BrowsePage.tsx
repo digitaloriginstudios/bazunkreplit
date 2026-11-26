@@ -251,8 +251,8 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
 
   const { t } = useLanguage();
   const {countryCode: deliveryCountry}=useCurrency();
-  const [deliveryMode,setDeliveryMode]=useState("");
   const rawSearch = useSearch();
+  const [deliveryMode,setDeliveryMode]=useState(()=>{const mode=new URLSearchParams(rawSearch).get("deliveryMode")||"";return ["ships-to-me","domestic","international"].includes(mode)?mode:"";});
   const [, setLocation] = useLocation();
 
   const params = new URLSearchParams(rawSearch);
