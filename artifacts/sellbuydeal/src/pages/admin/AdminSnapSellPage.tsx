@@ -10,6 +10,16 @@ type Report={status:{enabled:boolean;barcode:boolean;writing:boolean;background:
 export function AdminSnapSellPage(){
  const {authFetch,isAdmin}=useAdmin();
  const [report,setReport]=useState<Report|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState("");
+ const [testing,setTesting]=useState(false),[testResult,setTestResult]=useState<{ok:boolean;message:string}|null>(null);
+ async function testConnection(){
+  setTesting(true);setTestResult(null);
+  try{
+   const res=await authFetch("/api/admin/snap-sell/test",{method:"POST"});
+   const data=await res.json().catch(()=>({}));
+   setTestResult({ok:res.ok&&data.ok===true,message:res.ok&&data.ok===true?`Connected to ${data.model} in ${data.latencyMs} ms`:`${data.code||"TEST_FAILED"}: ${data.error||"Connection test failed"}`});
+  }catch(e){setTestResult({ok:false,message:e instanceof Error?e.message:"Connection test unavailable"});}
+  finally{setTesting(false);}
+ }
  async function refresh(){
   setLoading(true);setError("");
   try{
@@ -59,6 +69,13 @@ export function AdminSnapSellPage(){
     </div>
     <p className="text-sm text-slate-700 dark:text-slate-200">Model: <strong>{v?.model}</strong>. Limits per account: 20 photo and 20 writing attempts, 10 background cleanups and 80 catalogue lookups in 24 hours. Generated content always requires seller review.</p>
     {!v?.backgroundConfigured&&<p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-bold text-amber-900 dark:bg-amber-950 dark:text-amber-100">Optional photo background cleanup needs a REMOVE_BG_API_KEY set securely on the production Render API. Pricing suggestions do not require this key.</p>}
+   </section>
+   <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5">
+    <h2 className="text-lg font-black text-slate-900">AI connection diagnostics</h2>
+    <p className="text-sm text-slate-700">A configured key does not guarantee available credits. This test sends a small billable sample request to the configured model.</p>
+    <button type="button" disabled={testing||!v?.aiConfigured} onClick={()=>void testConnection()} className="rounded-xl bg-blue-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{testing?"Testing connection…":"Test AI Connection"}</button>
+    {testResult&&<p role="status" className={`rounded-lg p-3 text-sm font-bold ${testResult.ok?"bg-green-50 text-green-900":"bg-red-50 text-red-900"}`}>{testResult.message}</p>}
+    <a href="https://platform.openai.com/settings/organization/billing/overview" target="_blank" rel="noreferrer" className="block text-sm font-bold text-blue-700 underline">Check OpenAI billing and credits</a>
    </section>
    <AdminListingAlertsPanel />
    <section className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-[#172541]">
