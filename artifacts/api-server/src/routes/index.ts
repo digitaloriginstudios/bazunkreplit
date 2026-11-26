@@ -1,3 +1,4 @@
+import swapsRouter from "./swaps.js";
 import { Router, type IRouter } from "express";
 import affiliatesRouter from "./affiliates.js";
 import healthRouter from "./health.js";
@@ -92,6 +93,7 @@ router.get("/public/homepage-intro", async (_req, res) => {
   res.json({ enabled: await featureEnabled("homepage_intro") });
 });
 
+router.use(swapsRouter);
 router.use(healthRouter);
 router.use(stripeRouter);
 router.use(mobileCheckoutRouter);
