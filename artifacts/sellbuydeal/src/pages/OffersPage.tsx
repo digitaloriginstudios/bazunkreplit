@@ -9,7 +9,6 @@ import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { useOffers, type Offer, type OfferStatus } from "@/context/OfferContext";
 import { useAuth } from "@/context/AuthContext";
-import { useCurrency } from "@/context/CurrencyContext";
 
 const STATUS_CONFIG: Record<OfferStatus, { label: string; color: string; icon: typeof Clock }> = {
   pending:          { label: "Pending",          color: "bg-amber-100 text-amber-700 border-amber-200",   icon: Clock       },
@@ -48,7 +47,6 @@ function OfferCard({ offer, currentEmail, onRespond }: { offer: RemoteOffer; cur
   const isSeller = !!offer.sellerEmail && offer.sellerEmail.toLowerCase() === currentEmail?.toLowerCase();
   const [counterInput,setCounterInput] = useState("");
   const [, setLocation] = useLocation();
-  const cfg = STATUS_CONFIG[offer.status];
 
   const savings = offer.listingPrice - offer.offerPrice;
   const savingsPct = Math.round((savings / offer.listingPrice) * 100);
@@ -161,9 +159,7 @@ function OfferCard({ offer, currentEmail, onRespond }: { offer: RemoteOffer; cur
 }
 
 export function OffersPage() {
-  const { formatPrice, currency } = useCurrency();
   const { user } = useAuth();
-  const { offers: localOffers } = useOffers();
   const { getToken } = useClerkAuth();
   const [remoteOffers,setRemoteOffers] = useState<RemoteOffer[]>([]);
   const [loaded,setLoaded] = useState(false);
