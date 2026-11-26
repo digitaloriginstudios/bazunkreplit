@@ -1,3 +1,4 @@
+import { getAliExpressUsdToGbpRate, tidyAliExpressDescription } from "../lib/aliExpressImportDetails.js";
 import { randomUUID } from "node:crypto";
 import { dropshipConfigured, dropshipSearchDiagnostic, inspectDropshipSearch, searchDropship, getDropshipProduct, aliExpressProductId } from "../lib/aliexpressDropship.js";
 import { Router } from "express";
@@ -1682,7 +1683,7 @@ router.get("/admin/aliexpress-product-preview", async (req, res) => {
   if(await dropshipConfigured()){
     const id=aliExpressProductId(String(req.query.url??""));
     if(!id){res.status(400).json({error:"Enter a supported AliExpress product URL or product ID"});return;}
-    try{const p=await getDropshipProduct(id);res.setHeader("Cache-Control","no-store");res.json({id,title:p.title,description:p.description,imageUrl:p.images[0]?.url??"",supplierPrice:p.price.amount||null,currency:p.price.currency,sourceUrl:p.sourceUrl});}
+    try{const p=await getDropshipProduct(id);res.setHeader("Cache-Control","no-store");res.json({id,title:p.title,description:tidyAliExpressDescription(p.description),imageUrl:p.images[0]?.url??"",supplierPrice:p.price.amount||null,currency:p.price.currency,sourceUrl:p.sourceUrl});}
     catch(error){logger.warn({error},"AliExpress Dropshipping preview failed");res.status(502).json({error:error instanceof Error?error.message:"AliExpress product lookup failed"});}return;
   }
   const raw = String(req.query.url ?? "");
@@ -1701,7 +1702,7 @@ router.get("/admin/aliexpress-product-preview", async (req, res) => {
       const p=await response.json() as any;
       const price=Number(p.price?.amount);
       res.setHeader("Cache-Control","no-store");
-      res.json({id,title:String(p.title??""),description:String(p.description??""),imageUrl:String(p.images?.[0]?.url??""),supplierPrice:Number.isFinite(price)&&price>0?price:null,currency:String(p.price?.currency??""),sourceUrl:String(p.sourceUrl??raw)});return;
+      res.json({id,title:String(p.title??""),description:tidyAliExpressDescription(p.description),imageUrl:String(p.images?.[0]?.url??""),supplierPrice:Number.isFinite(price)&&price>0?price:null,currency:String(p.price?.currency??""),sourceUrl:String(p.sourceUrl??raw)});return;
     }catch(error){logger.warn({error},"Official AliExpress preview failed");res.status(502).json({error:"Official AliExpress product lookup unavailable."});return;}
   }
   const base = process.env.ALIEXPRESS_SCRAPER_URL;
@@ -1719,7 +1720,7 @@ router.get("/admin/aliexpress-product-preview", async (req, res) => {
     const amount = Number(product.price?.amount);
     res.setHeader("Cache-Control", "no-store");
     res.json({
-      id, title: String(product.title ?? ""), description: String(product.description ?? ""),
+      id, title: String(product.title ?? ""), description: tidyAliExpressDescription(product.description),
       imageUrl: String(product.images?.[0]?.url ?? ""),
       supplierPrice: Number.isFinite(amount) && amount > 0 ? amount : null,
       currency: String(product.price?.currency ?? "").toUpperCase(),
@@ -1730,15 +1731,6 @@ router.get("/admin/aliexpress-product-preview", async (req, res) => {
     res.status(502).json({ error: "Unable to retrieve AliExpress product details. You can still enter them manually." });
   }
 });
-
-async function getAliExpressUsdToGbpRate(): Promise<number> {
-  const response = await fetch("https://api.frankfurter.dev/v1/latest?base=USD&symbols=GBP", { signal: AbortSignal.timeout(8000) });
-  if (!response.ok) throw new Error("FX unavailable");
-  const data = await response.json() as { rates?: { GBP?: number } };
-  const rate = Number(data.rates?.GBP);
-  if (!Number.isFinite(rate) || rate <= 0) throw new Error("Invalid FX rate");
-  return rate;
-}
 
 router.get("/admin/aliexpress-import-rate", async (_req, res) => {
   res.set("Cache-Control", "no-store");
@@ -1760,7 +1752,13 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
     res.status(400).json({ error: "Valid AliExpress item URL required" }); return;
   }
   const title = String(body.title ?? "").trim().slice(0, 500);
-  const description = String(body.description ?? "").trim().slice(0, 10000);
+  const description = tidyAliExpressDescription(body.description);
+  const market = body.market ?? "uk";
+  const quantity = Number(body.quantity ?? 1);
+  if (!["uk", "us"].includes(market) || !Number.isInteger(quantity) || quantity < 1 || quantity > 2147483647) {
+    res.status(400).json({ error: "Select UK or USA and enter a positive whole-number quantity." }); return;
+  }
+  const currency = market === "uk" ? "GBP" : "USD";
   const imageUrl = String(body.imageUrl ?? "").trim();
   const priceUsd = Number(body.supplierPriceUsd);
   const markupType = String(body.markupType ?? "percentage");
@@ -1781,20 +1779,23 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
   const seller = await db.execute(sql`SELECT email,name FROM users WHERE email = ${sellerEmail} LIMIT 1`)
     .then(r => r.rows[0] as {email:string;name:string|null}|undefined);
   if (!seller) { res.status(400).json({ error: "Select an existing seller" }); return; }
-  let rate: number;
+  let rate: number | null = null;
   try {
     rate = await getAliExpressUsdToGbpRate();
-  } catch { res.status(503).json({ error: "Verified USD/GBP rate unavailable. No listing created." }); return; }
-  const baseGbp = priceUsd * rate;
-  const sellingPrice = Math.round((markupType === "fixed" ? baseGbp + markupValue : baseGbp * (1 + markupValue / 100)) * 100) / 100;
+  } catch {
+    if (market === "uk") { res.status(503).json({ error: "Verified USD/GBP rate unavailable. No listing created." }); return; }
+  }
+  const basePrice = priceUsd * (market === "uk" ? rate! : 1);
+  const sellingPrice = Math.round((markupType === "fixed" ? basePrice + markupValue : basePrice * (1 + markupValue / 100)) * 100) / 100;
   if (body.expectedSellingPrice !== undefined && body.expectedSellingPrice !== sellingPrice) {
     res.status(409).json({
-      error: "The GBP price changed. Review the updated price before creating the listing.",
+      error: "The listing price changed. Review the updated price before creating the listing.",
       usdToGbp: rate,
     });
     return;
   }
-  const specs = JSON.stringify({source:"AliExpress",aliexpress_id:id,aliexpress_url:rawUrl,source_price:priceUsd,source_currency:"USD",exchange_rate_to_gbp:rate,markup_type:markupType,markup_value:markupValue,source_sync:true});
+  const priceGbp = market === "uk" ? sellingPrice : rate === null ? null : Math.round(sellingPrice * rate * 100) / 100;
+  const specs = JSON.stringify({marketplace_region:market,source:"AliExpress",aliexpress_id:id,aliexpress_url:rawUrl,source_price:priceUsd,source_currency:"USD",exchange_rate_to_gbp:rate,markup_type:markupType,markup_value:markupValue,source_sync:true});
   try {
     const listingId = await db.transaction(async (tx) => {
       // Serialise imports of this supplier product for this seller, even across requests.
@@ -1807,8 +1808,8 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
         throw new Error("ALIEXPRESS_ALREADY_IMPORTED");
       }
       const inserted = await tx.execute(sql`INSERT INTO listings
-        (title,price,price_gbp,currency,category,subcategory,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
-        VALUES (${title},${sellingPrice},${sellingPrice},'GBP',${category},${subcategory || null},${description || title},${condition},${imageUrl || null},${seller.email},${seller.name ?? seller.email.split("@")[0]},${specs},'active',NOW(),NOW()) RETURNING id`);
+        (title,price,price_gbp,currency,quantity,category,subcategory,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
+        VALUES (${title},${sellingPrice},${priceGbp},${currency},${quantity},${category},${subcategory || null},${description || title},${condition},${imageUrl || null},${seller.email},${seller.name ?? seller.email.split("@")[0]},${specs},'active',NOW(),NOW()) RETURNING id`);
       const newId = Number((inserted.rows[0] as {id:number}).id);
       await tx.execute(sql`UPDATE listings SET public_id = ${"BZL-" + newId} WHERE id = ${newId}`);
       await tx.execute(sql`INSERT INTO supplier_imports
@@ -1816,7 +1817,7 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
         VALUES (${newId},'aliexpress',${id},${rawUrl},${priceUsd},'USD',${markupType},${markupValue},NOW(),'ok')`);
       return newId;
     });
-    res.status(201).json({ listingId, sellingPrice, currency:"GBP", supplierPriceUsd:priceUsd });
+    res.status(201).json({ listingId, sellingPrice, currency, quantity, supplierPriceUsd:priceUsd });
   } catch (error) {
     if (error instanceof Error && error.message === "ALIEXPRESS_ALREADY_IMPORTED") {
       res.status(409).json({ error: "Product already imported for this seller" });
@@ -1829,6 +1830,12 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
 
 // POST /api/admin/import-selected-aliexpress — server-side verified bulk listing creation
 router.post("/admin/import-selected-aliexpress", async (req, res) => {
+  const market = req.body?.market ?? "uk";
+  const quantity = Number(req.body?.quantity ?? 1);
+  if (!["uk", "us"].includes(market) || !Number.isInteger(quantity) || quantity < 1 || quantity > 2147483647) {
+    res.status(400).json({ error: "Select UK or USA and enter a positive whole-number quantity per product." }); return;
+  }
+  const listingCurrency = market === "uk" ? "GBP" : "USD";
   const official = Boolean(process.env.BAZUNK_DATA_API_URL && process.env.BAZUNK_DATA_INTERNAL_TOKEN);
   const base = official ? process.env.BAZUNK_DATA_API_URL : process.env.ALIEXPRESS_SCRAPER_URL;
   const token = official ? process.env.BAZUNK_DATA_INTERNAL_TOKEN : process.env.ALIEXPRESS_SCRAPER_TOKEN;
@@ -1874,17 +1881,19 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
       const currency = String(p.price?.currency ?? "");
       if (!p.title || !Number.isFinite(price) || price <= 0) throw new Error("Title or price unavailable");
       const gbpRate = fxRates[currency];
-      if (!gbpRate) throw new Error("No verified GBP exchange rate for " + currency + "; import skipped");
+      const listingRate = currency === listingCurrency ? 1 : gbpRate && fxRates[listingCurrency] ? gbpRate / fxRates[listingCurrency] : null;
+      if (!listingRate) throw new Error("No verified exchange rate from " + currency + " to " + listingCurrency);
       if (p.availability === "out_of_stock") throw new Error("Product out of stock");
-      const bazPrice = Math.round((price * gbpRate * (1 + markup / 100) + shipping) * 100) / 100;
-      const specs = JSON.stringify({ source:"AliExpress", aliexpress_id:id, aliexpress_url:p.sourceUrl,
-        source_price:price, source_currency:currency, exchange_rate_to_gbp:gbpRate, markup_pct:markup, shipping_gbp:shipping,
+      const bazPrice = Math.round((price * listingRate * (1 + markup / 100) + shipping) * 100) / 100;
+      const priceGbp = fxRates[listingCurrency] ? Math.round(bazPrice * fxRates[listingCurrency] * 100) / 100 : null;
+      const specs = JSON.stringify({ marketplace_region:market, source:"AliExpress", aliexpress_id:id, aliexpress_url:p.sourceUrl,
+        source_price:price, source_currency:currency, exchange_rate_to_gbp:gbpRate, markup_pct:markup, shipping_gbp:market === "uk" ? shipping : undefined, shipping_usd:market === "us" ? shipping : undefined,
         source_sync:true, last_synced_at:new Date().toISOString(), source_availability:p.availability });
       const publicId = "BZK-ALI-" + id;
       await db.execute(sql`INSERT INTO listings
-        (public_id,title,price,price_gbp,currency,category,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
-        VALUES (${publicId},${String(p.title).slice(0,500)},${bazPrice},${bazPrice},'GBP','other',
-        ${String(p.description ?? p.title).slice(0,10000)},'new',${p.images?.[0]?.url ?? null},
+        (public_id,title,price,price_gbp,currency,quantity,category,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
+        VALUES (${publicId},${String(p.title).slice(0,500)},${bazPrice},${priceGbp},${listingCurrency},${quantity},'other',
+        ${tidyAliExpressDescription(p.description) || String(p.title).slice(0,500)},'new',${p.images?.[0]?.url ?? null},
         ${seller.email},${seller.name ?? seller.email.split("@")[0]},${specs},'active',NOW(),NOW())`);
       results.push({id,status:"imported"});
     } catch (error) { results.push({id,status:"failed",reason:error instanceof Error ? error.message : "Import failed"}); }

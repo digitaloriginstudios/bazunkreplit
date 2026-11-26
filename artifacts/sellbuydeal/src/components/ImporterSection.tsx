@@ -17,6 +17,7 @@ interface SupplierImport {
   public_id: string;
   title: string;
   bazunk_price: string;
+  listing_currency?: string;
   image: string | null;
   listing_status: string;
   supplier_source: string;
@@ -81,13 +82,18 @@ interface ImportModalProps {
   userName: string;
   initialUrl?: string;
   initialMarkup?: string;
+  initialMarket?: "uk" | "us";
+  initialQuantity?: string;
 }
 
 const CONDITIONS = ["new", "like new", "good", "fair", "poor"];
 
-export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUrl = "", initialMarkup = "30" }: ImportModalProps) {
+export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUrl = "", initialMarkup = "30", initialMarket = "uk", initialQuantity = "1" }: ImportModalProps) {
   const { authFetch } = useAdmin();
   const [url, setUrl] = useState(initialUrl);
+  const [market, setMarket] = useState(initialMarket);
+  const [quantity, setQuantity] = useState(initialQuantity);
+  const currencySymbol = market === "uk" ? "£" : "$";
   const [title, setTitle] = useState("");
   const [supplierPriceUsd, setSupplierPriceUsd] = useState("");
   const [supplierQuote, setSupplierQuote] = useState<{ amount: number; currency: string } | null>(null);
@@ -114,7 +120,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
       setRateLoading(false);
     }
   }, []);
-  useEffect(() => { void loadRate(); }, [loadRate]);
+  useEffect(() => { if (market === "uk") void loadRate(); }, [market, loadRate]);
   const [imageUrl, setImageUrl] = useState("");
   const [category, setCategory] = useState("");
   const [subcategory, setSubcategory] = useState("");
@@ -156,13 +162,15 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
 
   const usd = Number(supplierPriceUsd);
   const mv = Number(markupValue);
-  const bazunkPreview = usdToGbp !== null && Number.isFinite(usd) && usd > 0 &&
+  const listingRate = market === "uk" ? usdToGbp : 1;
+  const stock = Number(quantity);
+  const bazunkPreview = listingRate !== null && Number.isFinite(usd) && usd > 0 &&
     Number.isFinite(mv) && mv >= 0 && mv <= 1000
-    ? calcBazunkPrice(usd, markupType, mv, usdToGbp)
+    ? calcBazunkPrice(usd, markupType, mv, listingRate)
     : null;
 
   const subcategories = SITE_CATEGORIES.find(c => c.slug === category)?.subcategories ?? [];
-  const canSubmit = url.trim() && title.trim() && bazunkPreview !== null && bazunkPreview > 0 && !!category && !loading && !previewLoading && !rateLoading;
+  const canSubmit = url.trim() && title.trim() && bazunkPreview !== null && bazunkPreview > 0 && !!category && !loading && !previewLoading && (market === "us" || !rateLoading) && Number.isInteger(stock) && stock > 0 && stock <= 2147483647;
 
   async function handleImport() {
     if (!canSubmit) return;
@@ -176,6 +184,8 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           sellerEmail: userEmail,
           title: title.trim(),
           supplierPriceUsd: usd,
+          market,
+          quantity: stock,
           expectedSellingPrice: bazunkPreview,
           imageUrl: imageUrl.trim() || null,
           ...resolveCategory(category, subcategory),
@@ -243,7 +253,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-7 h-7 text-emerald-600" />
           </div>
-          <p className="font-bold text-gray-900 text-lg">{savedPrice === null ? "Imported!" : `Imported at £${savedPrice.toFixed(2)}`}</p>
+          <p className="font-bold text-gray-900 text-lg">{savedPrice === null ? "Imported!" : `Imported at ${currencySymbol}${savedPrice.toFixed(2)}`}</p>
           <p className="text-sm text-gray-400 mt-1 mb-6 truncate px-4">{importedTitle}</p>
           <div className="flex gap-3">
             <button onClick={() => { setSuccess(false); setUrl(""); setTitle(""); setSupplierPriceUsd(""); setSupplierQuote(null); setImageUrl(""); setDescription(""); }} className="flex-1 py-2.5 rounded-xl border border-gray-200 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
@@ -324,6 +334,20 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
             </div>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block text-xs font-semibold text-gray-600">
+              Marketplace
+              <select value={market} onChange={e => setMarket(e.target.value === "us" ? "us" : "uk")} className={`${inputCls} mt-1.5 bg-white`} disabled={loading || success}>
+                <option value="uk">UK · GBP</option>
+                <option value="us">USA · USD</option>
+              </select>
+            </label>
+            <label className="block text-xs font-semibold text-gray-600">
+              Quantity
+              <input type="number" min="1" max="2147483647" step="1" value={quantity} onChange={e => setQuantity(e.target.value)} className={`${inputCls} mt-1.5`} />
+            </label>
+          </div>
+
           {/* Description */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Description <span className="text-gray-400 font-normal">(optional)</span></label>
@@ -336,17 +360,17 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Markup Type</label>
               <select value={markupType} onChange={e => setMarkupType(e.target.value as "percentage" | "fixed")} className={`${inputCls} bg-white`}>
                 <option value="percentage">Percentage (%)</option>
-                <option value="fixed">Fixed amount (£)</option>
+                <option value="fixed">Fixed amount ({currencySymbol})</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">{markupType === "percentage" ? "Markup %" : "Add £"}</label>
+              <label className="block text-xs font-semibold text-gray-600 mb-1.5">{markupType === "percentage" ? "Markup %" : `Add ${currencySymbol}`}</label>
               <input type="number" min="0" step={markupType === "percentage" ? "1" : "0.01"} value={markupValue} onChange={e => setMarkupValue(e.target.value)} className={inputCls} />
             </div>
           </div>
 
-          {rateLoading && <p role="status" className="text-xs text-gray-600">Checking the USD/GBP rate…</p>}
-          {rateError && <p role="alert" className="text-sm text-red-700">{rateError}{" "}
+          {market === "uk" && rateLoading && <p role="status" className="text-xs text-gray-600">Checking the USD/GBP rate…</p>}
+          {market === "uk" && rateError && <p role="alert" className="text-sm text-red-700">{rateError}{" "}
             <button type="button" onClick={loadRate} className="font-semibold underline">Retry rate check</button>
           </p>}
 
@@ -354,10 +378,10 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           {bazunkPreview !== null && (
             <div className="bg-[#F26B21]/8 rounded-xl px-4 py-3 flex items-center justify-between text-sm">
               <span className="text-gray-500 text-xs">
-                ${usd.toFixed(2)} USD → £{(usd * (usdToGbp ?? 0)).toFixed(2)} GBP
-                {markupType === "percentage" ? ` +${mv}%` : ` +£${mv.toFixed(2)}`}
+                ${usd.toFixed(2)} USD {market === "uk" && `→ £${(usd * (usdToGbp ?? 0)).toFixed(2)} GBP`}
+                {markupType === "percentage" ? ` +${mv}%` : ` +${currencySymbol}${mv.toFixed(2)}`}
               </span>
-              <span className="font-black text-[#F26B21] text-base">£{bazunkPreview.toFixed(2)}</span>
+              <span className="font-black text-[#F26B21] text-base">{currencySymbol}{bazunkPreview.toFixed(2)}</span>
             </div>
           )}
 
@@ -394,7 +418,8 @@ function MarkupEditModal({ item, onSave, onClose }: MarkupEditProps) {
   const [markupValue, setMarkupValue] = useState(item.markup_value);
   const [saving, setSaving] = useState(false);
 
-  const preview = calcBazunkPrice(parseFloat(item.supplier_price), markupType, parseFloat(markupValue) || 0);
+  const symbol = item.listing_currency === "USD" ? "$" : "£";
+  const preview = calcBazunkPrice(parseFloat(item.supplier_price), markupType, parseFloat(markupValue) || 0, item.listing_currency === "USD" ? 1 : undefined);
 
   async function handleSave() {
     setSaving(true);
@@ -427,12 +452,12 @@ function MarkupEditModal({ item, onSave, onClose }: MarkupEditProps) {
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F26B21]/30 focus:border-[#F26B21] bg-white"
             >
               <option value="percentage">Percentage (%)</option>
-              <option value="fixed">Fixed amount (£)</option>
+              <option value="fixed">Fixed amount ({symbol})</option>
             </select>
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">
-              {markupType === "percentage" ? "Markup %" : "Add £"}
+              {markupType === "percentage" ? "Markup %" : `Add ${symbol}`}
             </label>
             <input
               type="number" min="0" step={markupType === "percentage" ? "1" : "0.01"}
@@ -445,7 +470,7 @@ function MarkupEditModal({ item, onSave, onClose }: MarkupEditProps) {
             <span className="font-semibold">${item.supplier_price} USD</span>
             <span className="text-gray-400 mx-2">→</span>
             <span className="text-gray-500">Bazunk price: </span>
-            <span className="font-bold text-[#F26B21]">£{preview.toFixed(2)}</span>
+            <span className="font-bold text-[#F26B21]">{symbol}{preview.toFixed(2)}</span>
           </div>
         </div>
 
@@ -688,7 +713,7 @@ export function ImporterSection() {
                       </span>
                     </span>
                     <span className="font-semibold text-[#F26B21]">
-                      Bazunk: £{parseFloat(item.bazunk_price).toFixed(2)}
+                      Bazunk: {item.listing_currency === "USD" ? "$" : "£"}{parseFloat(item.bazunk_price).toFixed(2)}
                     </span>
                     <span className="text-gray-300">•</span>
                     <span>Synced {timeAgo(item.last_synced_at)}</span>
