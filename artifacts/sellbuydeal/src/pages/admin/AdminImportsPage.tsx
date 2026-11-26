@@ -1477,14 +1477,23 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
                   const links=aliUrls.split(/[\s,]+/).map(v=>v.trim()).filter(Boolean).map(v=>{try{const u=new URL(v);const host=u.hostname.toLowerCase();const id=u.pathname.match(/\/item\/(\d{10,})(?:\.html)?/i)?.[1];return u.protocol==="https:"&&(host==="aliexpress.com"||host.endsWith(".aliexpress.com"))&&id?`https://www.aliexpress.com/item/${id}.html`:null}catch{return null}}).filter((v):v is string=>Boolean(v));
                   const unique=[...new Set(links)].slice(0,50);setAliQueued(unique);setAliSelected(new Set(unique));setAliNotice(unique.length?`${unique.length} valid product link(s) ready. Select a product to enter or review its details.`:"No valid AliExpress product URLs found. Paste an item URL ending in a product ID.");
                 }}><Search className="w-4 h-4"/>Prepare products</button>
-                {aliNotice&&<p role="status" className="whitespace-pre-line text-sm text-gray-600">{aliNotice}</p>}
+                {!aliQueued.length && aliNotice && <p role="status" className="whitespace-pre-line text-sm text-gray-600">{aliNotice}</p>}
               </div>
             </div>
             {aliQueued.length>0&&<div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 shadow-sm space-y-4">
               <div className="flex flex-wrap justify-between items-center gap-3"><div><h3 className="font-black text-gray-900">Choose products</h3><p className="text-sm text-gray-500">{aliSelected.size} of {aliQueued.length} selected</p></div><div className="flex gap-2"><button type="button" className="border rounded-lg px-3 py-2 text-sm" onClick={()=>setAliSelected(new Set(aliQueued))}>Select all</button><button type="button" className="border rounded-lg px-3 py-2 text-sm" onClick={()=>setAliSelected(new Set())}>Clear</button></div></div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" onClick={() => void importAliExpressUrls()} disabled={aliBulkImporting || !aliSelected.size}
+                  className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">
+                  {aliBulkImporting ? "Batch creating…" : `Batch create ${aliSelected.size} selected ${aliSelected.size === 1 ? "listing" : "listings"}`}
+                </button>
+                <a href="#ali-import-settings" className="text-sm font-semibold underline">Import settings</a>
+              </div>
+              <p className="text-xs text-gray-500">Batch create uses the shared settings. Use Review &amp; import only for products you want to edit individually.</p>
+              {aliNotice && <p role="status" className="whitespace-pre-line text-sm text-gray-600">{aliNotice}</p>}
               <div className="space-y-2 max-h-80 overflow-y-auto">{aliQueued.map((url,i)=><div key={url} className="flex flex-wrap sm:flex-nowrap gap-3 items-center rounded-xl border border-gray-200 p-3 text-sm"><input aria-label={`Select product ${i+1}`} type="checkbox" checked={aliSelected.has(url)} onChange={e=>setAliSelected(prev=>{const n=new Set(prev);e.target.checked?n.add(url):n.delete(url);return n})}/><span className="min-w-0 flex-1 truncate text-gray-700">Product #{url.match(/\/(\d+)\.html/)?.[1]??i+1}</span><a href={url} target="_blank" rel="noreferrer" className="text-indigo-600" aria-label="Open AliExpress product"><ExternalLink className="w-4 h-4"/></a><button type="button" onClick={()=>{setAliActiveUrl(url);setAliModalOpen(true)}} className="rounded-lg bg-orange-50 px-3 py-2 font-bold text-orange-700 hover:bg-orange-100">Review & import</button></div>)}</div>
             </div>}
-            <div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 shadow-sm space-y-4">
+            <div id="ali-import-settings" className="scroll-mt-24 rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 shadow-sm space-y-4">
               <h3 className="font-black text-gray-900">Import settings</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label className="block text-sm font-bold text-gray-700 mb-2">Destination seller</label><select value={aliSeller} onChange={e=>setAliSeller(e.target.value)} className={inputCls+" w-full"}>{users.length===0?<option value={aliSeller}>{aliSeller}</option>:users.map(u=><option key={u.email} value={u.email}>{u.name?`${u.name} (${u.email})`:u.email}</option>)}</select></div>
               <div><label className="block text-sm font-bold text-gray-700 mb-2">Default markup (%)</label><input type="number" min="0" max="1000" step="1" value={aliMarkup} onChange={e=>setAliMarkup(e.target.value)} className={inputCls+" w-full"}/></div></div>
@@ -1508,10 +1517,6 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
               </label>
               <p className="text-xs text-gray-500">These settings apply to bulk imports and are the defaults for products you review individually.</p>
               <button onClick={()=>{setAliActiveUrl(aliQueued.find(u=>aliSelected.has(u))??"");setAliModalOpen(true)}} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-white font-bold text-sm hover:bg-orange-600"><Plus className="w-4 h-4"/>Import a product</button>
-              {!!aliQueued.length && <button type="button" onClick={() => void importAliExpressUrls()} disabled={aliBulkImporting || !aliSelected.size}
-                className="ml-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white disabled:opacity-50">
-                {aliBulkImporting ? "Importing…" : `Create ${aliSelected.size} selected listings`}
-              </button>}
               {aliDone>0&&<p className="text-sm text-green-700">{aliDone} product(s) imported this session.</p>}
             </div>
             {aliModalOpen&&<ImportModal key={aliActiveUrl} initialUrl={aliActiveUrl} initialMarkup={aliMarkup} initialMarket={aliMarket} initialQuantity={aliQuantity} initialOrigin={aliOrigin} initialDestinations={aliDestinations} initialPostage={aliShipping} onClose={()=>setAliModalOpen(false)} onSuccess={()=>{setAliDone(n=>n+1);setAliSelected(prev=>{const next=new Set(prev);next.delete(aliActiveUrl);return next})}} userEmail={aliSeller} userName={users.find(u=>u.email===aliSeller)?.name??""}/>}
