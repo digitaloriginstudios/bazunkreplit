@@ -134,6 +134,7 @@ const AdminDesignCenterPage = React.lazy(() => import("@/pages/admin/AdminDesign
 const AdminWordPressDashboard = React.lazy(() => import("@/pages/admin/AdminWordPressDashboard").then(module => ({ default: module.AdminWordPressDashboard })));
 const AdminContentPage = React.lazy(() => import("@/pages/admin/AdminManagementHubs").then(module => ({ default: module.AdminContentPage })));
 const AdminAnalyticsPage = React.lazy(() => import("@/pages/admin/AdminManagementHubs").then(module => ({ default: module.AdminAnalyticsPage })));
+const AdminPromoImagesPage = React.lazy(() => import("@/pages/admin/AdminPromoImagesPage").then(module => ({ default: module.AdminPromoImagesPage })));
 const AdminMarketingOverviewPage = React.lazy(() => import("@/pages/admin/AdminOperationsHubs").then(module => ({ default: module.AdminMarketingOverviewPage })));
 const AdminSettingsOverviewPage = React.lazy(() => import("@/pages/admin/AdminOperationsHubs").then(module => ({ default: module.AdminSettingsOverviewPage })));
 const AdminImporterOverviewPage = React.lazy(() => import("@/pages/admin/AdminImporterPages").then(module => ({ default: module.AdminImporterOverviewPage })));
@@ -480,6 +481,7 @@ function Router() {
       <Route path="/admin/live-commerce" component={AdminLiveCommercePage} />
       <Route path="/admin/demo-creator" component={AdminDemoCreatorPage} />
       <Route path="/admin/dashboard" component={AdminWordPressDashboard} />
+      <Route path="/admin/marketing/images" component={AdminPromoImagesPage} />
       <Route path="/admin/marketing" component={AdminMarketingOverviewPage} />
       <Route path="/admin/importer-overview" component={AdminImporterOverviewPage} />
       <Route path="/admin/settings-overview" component={AdminSettingsOverviewPage} />
