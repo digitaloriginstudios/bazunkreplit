@@ -2,11 +2,12 @@ import { Link } from "wouter";
 import { useRawSettings, useSettingsLoaded } from "@/context/SiteSettingsContext";
 import { Power } from "lucide-react";
 
-export function isFeatureEnabled(settings: Record<string,string>, key:string){ return settings[`feature_${key}`] !== "false"; }
+export function isFeatureEnabled(settings: Record<string,string>, key:string){ return key==="swaps" ? settings.feature_swaps==="true" : settings[`feature_${key}`] !== "false"; }
 export function useFeature(key:string){ const settings=useRawSettings(); const loaded=useSettingsLoaded(); return loaded && isFeatureEnabled(settings, key); }
 export function FeatureVisible({feature,children}:{feature:string;children:React.ReactNode}){ return useFeature(feature) ? <>{children}</> : null; }
 export function featureForHref(href:string):string|undefined {
   const path=href.split("?")[0];
+  if(path==="/swap"||path.startsWith("/swap/")||path==="/dashboard/swaps") return "swaps";
   if(path.startsWith("/trust-proof")) return "trust_proof";
   if(path.startsWith("/deal-pilot")) return "deal_pilot";
   if(path.startsWith("/find-it")) return "find_it";
