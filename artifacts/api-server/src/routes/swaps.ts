@@ -43,6 +43,8 @@ function ensureTables(){
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_cases(id UUID PRIMARY KEY DEFAULT gen_random_uuid(),offer_id UUID NOT NULL REFERENCES swap_offers(id),opened_by TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('dispute','cancellation')),reason TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','resolved')),resolution TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS swap_open_case ON swap_cases(offer_id) WHERE status='open'`);
  await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_admin_audit(id BIGSERIAL PRIMARY KEY,subject_id UUID NOT NULL,action TEXT NOT NULL,reason TEXT NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS swap_saved(owner_email TEXT NOT NULL,listing_id UUID NOT NULL REFERENCES swap_listings(id),created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(owner_email,listing_id))`);
+ await db.execute(sql`CREATE INDEX IF NOT EXISTS swap_search_idx ON swap_listings USING GIN(to_tsvector('simple',title||' '||description||' '||category||' '||wanted)) WHERE status='active'`);
  })().catch(e=>{setup=undefined;throw e;});
 }
 router.use("/swaps",async(_req,res,next)=>{
@@ -53,7 +55,8 @@ router.get("/swaps",async(req,res)=>{
  try{
  const offset=Number(req.query.offset??0);
  if(!Number.isSafeInteger(offset)||offset<0||offset>10000){res.status(400).json({error:"Invalid offset"});return;}
- const rows=(await db.execute(sql`SELECT id,title,description,category,condition,wanted,value_minor,currency,created_at FROM swap_listings WHERE status='active' ORDER BY created_at DESC,id LIMIT 50 OFFSET ${offset}`)).rows;
+ const q=String(req.query.q??"").trim().slice(0,160),category=String(req.query.category??"").trim().slice(0,100);
+ const rows=(await db.execute(sql`SELECT id,title,description,category,condition,wanted,value_minor,currency,created_at FROM swap_listings WHERE status='active' AND (${q}='' OR to_tsvector('simple',title||' '||description||' '||category||' '||wanted) @@ plainto_tsquery('simple',${q})) AND (${category}='' OR lower(category)=lower(${category})) ORDER BY created_at DESC,id LIMIT 50 OFFSET ${offset}`)).rows;
  res.json({items:rows});
  }catch{res.status(503).json({error:"Swap catalogue unavailable"});}
 });
@@ -72,6 +75,35 @@ router.post("/swaps",async(req,res)=>{
  res.status(201).json(row);
  }catch{res.status(503).json({error:"Could not create swap listing"});}
 });
+
+router.get("/swaps/saved",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;
+ res.setHeader("Cache-Control","private, no-store");res.json({items:(await db.execute(sql`SELECT l.id,l.title,l.description,l.category,l.condition,l.wanted,l.value_minor,l.currency,l.status,l.created_at FROM swap_saved s JOIN swap_listings l ON l.id=s.listing_id WHERE s.owner_email=${email} ORDER BY s.created_at DESC LIMIT 100`)).rows});
+ }catch{res.status(503).json({error:"Saved swaps unavailable"});}
+});
+router.post("/swaps/saved/:id",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;const id=req.params.id,saved=req.body?.saved;
+ if(!uuid(id)||typeof saved!=="boolean"){res.status(400).json({error:"Invalid save request"});return;}
+ if(saved){const row=(await db.execute(sql`INSERT INTO swap_saved(owner_email,listing_id) SELECT ${email},id FROM swap_listings WHERE id=${id} AND status='active' AND owner_email<>${email} ON CONFLICT DO NOTHING RETURNING listing_id`)).rows[0];if(!row){const existing=(await db.execute(sql`SELECT listing_id FROM swap_saved WHERE owner_email=${email} AND listing_id=${id}`)).rows[0];if(!existing){res.status(409).json({error:"Listing unavailable to save"});return;}}}
+ else await db.execute(sql`DELETE FROM swap_saved WHERE owner_email=${email} AND listing_id=${id}`);
+ res.json({saved});
+ }catch{res.status(503).json({error:"Could not update saved swaps"});}
+});
+router.get("/swaps/matches",async(req,res)=>{
+ try{const email=await authenticatedSellerEmail(req,res);if(!email)return;
+ const rows=(await db.execute(sql`WITH mine AS (SELECT id,title,category,wanted,value_minor FROM swap_listings WHERE owner_email=${email} AND status='active' ORDER BY created_at DESC LIMIT 30),
+ candidates AS (SELECT id,title,description,category,condition,wanted,value_minor,currency,created_at FROM swap_listings WHERE owner_email<>${email} AND status='active' ORDER BY created_at DESC LIMIT 3000),
+ scored AS (SELECT c.*,m.id AS my_listing_id,m.title AS my_title,
+ ts_rank(to_tsvector('simple',c.title||' '||c.category),plainto_tsquery('simple',m.wanted)) AS wanted_score,
+ ts_rank(to_tsvector('simple',m.title||' '||m.category),plainto_tsquery('simple',c.wanted)) AS reciprocal_score,
+ (CASE WHEN lower(c.category)=lower(m.category) THEN 1 ELSE 0 END) AS category_match,
+ abs(c.value_minor-m.value_minor) AS value_gap FROM candidates c CROSS JOIN mine),
+ ranked AS (SELECT *,row_number() OVER(PARTITION BY id ORDER BY (wanted_score+reciprocal_score) DESC,category_match DESC,value_gap ASC,my_listing_id) AS rn FROM scored WHERE wanted_score>0 OR reciprocal_score>0 OR category_match=1)
+ SELECT id,title,description,category,condition,wanted,value_minor,currency,created_at,my_listing_id,my_title,wanted_score,reciprocal_score,category_match,value_gap FROM ranked WHERE rn=1 ORDER BY (wanted_score+reciprocal_score) DESC,category_match DESC,value_gap ASC,id LIMIT 50`)).rows;
+ res.setHeader("Cache-Control","private, no-store");res.json({items:rows});
+ }catch{res.status(503).json({error:"Recommendations unavailable"});}
+});
+
 router.get("/swaps/:id",async(req,res)=>{
  try{
  const id=req.params.id;
