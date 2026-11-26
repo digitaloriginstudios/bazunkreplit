@@ -228,11 +228,18 @@ const SELL_HUB_OPTIONS = [
  {id:"classified",title:"List a Classified",desc:"Post a local listing, service or wanted ad.",href:"/classifieds/post",icon:Newspaper,colors:"from-lime-500 to-emerald-700",border:"border-[#00bf69]",label:"Post ad"},
  {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/live",icon:Video,colors:"from-[#14c7f4] to-[#006dce]",border:"border-[#04aeed]",label:"Start live"}
 ] as const;
+const SELL_PALETTE: Record<string,{color:string;light:string;emoji:string}> = {
+ swap:{color:"#2563eb",light:"#dbeafe",emoji:"🔄"},
+ direct:{color:"#c2410c",light:"#ffedd5",emoji:"🛍️"},
+ quick:{color:"#0369a1",light:"#e0f2fe",emoji:"⚡"},
+ auction:{color:"#087f75",light:"#ccfbf1",emoji:"🔨"},
+ flash:{color:"#be185d",light:"#fce7f3",emoji:"🏷️"},
+ classified:{color:"#15803d",light:"#dcfce7",emoji:"📋"},
+ live:{color:"#b91c1c",light:"#fee2e2",emoji:"🎥"}
+};
 function SellHubArtwork({kind}:{kind:string}) {
- const option=SELL_HUB_OPTIONS.find(o=>o.id===kind);
- if(!option)return null;
- const Icon=option.icon;
- return <div aria-hidden="true" className="relative mb-4 flex w-full items-center justify-center"><span className={`relative flex h-28 w-28 sm:h-36 sm:w-36 items-center justify-center rounded-full bg-gradient-to-br ${option.colors} text-white shadow-lg ring-8 ring-white transition-transform group-hover:scale-105 group-hover:-rotate-6`}><Icon className="h-14 w-14 sm:h-16 sm:w-16" strokeWidth={2.3}/><Sparkles className="absolute right-3 top-3 h-5 w-5 text-white/80"/></span></div>;
+ const palette=SELL_PALETTE[kind];
+ return <div aria-hidden="true" className="bz-sell-art-circle" style={{background:palette.color}}><span className="bz-sell-art-emoji">{palette.emoji}</span></div>;
 }
 const NativeDirectSeller = lazy(() => import("@/pages/DirectSalePage").then(m => ({default:m.DirectSalePage})));
 const NativeAuctionSeller = lazy(() => import("@/pages/CreateAuctionPage").then(m => ({default:m.CreateAuctionPage})));
@@ -273,7 +280,7 @@ export function SellPage() {
 
   return (
     <div className="sell-page min-h-screen bg-[linear-gradient(130deg,#dceeff_0%,#fff5ed_45%,#e3f3ff_100%)] font-sans text-[#10213e] flex flex-col">
-      <Navbar />
+      <style>{` .sell-page button.bz-sell-playful-card{background-image:none!important;border-radius:32px!important;padding:24px!important;display:flex!important;flex-direction:column!important;align-items:center!important;gap:10px!important;min-height:290px!important;} .sell-page .bz-sell-art-circle{display:flex!important;align-items:center!important;justify-content:center!important;width:132px!important;height:132px!important;flex:none!important;border-radius:50%!important;border:6px solid white!important;box-shadow:0 8px 18px #0002!important;margin:0 auto 8px!important;} .sell-page .bz-sell-art-emoji{display:block!important;font-size:64px!important;line-height:1!important;font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif!important;filter:none!important;} .sell-page .bz-sell-playful-action{display:flex!important;align-items:center!important;justify-content:center!important;min-height:52px!important;border-radius:999px!important;color:white!important;background-image:none!important;font-weight:800!important;} .sell-page .bz-sell-playful-action svg{stroke:white!important;color:white!important;} .sell-page .bz-sell-playful-card h3{font-size:22px!important;font-weight:800!important;color:#14233b!important;} .sell-page .bz-sell-playful-card p{color:#334155!important;} `}</style><Navbar />
       <main className="flex-1">
 
 
@@ -290,12 +297,12 @@ export function SellPage() {
 
             </div>
             <div className="relative flex flex-wrap justify-center gap-4 sm:gap-6">
-              {SELL_HUB_OPTIONS.filter(option => !featureForHref(option.href) || isFeatureEnabled(rawSettings,featureForHref(option.href)!)).map(option => {const Icon=option.icon;return <button type="button" key={option.id} onClick={()=>setSelectedSellOption(option)} data-testid={`sell-hub-${option.id}`} className={`group relative flex min-w-0 flex-[1_1_210px] max-w-[340px] flex-col items-center overflow-hidden rounded-[32px] border-2 ${option.border} bg-white p-5 text-center shadow-[0_7px_18px_rgba(12,58,116,.14)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_14px_26px_rgba(12,58,116,.2)] focus-visible:outline focus-visible:outline-4 focus-visible:outline-orange-500 sm:p-6`}>
-                <span aria-hidden="true" className={`absolute inset-0 bg-gradient-to-br ${option.colors} opacity-[.13]`}/>
+              {SELL_HUB_OPTIONS.filter(option => !featureForHref(option.href) || isFeatureEnabled(rawSettings,featureForHref(option.href)!)).map(option => {const Icon=option.icon;return <button type="button" key={option.id} onClick={()=>setSelectedSellOption(option)} data-testid={`sell-hub-${option.id}`} style={{background:SELL_PALETTE[option.id].light,borderColor:SELL_PALETTE[option.id].color}} className={`bz-sell-playful-card group relative flex min-w-0 flex-[1_1_210px] max-w-[340px] flex-col items-center overflow-hidden rounded-[32px] border-2 ${option.border} bg-white p-5 text-center shadow-[0_7px_18px_rgba(12,58,116,.14)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_14px_26px_rgba(12,58,116,.2)] focus-visible:outline focus-visible:outline-4 focus-visible:outline-orange-500 sm:p-6`}>
+                
                 <SellHubArtwork kind={option.id}/>
                 <h3 className="relative text-xl font-black tracking-tight text-[#092b68] sm:text-[25px]">{option.title}</h3>
                 <p className="relative mt-2 min-h-14 text-sm font-medium leading-relaxed text-[#173c71]">{option.desc}</p>
-                <span className={`relative mt-auto inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r ${option.colors} px-5 py-3 text-base font-black text-white shadow-md`}>{option.label}<ArrowRight className="h-4 w-4"/></span>
+                <span style={{background:SELL_PALETTE[option.id].color}} className={`bz-sell-playful-action relative mt-auto inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r ${option.colors} px-5 py-3 text-base font-black text-white shadow-md`}>{option.label}<ArrowRight className="h-4 w-4"/></span>
               </button>})}
             </div>
             <div className="relative mt-7 grid grid-cols-2 gap-3 rounded-2xl border border-[#c3d8ff] bg-white p-4 shadow-[0_6px_18px_rgba(10,61,133,.12)] md:grid-cols-4">
