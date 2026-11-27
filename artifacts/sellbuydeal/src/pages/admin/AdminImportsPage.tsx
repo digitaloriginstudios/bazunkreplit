@@ -699,7 +699,7 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="min-w-0 text-sm font-semibold">
           Category
-          <select value={aliCategory} disabled={!aliTaxonomy} onChange={e => {
+          <select aria-label="Batch category" value={aliCategory} disabled={!aliTaxonomy} onChange={e => {
             setAliCategory(e.target.value);
             setAliSubcategory("");
             setAliThird("");
@@ -727,6 +727,7 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
           </select>
         </label>
       </div>
+      {aliTaxonomy && <p className="mt-2 text-xs text-gray-600">Categories marked (hidden) are hidden in storefront navigation and can still be assigned here.</p>}
       {!aliTaxonomy && !aliTaxonomyError && <p role="status" className="mt-2 text-sm">Loading catalogue categories…</p>}
       {aliTaxonomyError && <p role="status" className="mt-2 text-sm">
         Could not load saved taxonomy. <button type="button" className="font-semibold underline" onClick={() => setAliTaxonomyRetry(n => n + 1)}>Retry</button>
@@ -1591,7 +1592,7 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
               {!aliQueued.length && <button disabled={aliBulkImporting} onClick={()=>{setAliActiveUrl(aliQueued.find(u=>aliSelected.has(u))??"");setAliModalOpen(true)}} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-white font-bold text-sm hover:bg-orange-600"><Plus className="w-4 h-4"/>Import a product</button>}
               {aliDone>0&&<p className="text-sm text-green-700">{aliDone} product(s) imported this session.</p>}
             </div>
-            {aliModalOpen&&<ImportModal key={aliActiveUrl} initialUrl={aliActiveUrl} initialMarkup={aliMarkup} initialQuantity={aliQuantity} initialOrigin={aliOrigin} initialDestinations={aliDestinations} initialPostage={aliShipping} onClose={()=>setAliModalOpen(false)} onSuccess={()=>{setAliDone(n=>n+1);setAliSelected(prev=>{const next=new Set(prev);next.delete(aliActiveUrl);return next});setAliQueued(prev=>prev.filter(url=>url!==aliActiveUrl))}} userEmail={aliSeller} userName={users.find(u=>u.email===aliSeller)?.name??""}/>}
+            {aliModalOpen&&<ImportModal key={aliActiveUrl} adminCatalogue={aliTaxonomy?.items ?? null} initialUrl={aliActiveUrl} initialMarkup={aliMarkup} initialQuantity={aliQuantity} initialOrigin={aliOrigin} initialDestinations={aliDestinations} initialPostage={aliShipping} onClose={()=>setAliModalOpen(false)} onSuccess={()=>{setAliDone(n=>n+1);setAliSelected(prev=>{const next=new Set(prev);next.delete(aliActiveUrl);return next});setAliQueued(prev=>prev.filter(url=>url!==aliActiveUrl))}} userEmail={aliSeller} userName={users.find(u=>u.email===aliSeller)?.name??""}/>}
           </motion.div>
         )}
 
