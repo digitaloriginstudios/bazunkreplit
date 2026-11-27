@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "@clerk/react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
+import { SocialFeed } from "@/components/SocialFeed";
 import { SocialPeople } from "@/components/SocialPeople";
 import { Navbar } from "@/components/Navbar";
 import { useFeature } from "@/components/FeatureGate";
@@ -31,6 +32,8 @@ async function profileRequest(
 
 function SocialProfileForm() {
   const { getToken, userId } = useAuth();
+  const feedEnabled = useFeature("social_feed");
+  const [relationshipVersion, setRelationshipVersion] = useState(0);
   const [profile, setProfile] = useState(emptyProfile);
   const [hasProfile, setHasProfile] = useState(false);
   const [ready, setReady] = useState(false);
@@ -78,6 +81,12 @@ function SocialProfileForm() {
   const fieldClass = "w-full rounded-lg border bg-background px-3 py-2";
   return (
     <>
+      {ready && feedEnabled && (
+        <SocialFeed
+          hasProfile={hasProfile}
+          relationshipVersion={relationshipVersion}
+        />
+      )}
       <section className="rounded-2xl border bg-card p-5 sm:p-7">
         <h2 className="mb-4 text-xl font-bold">Your social profile</h2>
         {error && (
@@ -149,7 +158,14 @@ function SocialProfileForm() {
           </form>
         )}
       </section>
-      {ready && <SocialPeople hasProfile={hasProfile} />}
+      {ready && (
+        <SocialPeople
+          hasProfile={hasProfile}
+          onRelationshipChange={() =>
+            setRelationshipVersion((version) => version + 1)
+          }
+        />
+      )}
     </>
   );
 }
@@ -157,6 +173,12 @@ function SocialProfileForm() {
 export function SocialPage() {
   const { isLoaded, isSignedIn, userId } = useAuth();
   const profilesEnabled = useFeature("social_profiles");
+  const search = useSearch();
+  const post = new URLSearchParams(search).get("post");
+  const signInHref =
+    post && /^[1-9][0-9]{0,17}$/.test(post)
+      ? `/sign-in?redirect_url=${encodeURIComponent(`/social?post=${post}`)}`
+      : "/sign-in";
   return (
     <>
       <Navbar />
@@ -170,10 +192,12 @@ export function SocialPage() {
           <SocialProfileForm key={userId} />
         ) : (
           <Link
-            href="/sign-in"
+            href={signInHref}
             className="rounded-xl bg-[#4A5CE8] px-4 py-2 font-semibold text-white"
           >
-            Sign in to set up your profile
+            {post
+              ? "Sign in to see this post"
+              : "Sign in to set up your profile"}
           </Link>
         )}
       </main>

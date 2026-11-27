@@ -10,7 +10,13 @@ type Person = {
   own: boolean;
 };
 
-export function SocialPeople({ hasProfile }: { hasProfile: boolean }) {
+export function SocialPeople({
+  hasProfile,
+  onRelationshipChange,
+}: {
+  hasProfile: boolean;
+  onRelationshipChange: () => void;
+}) {
   const { getToken } = useAuth();
   const follows = useFeature("social_follows");
   const reporting = useFeature("social_reports");
@@ -115,6 +121,7 @@ export function SocialPeople({ hasProfile }: { hasProfile: boolean }) {
                         person.following ? "DELETE" : "PUT",
                       );
                       setPerson({ ...person, following: !person.following });
+                      onRelationshipChange();
                     })
                   }
                 >
@@ -131,6 +138,7 @@ export function SocialPeople({ hasProfile }: { hasProfile: boolean }) {
                         `people/${encodeURIComponent(person.username)}/block`,
                         "PUT",
                       );
+                      onRelationshipChange();
                       setPerson(null);
                       setBlocks(null);
                       setNotice(`Blocked @${person.username}.`);
@@ -224,6 +232,7 @@ export function SocialPeople({ hasProfile }: { hasProfile: boolean }) {
                           `people/${encodeURIComponent(username)}/block`,
                           "DELETE",
                         );
+                        onRelationshipChange();
                         setBlocks(
                           blocks.filter((block) => block.username !== username),
                         );

@@ -166,16 +166,19 @@ router.get("/notifications",async(req,res)=>{
       }
     }catch(err){console.error("Cashback notification lookup unavailable",err);}
     try {
-      const enabled = await Promise.all(["social", "social_profiles", "social_follows", "social_notifications"].map(featureEnabled));
-      if (enabled.every(Boolean)) {
+      const [social, profiles, notifications] = await Promise.all(
+        ["social", "social_profiles", "social_notifications"].map(featureEnabled),
+      );
+      const recipient = sql`(SELECT id FROM users WHERE LOWER(email) = ${email}
+        ORDER BY (users.email = ${email}) DESC, id LIMIT 1)`;
+      if (social && profiles && notifications && await featureEnabled("social_follows")) {
         const { rows } = await db.execute<{ username: string; follower_id: string; created_at: Date }>(sql`
           SELECT p.username, f.follower_id, f.created_at
           FROM social_follows f
           JOIN social_profiles p ON p.user_id = f.follower_id
           JOIN users actor ON actor.id = f.follower_id
           JOIN users recipient ON recipient.id = f.followed_id
-          WHERE recipient.id = (SELECT id FROM users WHERE LOWER(email) = ${email}
-            ORDER BY (users.email = ${email}) DESC, id LIMIT 1)
+          WHERE recipient.id = ${recipient}
             AND NOT actor.banned AND NOT recipient.banned
           ORDER BY f.created_at DESC LIMIT 35
         `);
@@ -184,6 +187,29 @@ router.get("/notifications",async(req,res)=>{
           const actorKey = createHash("sha256").update(follow.follower_id).digest("hex");
           events.push(event(`social:follow:${actorKey}:${time}`, "social", "New social follower",
             `@${follow.username} followed you`, time, "/social"));
+        }
+      }
+      if (social && profiles && notifications && await featureEnabled("social_feed") &&
+          await featureEnabled("social_comments")) {
+        const sharing = await featureEnabled("social_sharing");
+        const { rows } = await db.execute<{ id: string; post_id: string; username: string; created_at: Date }>(sql`
+          SELECT c.id::text AS id, c.post_id::text AS post_id, profile.username, c.created_at
+          FROM social_posts p
+          JOIN users recipient ON recipient.id = p.author_id
+          JOIN social_post_comments c ON c.post_id = p.id
+          JOIN social_profiles profile ON profile.user_id = c.author_id
+          JOIN users actor ON actor.id = c.author_id
+          WHERE p.author_id = ${recipient} AND c.author_id <> p.author_id
+            AND NOT actor.banned AND NOT recipient.banned
+            AND NOT EXISTS (SELECT 1 FROM social_blocks
+              WHERE (blocker_id = p.author_id AND blocked_id = c.author_id)
+                 OR (blocker_id = c.author_id AND blocked_id = p.author_id))
+          ORDER BY c.created_at DESC, c.id DESC LIMIT 35
+        `);
+        for (const comment of rows) {
+          events.push(event(`social:comment:${comment.id}`, "social", "New comment on your post",
+            `@${comment.username} commented on your post`, comment.created_at,
+            sharing ? `/social?post=${comment.post_id}` : "/social"));
         }
       }
     } catch (err) {
