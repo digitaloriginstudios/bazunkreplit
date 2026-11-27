@@ -209,7 +209,7 @@ router.get("/listings", async (req, res) => {
     if (subValues.length) clauses.push(sql`LOWER(${listingsTable.subcategory}) IN (${sql.join(subValues.map(x=>sql`${x.toLowerCase()}`),sql`, `)})`);
     if (thirdValues.length) clauses.push(inArray(listingsTable.subsubcategory, thirdValues));
     const conditionValues = csv(conditions);
-    if (conditionValues.length) clauses.push(inArray(listingsTable.condition, conditionValues));
+
     if (minPrice && Number.isFinite(Number(minPrice))) clauses.push(sql`${listingsTable.price}::numeric >= ${Number(minPrice)}`);
     if (maxPrice && Number.isFinite(Number(maxPrice))) clauses.push(sql`${listingsTable.price}::numeric <= ${Number(maxPrice)}`);
     const shippingOrigins = csv(shipFrom);
@@ -219,13 +219,26 @@ router.get("/listings", async (req, res) => {
     if (freeShipping === "true") clauses.push(sql`COALESCE(${listingsTable.shippingPrice}::numeric, 0) = 0`);
     const days = listedWithin === "today" ? 1 : listedWithin === "week" ? 7 : listedWithin === "month" ? 30 : null;
     if (days) clauses.push(sql`${listingsTable.createdAt} >= NOW() - ${days} * INTERVAL '1 day'`);
+    if (req.query.verifiedOnly === "true") {
+      clauses.push(sql`EXISTS (SELECT 1 FROM users WHERE LOWER(email) = LOWER(${listingsTable.sellerEmail}) AND verification_status = 'verified')`);
+    }
+    const minRating = Number(req.query.minRating);
+    if (minRating >= 1 && minRating <= 5) {
+      clauses.push(sql`LOWER(${listingsTable.sellerEmail}) IN (
+        SELECT LOWER(reviewee_email) FROM reviews WHERE role = 'buyer_to_seller'
+          AND removed_at IS NULL AND deleted_by_reviewer_at IS NULL
+        GROUP BY LOWER(reviewee_email) HAVING ROUND(AVG(rating)::numeric, 2) >= ${minRating}
+      )`);
+    }
+    const baseFilters = and(...clauses);
+    const filters = and(baseFilters, conditionValues.length ? inArray(listingsTable.condition, conditionValues) : undefined);
     const ordering = collection === "trending" ? sql`COALESCE(${listingsTable.views},0) + 3 * COALESCE(${listingsTable.watchers},0) DESC` : sort === "price-asc" || sort === "price-lowest" ? sql`${listingsTable.price}::numeric ASC`
       : sort === "price-desc" ? sql`${listingsTable.price}::numeric DESC`
       : sort === "views" ? sql`${listingsTable.views} DESC` : desc(listingsTable.createdAt);
 
     // Browse/list views only need card fields. Avoid sending large description, tags,
     // specifications and other detail-only columns for every listing.
-    const rows = await db
+    const pageQuery = db
       .select({
         id: listingsTable.id,
         publicId: listingsTable.publicId,
@@ -251,17 +264,33 @@ router.get("/listings", async (req, res) => {
         createdAt: listingsTable.createdAt,
       })
       .from(listingsTable)
-      .where(and(...clauses))
-      .orderBy(ordering)
+      .where(filters)
+      .orderBy(ordering, desc(listingsTable.id))
       .limit(parsedLimit)
       .offset(parsedOffset);
 
+    const includeTotals = req.query.includeTotals === "true";
+    const [rows, byCondition] = await Promise.all([
+      pageQuery,
+      includeTotals
+        ? db.select({ condition: listingsTable.condition, total: sql<number>`COUNT(*)`.mapWith(Number) })
+          .from(listingsTable).where(baseFilters).groupBy(listingsTable.condition)
+        : Promise.resolve<{ condition: string; total: number }[]>([]),
+    ]);
     const withPromos = await attachPromotions(rows);
-    if (!collection) withPromos.sort((a, b) => promoRank(b.promotions) - promoRank(a.promotions));
+    if (!collection && !includeTotals) withPromos.sort((a, b) => promoRank(b.promotions) - promoRank(a.promotions));
     // Public browse cards change relatively infrequently; a tiny cache removes repeated
     // database work while keeping new/edited listings fresh within seconds.
     res.setHeader("Cache-Control", "public, max-age=15, stale-while-revalidate=45");
-    res.json(withPromos.map(normalizeListingMedia));
+    const listings = withPromos.map(normalizeListingMedia);
+    if (includeTotals) {
+      const conditionCounts = Object.fromEntries(byCondition.map(row => [row.condition, row.total]));
+      const total = byCondition.reduce((sum, row) =>
+        sum + (!conditionValues.length || conditionValues.includes(row.condition) ? row.total : 0), 0);
+      res.json({ listings, total, conditionCounts });
+    } else {
+      res.json(listings);
+    }
   } catch (err) {
     console.error("Error fetching listings:", err);
     res.status(500).json({ error: "internal_server_error", message: String(err) });
