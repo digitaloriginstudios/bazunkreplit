@@ -172,6 +172,7 @@ function SocialProfileForm() {
 
 export function SocialPage() {
   const { isLoaded, isSignedIn, userId } = useAuth();
+  const collectionsEnabled = useFeature("social_collections");
   const profilesEnabled = useFeature("social_profiles");
   const search = useSearch();
   const post = new URLSearchParams(search).get("post");
@@ -184,6 +185,14 @@ export function SocialPage() {
       <Navbar />
       <main className="mx-auto min-h-[65vh] max-w-2xl px-4 py-10">
         <h1 className="mb-6 text-3xl font-black">Bazunk Social</h1>
+        {collectionsEnabled && (
+          <Link
+            href="/collections"
+            className="mb-6 inline-flex rounded-xl border px-4 py-2 font-semibold"
+          >
+            Collections & wishlists
+          </Link>
+        )}
         {!profilesEnabled ? (
           <p>Social profiles are currently unavailable.</p>
         ) : !isLoaded ? (

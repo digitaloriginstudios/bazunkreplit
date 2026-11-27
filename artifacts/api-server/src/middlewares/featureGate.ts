@@ -6,6 +6,7 @@ const rules:[RegExp,string][]=[
  [/^\/social\/(?:feed|posts)(?:\/|$)/i,"social_profiles"],
  [/^\/social\/(?:feed|posts)(?:\/|$)/i,"social_feed"],
  [/^\/social\/posts\/[^/]+\/comments(?:\/|$)/i,"social_comments"],
+ [/^\/social\/collections(?:\/|$)/i,"social_collections"],
  [/^\/social\/blocks(?:\/|$)/i,"social_blocks"],
  [/^\/swaps(?:\/|$)/,"swaps"],
  [/^\/discovery\/recommendations(?:\/|$)/,"personalized_recommendations"],

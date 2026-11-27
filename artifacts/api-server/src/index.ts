@@ -1,3 +1,4 @@
+import { collectionMigrations } from "./lib/collectionMigrations.js";
 import app from "./app.js";
 import { logger } from "./lib/logger.js";
 import { db } from "@workspace/db";
@@ -196,6 +197,7 @@ async function runAppMigrations() {
   await run(sql`ALTER TABLE listings ADD COLUMN IF NOT EXISTS handling_charge NUMERIC(10,2)`, "listings.handling_charge");
   await run(sql`ALTER TABLE listings ADD COLUMN IF NOT EXISTS quantity INTEGER`, "listings.quantity");
   await run(sql`ALTER TABLE listings ADD COLUMN IF NOT EXISTS sku TEXT`, "listings.sku");
+  for (const [label, statement] of collectionMigrations) await run(statement, label);
 
   await run(sql`
     CREATE TABLE IF NOT EXISTS listing_promotions (

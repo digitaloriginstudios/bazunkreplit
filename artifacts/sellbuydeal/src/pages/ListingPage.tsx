@@ -1,3 +1,4 @@
+import { AddToCollection } from "@/components/AddToCollection";
 import { useToast } from "@/hooks/use-toast";
 import { shippingCountries, shippingCountryLabel, shippingZoneLabel, shipsToCountry } from "@/lib/listingShipping";
 import {useSeoMetadata} from "@/hooks/useSeoMetadata";
@@ -610,6 +611,8 @@ export function ListingPage() {
                 : <video aria-label="Product video" src={richProduct.listingVideo.src} controls playsInline preload="metadata"
                     className="max-h-96 w-full rounded-lg bg-black" />}
             </section>}
+
+            {apiProduct?.id && <AddToCollection key={apiProduct.id} listingId={Number(apiProduct.id)} />}
 
             {/* TrustProof is an optional feature-flagged tab, not a permanent large panel. */}
             <div className="overflow-hidden rounded-xl border border-slate-300 dark:border-slate-600 bazunk-listing-tabs">
