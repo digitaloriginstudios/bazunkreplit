@@ -22,12 +22,12 @@ export const FEATURE_DEFINITIONS = [
   ["global_marketplace","Global marketplace catalogue (preview)","Buying"],
   ["quick_sell","Direct Sale","Selling"],["offers","Make an Offer","Selling"],["auctions","Auctions","Selling"],["flash_sales","Flash Sales","Selling"],["classifieds","Classifieds","Selling"],["live","Live selling","Selling"],["product_video","Product Video","Selling"],
   ["snap_sell","Snap & Sell","Tools"],["snap_barcode","Barcode & ISBN Scanning","Tools"],["snap_ai_writing","AI Photo & Writing","Tools"],["snap_background","Photo Background Cleanup","Tools"],["snap_pricing","Seller Pricing & Performance","Tools"],["importers","Importers","Tools"],["promotions","Promotions","Tools"],["watchers","Watch / Watcher offers","Tools"],["messaging","Messaging","Community"],["reviews","Reviews & reputation","Community"],["referrals","Referrals","Rewards"],["games","Rewards Arcade / Games","Rewards"],["credits","Credits","Rewards"],["cashback","Cashback","Rewards"],
-  ["chatwoot_support","Chatwoot Live Support","Support"],["homepage_intro","Homepage Intro GIF","Appearance"],
+  ["chatwoot_support","Chatwoot Live Support","Support"],["homepage_intro","Homepage Intro GIF","Appearance"],["browse_shop_banner","Shop on Bazunk browse banner","Appearance"],
   ["bundles","Bundles","Buying"],["personalized_recommendations","Personalised Recommendations","Buying"],["recently_viewed","Recently Viewed","Buying"],["combined_shipping","Combined Shipping","Buying"],["multi_item_discount","Multi-item Seller Discount","Buying"],["checkout_recovery","Checkout Recovery Messages","Buying"],["deal_pilot","DealPilot personal buying assistant","Buying"],["find_it","Find It reverse marketplace","Buying"],["buyer_protection","Buyer Protection","Buying"],["disputes_returns","Disputes & Returns","Buying"],["verification","Seller verification","Trust"],["trust_proof","TrustProof listing evidence","Trust"],["reputation_insights","Seller Reputation Insights","Trust"]
 ] as const;
 
 export function resolveFeatureValue(key:string,value:unknown):boolean {
-  if(value==null) return key!=="global_marketplace" && key!=="swaps" && key!=="social" && !key.startsWith("social_");
+  if(value==null) return key!=="browse_shop_banner" && key!=="global_marketplace" && key!=="swaps" && key!=="social" && !key.startsWith("social_");
   return String(value).trim().toLowerCase()==="true";
 }
 

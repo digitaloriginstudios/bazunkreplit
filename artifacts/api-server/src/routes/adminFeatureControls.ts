@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { FEATURE_DEFINITIONS, resolveFeatureValue } from "../lib/featureFlags.js";
 const router=Router();
 const ENV=process.env.RENDER_SERVICE_ID==="srv-db732i2d0e5s73asr0kg" ? "staging":
- process.env.RENDER_SERVICE_ID==="srv-davd6f3bc2fs73ce9ohg" ? "production" :
+ ["srv-davd6f3bc2fs73ce9ohg","srv-dbtl3vtbedkc7386nep0"].includes(process.env.RENDER_SERVICE_ID ?? "") ? "production" :
  process.env.RENDER_SERVICE_ID==="srv-dal8qm6k1f9s73e37f2g" ? "legacy" :
  process.env.BAZUNK_DEPLOYMENT_ENV==="staging" ? "staging":
  process.env.BAZUNK_DEPLOYMENT_ENV==="production" ? "production":"unknown";
