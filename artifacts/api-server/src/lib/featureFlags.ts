@@ -2,6 +2,22 @@ import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
 export const FEATURE_DEFINITIONS = [
+  ["social","Bazunk Social","Community"],
+  ["social_profiles","Social profiles","Community"],
+  ["social_follows","Social follows","Community"],
+  ["social_blocks","Social blocking","Community"],
+  ["social_reports","Social reports","Community"],
+  ["social_stories","Seller stories","Community"],
+  ["social_polls","Product polls","Community"],
+  ["social_collections","Product collections","Community"],
+  ["social_wishlists","Collaborative wishlists","Community"],
+  ["social_collection_follows","Collection following","Community"],
+  ["social_feed","Social feed and posts","Community"],
+  ["social_likes","Social post likes","Community"],
+  ["social_saves","Social saved posts","Community"],
+  ["social_comments","Social comments","Community"],
+  ["social_sharing","Social post sharing","Community"],
+  ["social_notifications","Social notifications","Community"],
   ["swaps","Bazunk Swap (preview)","Selling"],
   ["global_marketplace","Global marketplace catalogue (preview)","Buying"],
   ["quick_sell","Direct Sale","Selling"],["offers","Make an Offer","Selling"],["auctions","Auctions","Selling"],["flash_sales","Flash Sales","Selling"],["classifieds","Classifieds","Selling"],["live","Live selling","Selling"],["product_video","Product Video","Selling"],
@@ -11,7 +27,7 @@ export const FEATURE_DEFINITIONS = [
 ] as const;
 
 export function resolveFeatureValue(key:string,value:unknown):boolean {
-  if(value==null) return key!=="global_marketplace" && key!=="swaps";
+  if(value==null) return key!=="global_marketplace" && key!=="swaps" && key!=="social" && !key.startsWith("social_");
   return String(value).trim().toLowerCase()==="true";
 }
 

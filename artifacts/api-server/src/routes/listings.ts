@@ -1,3 +1,4 @@
+import { categoryVisibility } from "../lib/listingVisibility.js";
 import { listingShipping as globalListingShipping, shippingCountry as globalShippingCountry, shipsToCountry as globalShipsToCountry } from "../lib/listingShipping.js";
 import { featureEnabled } from "../lib/featureFlags.js";
 import { recordCreditEconomy } from "../lib/creditEconomy.js";
@@ -34,20 +35,6 @@ const latestPriceDrop=sql`(SELECT h.old_price FROM listing_price_history h WHERE
 const listingMediaUrl=(value:unknown):unknown=>typeof value==="string"&&value.startsWith("/api/listing-media/")?"https://bazunk-api-ifqs.onrender.com"+value:value;
 const normalizeListingMedia=<T extends Record<string,any>>(item:T):T=>({...item,image:listingMediaUrl(item.image)});
 
-
-// Server-side visibility: missing setting means visible; parent OFF overrides children.
-async function categoryVisibility() {
- await db.execute(sql`CREATE TABLE IF NOT EXISTS demo_creator_settings (key TEXT PRIMARY KEY, enabled BOOLEAN NOT NULL DEFAULT FALSE)`);
- await db.execute(sql`CREATE TABLE IF NOT EXISTS demo_listing_registry (
- listing_id INTEGER PRIMARY KEY REFERENCES listings(id) ON DELETE CASCADE,
- seller_email TEXT NOT NULL, region TEXT NOT NULL CHECK(region IN ('uk','us')),
- enabled BOOLEAN NOT NULL DEFAULT TRUE, source_url TEXT,
- created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);
- return sql`NOT EXISTS (SELECT 1 FROM demo_listing_registry d WHERE d.listing_id=${listingsTable.id}
- AND (NOT d.enabled OR NOT COALESCE((SELECT enabled FROM demo_creator_settings WHERE key='master'),FALSE)
- OR NOT COALESCE((SELECT enabled FROM demo_creator_settings WHERE key='listings'),FALSE)))
- AND NOT EXISTS (SELECT 1 FROM site_settings cv WHERE cv.value='false' AND (cv.key='category_visible_' || ${listingsTable.category} OR cv.key='category_visible_' || ${listingsTable.category} || '__' || COALESCE(${listingsTable.subcategory},'')))`;
-}
 
 // Region is a browsing scope, not an account or permissions boundary.
 function listingRegionFilter(region: unknown) {

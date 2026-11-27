@@ -117,6 +117,7 @@ const MORE_NAV = [
 ];
 
 const MOBILE_NAV_LINKS = [
+  { href: "/social", label: "Social", icon: MessageSquare },
   { href: "/",            label: "Home",        icon: Home },
   { href: "/browse",      label: "Shop",        icon: Grid3X3 },
   { href: "/deal-pilot", label: "DealPilot", icon: Search },
@@ -296,6 +297,7 @@ export function Navbar() {
   const primaryLinks: Array<{ href: string; label: string; live?: boolean }> = [
     { href: "/", label: "Home" },
     { href: "/browse", label: "Shop" },
+    { href: "/social", label: "Social" },
     { href: "/auctions", label: "Auctions" },
     { href: "/flash-sales", label: "Flash Sales" },
     { href: "/live", label: "Live", live: true },

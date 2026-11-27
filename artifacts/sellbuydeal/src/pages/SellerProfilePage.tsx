@@ -1,3 +1,5 @@
+import { SellerStories } from "@/components/SellerStories";
+import { SocialSellerFollow } from "@/components/SocialSellerFollow";
 import {useSeoMetadata} from "@/hooks/useSeoMetadata";
 import { toast } from "@/hooks/use-toast";
 import { useMarketplaceLoadingDelay } from "@/components/useMarketplaceLoadingDelay";
@@ -114,6 +116,7 @@ export function SellerProfilePage() {
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap"><h1 className="text-2xl sm:text-3xl font-black text-gray-900">{rep.profile.name}{sellerEmail.toLowerCase() === "cczslater@gmail.com" && <span className="ml-2 inline-flex items-center gap-1 text-xs font-bold text-[#4A5CE8] bg-indigo-50 px-2 py-1 rounded-full"><ShieldCheck className="w-3.5 h-3.5" /> Official Bazunk Store</span>}</h1>{rep.profile.verified && <CheckCircle2 className="w-6 h-6 text-emerald-500" />}</div>
                 {rep.profile.username && <p className="text-gray-400 text-sm mt-1">@{rep.profile.username}</p>}
+                <SocialSellerFollow key={sellerEmail} email={sellerEmail} />
                 <div className="flex items-center gap-2 mt-3"><Stars rating={rep.reviews.average} size="w-5 h-5" /><span className="font-bold text-gray-800">{rep.reviews.total ? rep.reviews.average.toFixed(1) : "New"}</span><span className="text-sm text-gray-400">({rep.reviews.total} review{rep.reviews.total === 1 ? "" : "s"})</span></div>
                 {rep.memberSince && <p className="flex items-center gap-1.5 text-xs text-gray-400 mt-3"><Calendar className="w-3.5 h-3.5" /> Member since {new Date(rep.memberSince).toLocaleDateString("en-GB", { month: "long", year: "numeric" })}</p>}
               </div>
@@ -127,6 +130,7 @@ export function SellerProfilePage() {
             </div>
           </section>
 
+          <div className="mb-6 empty:hidden"><SellerStories seller={sellerEmail} manage={isSeller} /></div>
           <div className="grid lg:grid-cols-[1fr_320px] gap-6">
             <section className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
               <div className="flex items-center gap-2 mb-5"><ShoppingBag className="w-5 h-5 text-[#4A5CE8]" /><h2 className="font-black text-xl text-gray-900">Items for sale</h2><span className="text-sm text-gray-400">({listings.length})</span></div>

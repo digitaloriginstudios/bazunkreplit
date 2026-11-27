@@ -4,3 +4,5 @@ Sitemap: https://www.bazunk.com/sitemap.xml
 Sitemap: https://www.bazunk.com/api/seo/product-sitemap.xml
 
 Sitemap: https://www.bazunk.com/api/seo/swap-sitemap.xml
+
+Sitemap: https://www.bazunk.com/api/seo/collection-sitemap.xml

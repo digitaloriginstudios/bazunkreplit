@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { refreshSavedSearchMatches } from "../lib/savedSearches.js";
 import { ensureDealPilotTables, pilotSettings } from "../lib/dealPilot.js";
 import { ensureFindItTables } from "../lib/findIt.js";
@@ -6,10 +7,11 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { authenticatedSellerEmail } from "../lib/authenticatedSeller.js";
+import { featureEnabled } from "../lib/featureFlags.js";
 import { ensureMarketplaceOffers } from "./marketplaceOffers.js";
 
 const router=Router();
-type Event={id:string;type:"order"|"sale"|"offer"|"bid"|"message"|"search"|"price_drop"|"restock"|"deal_pilot"|"find_it"|"cashback";title:string;desc:string;time:string;href:string};
+type Event={id:string;type:"order"|"sale"|"offer"|"bid"|"message"|"search"|"price_drop"|"restock"|"deal_pilot"|"find_it"|"cashback"|"social";title:string;desc:string;time:string;href:string};
 async function ensureReads(){
   await db.execute(sql`CREATE TABLE IF NOT EXISTS marketplace_notification_reads (
     recipient_email text NOT NULL, event_id text NOT NULL, read_at timestamptz NOT NULL DEFAULT NOW(),
@@ -163,6 +165,56 @@ router.get("/notifications",async(req,res)=>{
           x.reviewed_at||x.requested_at,"/cashback"));
       }
     }catch(err){console.error("Cashback notification lookup unavailable",err);}
+    try {
+      const [social, profiles, notifications] = await Promise.all(
+        ["social", "social_profiles", "social_notifications"].map(featureEnabled),
+      );
+      const recipient = sql`(SELECT id FROM users WHERE LOWER(email) = ${email}
+        ORDER BY (users.email = ${email}) DESC, id LIMIT 1)`;
+      if (social && profiles && notifications && await featureEnabled("social_follows")) {
+        const { rows } = await db.execute<{ username: string; follower_id: string; created_at: Date }>(sql`
+          SELECT p.username, f.follower_id, f.created_at
+          FROM social_follows f
+          JOIN social_profiles p ON p.user_id = f.follower_id
+          JOIN users actor ON actor.id = f.follower_id
+          JOIN users recipient ON recipient.id = f.followed_id
+          WHERE recipient.id = ${recipient}
+            AND NOT actor.banned AND NOT recipient.banned
+          ORDER BY f.created_at DESC LIMIT 35
+        `);
+        for (const follow of rows) {
+          const time = new Date(follow.created_at).toISOString();
+          const actorKey = createHash("sha256").update(follow.follower_id).digest("hex");
+          events.push(event(`social:follow:${actorKey}:${time}`, "social", "New social follower",
+            `@${follow.username} followed you`, time, "/social"));
+        }
+      }
+      if (social && profiles && notifications && await featureEnabled("social_feed") &&
+          await featureEnabled("social_comments")) {
+        const sharing = await featureEnabled("social_sharing");
+        const { rows } = await db.execute<{ id: string; post_id: string; username: string; created_at: Date }>(sql`
+          SELECT c.id::text AS id, c.post_id::text AS post_id, profile.username, c.created_at
+          FROM social_posts p
+          JOIN users recipient ON recipient.id = p.author_id
+          JOIN social_post_comments c ON c.post_id = p.id
+          JOIN social_profiles profile ON profile.user_id = c.author_id
+          JOIN users actor ON actor.id = c.author_id
+          WHERE p.author_id = ${recipient} AND c.author_id <> p.author_id
+            AND NOT actor.banned AND NOT recipient.banned
+            AND NOT EXISTS (SELECT 1 FROM social_blocks
+              WHERE (blocker_id = p.author_id AND blocked_id = c.author_id)
+                 OR (blocker_id = c.author_id AND blocked_id = p.author_id))
+          ORDER BY c.created_at DESC, c.id DESC LIMIT 35
+        `);
+        for (const comment of rows) {
+          events.push(event(`social:comment:${comment.id}`, "social", "New comment on your post",
+            `@${comment.username} commented on your post`, comment.created_at,
+            sharing ? `/social?post=${comment.post_id}` : "/social"));
+        }
+      }
+    } catch (err) {
+      console.error("Social notification lookup unavailable", err);
+    }
     const seen=new Set((reads.rows as any[]).map(r=>String(r.event_id)));
     const filtered=events.sort((a,b)=>Date.parse(b.time)-Date.parse(a.time)).slice(0,100)
       .map(e=>({...e,unread:!seen.has(e.id)}));

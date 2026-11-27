@@ -1,6 +1,15 @@
 import type { Request,Response,NextFunction } from "express";
 import { featureEnabled } from "../lib/featureFlags.js";
 const rules:[RegExp,string][]=[
+ [/^\/social(?:\/|$)/i,"social"],
+ [/^\/social\/(?:profile|people|seller)(?:\/|$)/i,"social_profiles"],
+ [/^\/social\/(?:feed|posts)(?:\/|$)/i,"social_profiles"],
+ [/^\/social\/(?:feed|posts)(?:\/|$)/i,"social_feed"],
+ [/^\/social\/posts\/[^/]+\/comments(?:\/|$)/i,"social_comments"],
+ [/^\/social\/stories(?:\/|$)/i,"social_stories"],
+ [/^\/social\/polls(?:\/|$)/i,"social_polls"],
+ [/^\/social\/collections(?:\/|$)/i,"social_collections"],
+ [/^\/social\/blocks(?:\/|$)/i,"social_blocks"],
  [/^\/swaps(?:\/|$)/,"swaps"],
  [/^\/discovery\/recommendations(?:\/|$)/,"personalized_recommendations"],
  [/^\/discovery\/wishlist(?:\/|$)|^\/watch-alerts(?:\/|$)/,"watchers"],

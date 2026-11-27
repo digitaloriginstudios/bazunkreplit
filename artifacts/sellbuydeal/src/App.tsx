@@ -105,6 +105,10 @@ const ImportersPage = React.lazy(() => import("@/pages/ImportersPage").then(modu
 const ImporterWorkspacePage = React.lazy(() => import("@/pages/ImporterWorkspacePage").then(module => ({ default: module.ImporterWorkspacePage })));
 import {DiscoveryPage,discoveryPages} from "@/pages/DiscoveryPage";
 import { BrowsePage } from "@/pages/BrowsePage";
+const ProductPollsPage = React.lazy(() => import("@/pages/ProductPollsPage").then(module => ({ default: module.ProductPollsPage })));
+const CollectionsPage = React.lazy(() => import("@/pages/CollectionsPage").then(module => ({ default: module.CollectionsPage })));
+const CollectionDetailPage = React.lazy(() => import("@/pages/CollectionsPage").then(module => ({ default: module.CollectionDetailPage })));
+const CollectionJoinPage = React.lazy(() => import("@/pages/CollectionsPage").then(module => ({ default: module.CollectionJoinPage })));
 const ListingPage = React.lazy(() => import("@/pages/ListingPage").then(module => ({ default: module.ListingPage })));
 const TrustProofPage = React.lazy(() => import("@/pages/TrustProofPage").then(module => ({ default: module.TrustProofPage })));
 const AdminTrustProofPage = React.lazy(() => import("@/pages/admin/AdminTrustProofPage").then(module => ({ default: module.AdminTrustProofPage })));
@@ -159,6 +163,7 @@ const AdminDealPilotPage = React.lazy(() => import("@/pages/admin/AdminDealPilot
 const AdminSwapsPage = React.lazy(() => import("@/pages/admin/AdminSwapsPage").then(module => ({default:module.AdminSwapsPage})));
 const AdminFindItPage = React.lazy(() => import("@/pages/admin/AdminFindItPage").then(module => ({ default: module.AdminFindItPage })));
 const AdminFeatureFlagsPage = React.lazy(() => import("@/pages/admin/AdminFeatureFlagsPage").then(module => ({ default: module.AdminFeatureFlagsPage })));
+import { SocialPage } from "@/pages/SocialPage";
 import { FeatureGate, FeatureVisible } from "@/components/FeatureGate";
 const AdminPaymentsPage = React.lazy(() => import("@/pages/admin/AdminPaymentsPage").then(module => ({ default: module.AdminPaymentsPage })));
 const AdminOrdersPage = React.lazy(() => import("@/pages/admin/AdminOrdersPage").then(module => ({ default: module.AdminOrdersPage })));
@@ -450,6 +455,12 @@ function Router() {
       <Route path="/register">{() => <Redirect to="/sign-up" />}</Route>
       <Route path="/categories" component={CategoriesPage} />
       <Route path="/sell" component={SellPage} />
+      <Route path="/collections/join">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_collections" name="Collections"><CollectionJoinPage /></FeatureGate></FeatureGate>}</Route>
+      <Route path="/collections/:slug">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_collections" name="Collections"><CollectionDetailPage /></FeatureGate></FeatureGate>}</Route>
+      <Route path="/collections">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_collections" name="Collections"><CollectionsPage /></FeatureGate></FeatureGate>}</Route>
+      <Route path="/social/polls/:id">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_polls" name="Product polls"><ProductPollsPage /></FeatureGate></FeatureGate>}</Route>
+      <Route path="/social/polls">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_polls" name="Product polls"><ProductPollsPage /></FeatureGate></FeatureGate>}</Route>
+      <Route path="/social">{() => <FeatureGate feature="social" name="Bazunk Social"><SocialPage /></FeatureGate>}</Route>
       <Route path="/swap/create">{() => <FeatureGate feature="swaps" name="Bazunk Swap"><SwapPage /></FeatureGate>}</Route>
       <Route path="/swap/:id">{() => <FeatureGate feature="swaps" name="Bazunk Swap"><SwapPage /></FeatureGate>}</Route>
       <Route path="/swap">{() => <FeatureGate feature="swaps" name="Bazunk Swap"><SwapPage /></FeatureGate>}</Route>
