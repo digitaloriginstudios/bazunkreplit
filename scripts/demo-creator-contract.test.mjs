@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 const read = path => readFileSync(new URL('../'+path, import.meta.url), 'utf8');
 const demo=read('artifacts/api-server/src/routes/demoCreator.ts');
 const listings=read('artifacts/api-server/src/routes/listings.ts');
+const visibility=read('artifacts/api-server/src/lib/listingVisibility.ts');
 const checkout=read('artifacts/api-server/src/lib/checkoutQuote.ts');
 const detail=read('artifacts/sellbuydeal/src/pages/ListingPage.tsx');
 const routes=read('artifacts/api-server/src/routes/index.ts');
@@ -17,9 +18,10 @@ test('demo creator is routed behind admin authentication',()=>{
 });
 test('demo visibility defaults off and public listing query respects approval',()=>{
  assert.match(demo,/demo_creator_settings \(key TEXT PRIMARY KEY, enabled BOOLEAN NOT NULL DEFAULT FALSE\)/);
- assert.match(listings,/NOT d\.enabled/);
- assert.match(listings,/key='master'/);
- assert.match(listings,/key='listings'/);
+ assert.match(listings,/import \{ categoryVisibility \} from/);
+ assert.match(visibility,/NOT d\.enabled/);
+ assert.match(visibility,/key='master'/);
+ assert.match(visibility,/key='listings'/);
 });
 test('demo listing has zero stock and cannot be purchased',()=>{
  assert.match(demo,/demo_creator:true/);
