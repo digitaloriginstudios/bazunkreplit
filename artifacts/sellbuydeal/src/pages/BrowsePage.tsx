@@ -1,3 +1,4 @@
+import { useRawSettings } from "@/context/SiteSettingsContext";
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { ToastAction } from "@/components/ui/toast";
 import { toast } from "@/hooks/use-toast";
@@ -292,6 +293,8 @@ function cacheBrowse(key: string, results: BrowseResults) {
 }
 
 export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
+  const rawSettings = useRawSettings();
+  const showShopBanner = rawSettings.feature_browse_shop_banner === "true";
   const [marketRegion, setMarketRegion] = useMarketplaceRegion();
   const { getToken } = useClerkAuth();
   const [, refreshThirdLevels] = useState(0);
@@ -897,13 +900,13 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
     <div className="bz-browse-page min-h-screen bg-[#f2f7fc] flex flex-col">
       <Navbar watchlistCount={wishlistItems.length} />
 
-      <div className="bz-browse-hero-shell">
+      {(collection || showShopBanner) && <div className="bz-browse-hero-shell">
         <section className={`bz-browse-hero ${collection==="eco"?"bz-eco-hero":collection==="deals"?"bz-deals-hero":""}`} aria-label={collection==="eco"?"Eco Marketplace":collection==="deals"?"Deals on Bazunk":"Shop on Bazunk"}>
           <div className="bz-browse-hero-copy"><h1>{collection==="eco"?"Shop sustainably":collection==="deals"?"Discover great deals":<>Shop on <span>Bazunk</span></>}</h1><p>{collection==="eco"?"Explore items sellers have marked eco-friendly or recyclable. Reuse, resell and give great products another life.":collection==="deals"?"Discover listings with active promotions, featured placements and seller boosts.":"Browse thousands of unique items from independent sellers."}</p></div>
           <div className="bz-browse-hero-bags" aria-hidden="true"><div className="bz-browse-bag bz-browse-bag-blue"><ShoppingBag /></div><div className="bz-browse-bag bz-browse-bag-orange"><ShoppingBag /><strong>B</strong></div></div>
           <div className="bz-browse-hero-points"><span><ShieldCheck/> Buyer Protected</span><span><Zap/> {collection==="eco"?"Reuse & Resell":"Great Deals"}</span><span><Tag/> {collection==="deals"?"Promoted Listings":"Make an Offer"}</span></div>
         </section>
-      </div>
+      </div>}
       <AdSlot slotKey="browse_top" />
 
       <div className="bz-browse-content container mx-auto max-w-[1440px] px-3 sm:px-5 lg:px-6 py-4 sm:py-6 flex gap-4 lg:gap-5 flex-1 pb-24 md:pb-8">
