@@ -1445,17 +1445,42 @@ router.patch("/admin/listings/categories", async (req, res) => {
   const ids = req.body?.ids;
   const category = req.body?.category;
   const subcategory = req.body?.subcategory;
+  const thirdSlug = req.body?.thirdSlug;
   if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50 || !ids.every((id: unknown) => Number.isSafeInteger(id) && (id as number) > 0) || new Set(ids).size !== ids.length) {
     res.status(400).json({error:"Choose between 1 and 50 unique listing IDs."}); return;
   }
-  if (typeof category !== "string" || typeof subcategory !== "string" || !ADMIN_LISTING_CATEGORIES[category]?.includes(subcategory)) {
+  if (typeof category !== "string" || typeof subcategory !== "string" || !Object.hasOwn(ADMIN_LISTING_CATEGORIES, category) || !ADMIN_LISTING_CATEGORIES[category].includes(subcategory)) {
     res.status(400).json({error:"Choose a valid category and subcategory."}); return;
   }
+  if (thirdSlug !== undefined && typeof thirdSlug !== "string") {
+    res.status(400).json({error:"Choose a valid third-level category."}); return;
+  }
   try {
-    const updated = await db.execute(sql`UPDATE listings SET category=${category}, subcategory=${subcategory}, updated_at=NOW() WHERE id IN (${sql.join(ids.map((id: number) => sql`${id}`), sql`, `)}) RETURNING id,category,subcategory`);
-    if (updated.rows.length !== ids.length) { res.status(404).json({error:"One or more listings were not found; refresh and retry."}); return; }
-    await recordAdminAudit({req, category:"listings", action:"listings.recategorize", targetType:"listing", targetId:ids.length===1?String(ids[0]):"bulk", summary:`Changed category for ${ids.length} listing(s) to ${category}/${subcategory}`, after:{ids,category,subcategory}});
-    res.json({updated:updated.rows, count:updated.rows.length});
+    const result = await db.transaction(async tx => {
+      if (thirdSlug) {
+        const found = await tx.execute(sql`SELECT slug FROM third_level_categories
+          WHERE category=${category} AND subcategory=${subcategory} AND slug=${thirdSlug} FOR KEY SHARE`);
+        if (!found.rows.length) return {ok:false as const, error:"Choose a third-level category within the selected subcategory.", status:400};
+      }
+      const listingIds = sql.join(ids.map((id: number) => sql`${id}`), sql`, `);
+      const found = await tx.execute(sql`SELECT id FROM listings WHERE id IN (${listingIds}) ORDER BY id FOR UPDATE`);
+      if (found.rows.length !== ids.length) return {ok:false as const, error:"One or more listings were not found; refresh and retry.", status:404};
+
+      // Omitted thirdSlug keeps existing assignments only when their parent path is unchanged.
+      const specs = sql`COALESCE(NULLIF(specifications, '')::jsonb, '{}'::jsonb)`;
+      const sameParent = sql`(category = ${category} AND subcategory = ${subcategory})`;
+      const nextSpecs = thirdSlug === undefined
+        ? sql`CASE WHEN ${sameParent} THEN specifications ELSE (${specs} - 'admin_third_level_slug' - 'admin_category_review_approved_at')::text END`
+        : sql`CASE WHEN ${sameParent} AND COALESCE(${specs}->>'admin_third_level_slug', '') = ${thirdSlug}
+            THEN specifications
+            ELSE jsonb_set(${specs} - 'admin_category_review_approved_at', '{admin_third_level_slug}', to_jsonb(${thirdSlug}::text))::text END`;
+      const updated = await tx.execute(sql`UPDATE listings SET category=${category}, subcategory=${subcategory},
+        specifications=${nextSpecs}, updated_at=NOW() WHERE id IN (${listingIds}) RETURNING id, category, subcategory, specifications`);
+      return {ok:true as const, updated:updated.rows};
+    });
+    if (!result.ok) { res.status(result.status).json({error:result.error}); return; }
+    await recordAdminAudit({req, category:"listings", action:"listings.recategorize", targetType:"listing", targetId:ids.length===1?String(ids[0]):"bulk", summary:`Changed category for ${ids.length} listing(s) to ${[category,subcategory,thirdSlug].filter(Boolean).join("/")}`, after:{ids,category,subcategory,thirdSlug}});
+    res.json({updated:result.updated, count:result.updated.length});
   } catch (err) { logger.error({err}, "Failed to recategorize listings"); res.status(500).json({error:"Could not update listing categories."}); }
 });
 
@@ -1464,7 +1489,7 @@ router.post("/admin/listings/category-review", async (req,res)=>{
  const ids=req.body?.ids;
  if(!Array.isArray(ids)||ids.length<1||ids.length>50||!ids.every((x:unknown)=>Number.isSafeInteger(x)&&Number(x)>0)){res.status(400).json({error:"Select 1–50 listings"});return;}
  try{
- const rows=await db.execute(sql`SELECT l.id,l.title,l.category,l.subcategory,l.specifications, a.created_at AS historical_approved_at FROM listings l LEFT JOIN LATERAL (SELECT created_at FROM admin_audit_log WHERE action='listings.category-review' AND target_id=l.id::text AND after_data->>'category'=l.category AND after_data->>'subcategory'=COALESCE(l.subcategory,'') ORDER BY created_at DESC LIMIT 1) a ON TRUE WHERE l.id IN (${sql.join(ids.map((id:number)=>sql`${id}`),sql`,`)})`);
+ const rows=await db.execute(sql`SELECT l.id,l.title,l.category,l.subcategory,l.specifications, a.created_at AS historical_approved_at FROM listings l LEFT JOIN LATERAL (SELECT created_at FROM admin_audit_log WHERE action='listings.category-review' AND target_id=l.id::text AND after_data->>'category'=l.category AND after_data->>'subcategory'=COALESCE(l.subcategory,'') AND COALESCE(after_data->>'thirdSlug','')=COALESCE(NULLIF(l.specifications,'')::jsonb->>'admin_third_level_slug','') ORDER BY created_at DESC LIMIT 1) a ON TRUE WHERE l.id IN (${sql.join(ids.map((id:number)=>sql`${id}`),sql`,`)})`);
  const tax=await db.execute(sql`SELECT category,subcategory,slug,name,visible FROM third_level_categories`);
  const all=tax.rows as any[];
  const results=(rows.rows as any[]).map(l=>{

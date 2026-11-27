@@ -29,7 +29,16 @@ interface Listing {
   created_at: string;
 }
 
+interface ThirdLevelCategory {
+  category: string;
+  subcategory: string;
+  slug: string;
+  name: string;
+  visible: boolean;
+}
+
 interface Specs {
+  admin_third_level_slug?: string;
   amazon_url?: string;
   aliexpress_url?: string;
   aliexpress_id?: string;
@@ -180,23 +189,26 @@ export function AdminListingsPage() {
   const [reviewLoading,setReviewLoading]=useState(false);
   const [reviewError,setReviewError]=useState("");
   const [reviewBusy,setReviewBusy]=useState<number|null>(null);
-  const [taxonomy,setTaxonomy]=useState<{category:string;subcategory:string;slug:string;name:string;visible:boolean}[]>([]);
+  const [taxonomy,setTaxonomy]=useState<ThirdLevelCategory[]>([]);
+  async function loadThirdLevelCategories(): Promise<ThirdLevelCategory[]> {
+    const response = await authFetch("/api/admin/taxonomy/third-level");
+    if (!response.ok) throw new Error("Could not load third-level categories.");
+    const data = await response.json();
+    if (!Array.isArray(data.categories)) throw new Error("Could not load third-level categories.");
+    return data.categories;
+  }
   const [enableThirdIds,setEnableThirdIds]=useState<number[]>([]);
   async function checkCategories(){
     const ids=selectedIds.length?selectedIds.map(Number):listings.map(x=>x.id);
     if(!ids.length)return;
-    setReviewOpen(true);setReviewLoading(true);setReviewError("");
+    setReviewOpen(true);setReviewLoading(true);setReviewError("");setReviews([]);setEnableThirdIds([]);
     try{
-      const [a,b]=await Promise.all([
+      const [a,entries]=await Promise.all([
        authFetch("/api/admin/listings/category-review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids})}),
-       authFetch("/api/admin/taxonomy/third-level")
+       loadThirdLevelCategories()
       ]);
       const d=await a.json();
       if(!a.ok)throw Error(d.error||"Category check failed");
-      if(!b.ok)throw Error("Third-level taxonomy could not load (HTTP "+b.status+"). Review disabled rather than showing empty choices.");
-      const t=await b.json();
-      const entries=Array.isArray(t.categories)?t.categories:Array.isArray(t)?t:[];
-      if(!entries.length)throw Error("No third-level taxonomy entries returned. Category review requires taxonomy data.");
       // Audit every saved third-level row against its parent. Invalid and legacy
       // associations stay in the database for administrator review, but must not
       // be offered as suggestions under a different product department.
@@ -245,47 +257,87 @@ export function AdminListingsPage() {
       const d=await r.json().catch(()=>({}));
       if(!r.ok)throw Error(d.error||"Failed to move listing");
       setReviews(prev=>prev.map(v=>v.id===x.id?{...v,approved:true,approvedAt:new Date().toISOString(),category:x.suggestedCategory,subcategory:x.suggestedSubcategory,currentThird:x.suggestedThird}:v));
-      setListings(prev=>prev.map(v=>v.id===x.id?{...v,category:x.suggestedCategory,subcategory:x.suggestedSubcategory}:v));
+      setListings(prev => prev.map(listing => listing.id === x.id ? {
+        ...listing,
+        category: x.suggestedCategory,
+        subcategory: x.suggestedSubcategory,
+        specifications: JSON.stringify({...parseSpecs(listing.specifications), admin_third_level_slug: x.suggestedThird}),
+      } : listing));
       if(enableThird)setTaxonomy(prev=>prev.map(t=>t.category===x.suggestedCategory&&t.subcategory===x.suggestedSubcategory&&t.slug===x.suggestedThird?{...t,visible:true}:t));
     }catch(e){setReviewError(e instanceof Error?e.message:String(e));}finally{setReviewBusy(null);}
   }
   const [categoryEditing, setCategoryEditing] = useState<number | "bulk" | null>(null);
   const [categoryDraft, setCategoryDraft] = useState("electronics");
   const [subcategoryDraft, setSubcategoryDraft] = useState("audio");
+  const [thirdDraft, setThirdDraft] = useState<string>();
+  const [categoryTaxonomy, setCategoryTaxonomy] = useState<ThirdLevelCategory[]>([]);
+  const [categoryTaxonomyLoading, setCategoryTaxonomyLoading] = useState(false);
+  const [categoryTaxonomyError, setCategoryTaxonomyError] = useState("");
   const [categorySaving, setCategorySaving] = useState(false);
   const [categoryError, setCategoryError] = useState("");
   const categoryOptions = ACTIVE_CATEGORIES;
+  const thirdOptions = categoryTaxonomy.filter(
+    item => item.category === categoryDraft && item.subcategory === subcategoryDraft,
+  );
+  async function loadCategoryOptions() {
+    setCategoryTaxonomyLoading(true);
+    setCategoryTaxonomyError("");
+    try {
+      setCategoryTaxonomy(await loadThirdLevelCategories());
+    } catch (error) {
+      setCategoryTaxonomyError(error instanceof Error ? error.message : "Could not load third-level categories.");
+    } finally {
+      setCategoryTaxonomyLoading(false);
+    }
+  }
   function beginCategoryEdit(listing?: Listing) {
     setCategoryEditing(listing?.id ?? "bulk");
     const found=categoryOptions.find(c=>c.slug===listing?.category);
     setCategoryDraft(found?.slug ?? "electronics");
     setSubcategoryDraft(found?.subcategories.some(s=>s.slug===listing?.subcategory)?listing!.subcategory!:((found??categoryOptions.find(c=>c.slug==="electronics"))?.subcategories[0]?.slug??""));
+    setThirdDraft(undefined);
     setCategoryError("");
+    if (!categoryTaxonomyLoading) void loadCategoryOptions();
   }
   async function saveCategories() {
     const ids=categoryEditing==="bulk"?selectedIds.map(Number):[Number(categoryEditing)];
     if (!ids.length) return;
     setCategorySaving(true);setCategoryError("");
     try {
-      const res=await authFetch("/api/admin/listings/categories",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids,category:categoryDraft,subcategory:subcategoryDraft})});
+      const res=await authFetch("/api/admin/listings/categories",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids,category:categoryDraft,subcategory:subcategoryDraft,thirdSlug:thirdDraft})});
       const data=await res.json().catch(()=>null);
       if (!res.ok) throw new Error(data?.error || "Could not save categories.");
-      const changed=new Set(ids);
-      setListings(prev=>prev.map(l=>changed.has(l.id)?{...l,category:categoryDraft,subcategory:subcategoryDraft}:l));
+      const changed = new Map<number, Pick<Listing, "category" | "subcategory" | "specifications">>(
+        data.updated.map((row: Listing) => [row.id, row]),
+      );
+      setListings(prev => prev.map(listing => {
+        const update = changed.get(listing.id);
+        return update ? {...listing, ...update} : listing;
+      }));
       setCategoryEditing(null);setSelectedIds([]);
     } catch(e) {setCategoryError(e instanceof Error?e.message:"Could not save categories.");}
     finally {setCategorySaving(false);}
   }
-  const categoryFields=(<div className="flex flex-wrap items-center gap-2">
-    <select aria-label="New listing category" value={categoryDraft} onChange={e=>{setCategoryDraft(e.target.value);setSubcategoryDraft(categoryOptions.find(c=>c.slug===e.target.value)?.subcategories[0]?.slug??"");}} className="min-h-9 max-w-48 rounded-lg border border-slate-400 bg-white px-2 text-xs font-semibold text-slate-950 dark:border-slate-500 dark:bg-slate-800 dark:text-white">
+  const categoryFieldClass = "min-h-9 max-w-full rounded-lg border px-2 text-xs font-semibold";
+  const categoryFields=(<fieldset disabled={categorySaving} className="bz-listing-category-fields flex min-w-0 flex-wrap items-center gap-2">
+    <legend className="sr-only">Listing category assignment</legend>
+    <select aria-label="New listing category" value={categoryDraft} onChange={e=>{setCategoryDraft(e.target.value);setThirdDraft(undefined);setSubcategoryDraft(categoryOptions.find(c=>c.slug===e.target.value)?.subcategories[0]?.slug??"");}} className={categoryFieldClass}>
       {categoryOptions.map(c=><option key={c.slug} value={c.slug}>{c.name}</option>)}
     </select>
-    <select aria-label="New listing subcategory" value={subcategoryDraft} onChange={e=>setSubcategoryDraft(e.target.value)} className="min-h-9 max-w-48 rounded-lg border border-slate-400 bg-white px-2 text-xs font-semibold text-slate-950 dark:border-slate-500 dark:bg-slate-800 dark:text-white">
+    <select aria-label="New listing subcategory" value={subcategoryDraft} onChange={e=>{setSubcategoryDraft(e.target.value);setThirdDraft(undefined);}} className={categoryFieldClass}>
       {categoryOptions.find(c=>c.slug===categoryDraft)?.subcategories.map(s=><option key={s.slug} value={s.slug}>{s.name}</option>)}
     </select>
+    <select aria-label="New listing third-level category" className={categoryFieldClass}
+      disabled={categoryTaxonomyLoading || Boolean(categoryTaxonomyError)}
+      value={thirdDraft ?? "__keep__"} onChange={e => setThirdDraft(e.target.value === "__keep__" ? undefined : e.target.value)}>
+      <option value="__keep__">{categoryTaxonomyLoading ? "Loading third-level categories…" : "Keep third level if parent stays the same"}</option>
+      <option value="">No third-level category</option>
+      {thirdOptions.map(item => <option key={item.slug} value={item.slug}>{item.name}{item.visible ? "" : " (hidden)"}</option>)}
+    </select>
+    {categoryTaxonomyError && <span role="status">{categoryTaxonomyError} <button type="button" onClick={() => void loadCategoryOptions()}>Retry</button></span>}
     <button type="button" disabled={categorySaving} onClick={()=>void saveCategories()} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-60">{categorySaving?"Saving…":"Save category"}</button>
-    <button type="button" disabled={categorySaving} onClick={()=>{setCategoryEditing(null);setCategoryError("");}} className="rounded-lg border border-slate-400 px-3 py-2 text-xs font-bold text-slate-900 dark:text-white">Cancel</button>
-  </div>);
+    <button type="button" disabled={categorySaving} onClick={()=>{setCategoryEditing(null);setCategoryError("");}} className="rounded-lg border border-slate-400 px-3 py-2 text-xs font-bold">Cancel</button>
+  </fieldset>);
   const LIMIT = 50;
 
   useEffect(() => { if (!isAdmin) setLocation("/admin"); }, [isAdmin]);
@@ -339,20 +391,20 @@ export function AdminListingsPage() {
         {value:"all",label:"All listings"},{value:"active",label:"Live"},{value:"pending",label:"Pending"},
         {value:"draft",label:"Drafts"},{value:"suspended",label:"Suspended"},{value:"inactive",label:"Inactive"},{value:"sold",label:"Sold"}
       ]}/>
-      <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Listings management">
-        <button type="button" onClick={()=>void checkCategories()} className="rounded-lg border-2 border-cyan-300 !bg-blue-700 px-4 py-2 text-xs font-black !text-white hover:!bg-blue-600">Check Categories ({selectedIds.length||listings.length})</button>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button type="button" onClick={()=>void checkCategories()} disabled={loading || !listings.length || reviewLoading} className="rounded-lg border-2 border-cyan-300 !bg-blue-700 px-4 py-2 text-xs font-black !text-white hover:!bg-blue-600">Suggest categories ({selectedIds.length||listings.length})</button>
         <button type="button" onClick={()=>setLocation("/admin/listings/categories")} className="rounded-lg border-2 border-blue-400 !bg-blue-700 px-4 py-2 text-xs font-black !text-white hover:!bg-blue-600">Manage categories & subcategories →</button>
-        {([{id:"listings",label:"All Listings"},{id:"import-export",label:"Import / Export"}] as const).map(item=><button role="tab" aria-selected={view===item.id} key={item.id} type="button" onClick={()=>setView(item.id)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${view===item.id?"bg-blue-600 text-white border-blue-600":"border-slate-400 bg-white text-slate-950 dark:bg-slate-800 dark:text-white"}`}>{item.label}</button>)}
+        {([{id:"listings",label:"All Listings"},{id:"import-export",label:"Import / Export"}] as const).map(item=><button aria-pressed={view===item.id} key={item.id} type="button" onClick={()=>setView(item.id)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${view===item.id?"bg-blue-600 text-white border-blue-600":"border-slate-400 bg-white text-slate-950 dark:bg-slate-800 dark:text-white"}`}>{item.label}</button>)}
       </div>
-      {view!=="listings" ? <AdminListingCatalogueTools section={view}/> : <>
       {reviewOpen&&<div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-3"><section id="bazunk-listing-category-review" role="dialog" aria-modal="true" aria-label="Review listing categories" className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border-2 border-slate-500 !bg-[#14243c] !text-white shadow-2xl">
-        <header className="flex items-center justify-between gap-3 border-b border-slate-500 p-4"><div><h2 className="text-xl font-black text-white">Check listing categories</h2><p className="text-xs text-slate-200">Already-approved listings are marked Checked. You can still change their categories and approve again.</p></div><button className="rounded-lg border-2 border-slate-400 !bg-[#273b56] px-4 py-2 font-black !text-white" onClick={()=>setReviewOpen(false)}>Close</button></header>
+        <header className="flex items-center justify-between gap-3 border-b border-slate-500 p-4"><div><h2 className="text-xl font-black text-white">Review suggested categories</h2><p className="text-xs text-slate-200">Already-approved listings are marked Checked. You can still change their categories and approve again.</p></div><button className="rounded-lg border-2 border-slate-400 !bg-[#273b56] px-4 py-2 font-black !text-white" onClick={()=>setReviewOpen(false)}>Close</button></header>
         {reviewError&&<p role="alert" className="m-3 rounded-lg border border-red-400 !bg-red-900 p-3 font-bold text-white">{reviewError}</p>}
         <div className="flex-1 space-y-3 overflow-y-auto p-4">{reviewLoading?<p className="text-white">Checking categories…</p>:reviews.map(x=>{const choices=ACTIVE_CATEGORIES.find(c=>c.slug===x.suggestedCategory)?.subcategories||[];const thirdOptions=taxonomy.filter(t=>t.category===x.suggestedCategory&&t.subcategory===x.suggestedSubcategory);const chosen=thirdOptions.find(t=>t.slug===x.suggestedThird);return <div key={x.id} className="rounded-xl border border-slate-500 !bg-[#213651] p-4 text-white">
           <div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div className="max-w-2xl"><strong className="text-sm text-white">{x.title}</strong><p className="mt-1 text-xs text-slate-200">Current: {ACTIVE_CATEGORIES.find(c=>c.slug===x.category)?.name||x.category} / {ACTIVE_CATEGORIES.find(c=>c.slug===x.category)?.subcategories.find(sc=>sc.slug===x.subcategory)?.name||x.subcategory||"none"} / {x.currentThird||"none"}</p></div><span className="rounded border border-sky-300 !bg-[#194b83] px-2 py-1 text-xs font-black !text-white">{x.approved?"✓ Checked · Already approved":"Suggestion confidence: "+x.confidence}</span></div>
           <div className="grid gap-2 md:grid-cols-3">{[1].map(()=> <Fragment key="fields"><label className="text-xs font-bold text-white">Main category<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedCategory} onChange={e=>{const cat=ACTIVE_CATEGORIES.find(c=>c.slug===e.target.value);patchReview(x.id,{suggestedCategory:e.target.value,suggestedSubcategory:cat?.subcategories[0]?.slug||"",suggestedThird:""});}}>{ACTIVE_CATEGORIES.map(c=><option key={c.slug} value={c.slug}>{c.name}</option>)}</select></label><label className="text-xs font-bold text-white">Subcategory<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedSubcategory} onChange={e=>patchReview(x.id,{suggestedSubcategory:e.target.value,suggestedThird:""})}>{choices.map(c=><option key={c.slug} value={c.slug}>{c.name}</option>)}</select></label><label className="text-xs font-bold text-white">Third-level category<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedThird} onChange={e=>patchReview(x.id,{suggestedThird:e.target.value})}><option value="">None / review later</option>{thirdOptions.map(t=><option key={t.slug} value={t.slug}>{t.name}{t.visible?"":" (hidden)"}</option>)}</select></label></Fragment>)}</div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">{chosen&&!chosen.visible?<label className="flex items-center gap-2 text-xs font-bold text-white"><input type="checkbox" checked={enableThirdIds.includes(x.id)} onChange={e=>setEnableThirdIds(prev=>e.target.checked?[...prev,x.id]:prev.filter(id=>id!==x.id))}/> Enable this hidden third-level category on the site</label>:<span className="text-xs text-slate-200">{chosen?"Third-level already enabled":"No third-level selected"}</span>}<button disabled={reviewBusy===x.id} onClick={()=>void approveReview(x)} className="rounded-lg border-2 border-blue-200 !bg-[#114ab1] px-4 py-2 text-sm font-black !text-white hover:!bg-[#1d63c7]">{reviewBusy===x.id?"Saving…":x.approved?"Save Changes / Reapprove":"Approve & Mark Checked"}</button></div>
-        </div>})}{!reviewLoading&&!reviews.length&&<p className="text-white">No listings left to review.</p>}</div></section></div>}
+        </div>})}{!reviewLoading&&!reviewError&&!reviews.length&&<p className="text-white">No listings left to review.</p>}</div></section></div>}
+      {view!=="listings" ? <AdminListingCatalogueTools section={view}/> : <>
       {actionError&&<p role="alert" className="my-2 rounded-lg border border-red-500 p-3 font-bold text-red-500">{actionError}</p>}
       {/* Controls */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -405,7 +457,7 @@ export function AdminListingsPage() {
         {bulkPromoMessage&&<p role="status" className="mt-3 text-sm font-semibold">{bulkPromoMessage}</p>}
       </div>}
       {selectedIds.length>0 && <div className="mb-3"><button type="button" onClick={()=>beginCategoryEdit()} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">Change category for {selectedIds.length} selected</button></div>}
-      {categoryEditing==="bulk"&&<div className="mb-3 rounded-xl border border-blue-400 bg-blue-50 p-3 text-slate-950 dark:bg-slate-900 dark:text-white"><p className="mb-2 text-xs font-bold">Change category for {selectedIds.length} selected listings</p>{categoryFields}{categoryError&&<p role="alert" className="mt-2 text-xs font-bold text-red-500">{categoryError}</p>}</div>}
+      {categoryEditing==="bulk"&&<div className="bz-listing-category-editor mb-3 rounded-xl border p-3"><p className="mb-2 text-xs font-bold">Change category for {selectedIds.length} selected listings</p>{categoryFields}{categoryError&&<p role="alert" className="mt-2 text-xs font-bold text-red-500">{categoryError}</p>}</div>}
       {/* Table */}
       <div className="wp-management-table-card rounded-xl border border-slate-300 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-900">
         <div className="w-full overflow-x-hidden">
@@ -469,6 +521,7 @@ export function AdminListingsPage() {
                     <td className="px-2 py-3 break-words text-xs text-slate-700 dark:text-slate-200 align-top">
                       <span className="capitalize">{l.category.replace(/-/g, " ")}</span>
                       {l.subcategory && <span className="text-slate-600 dark:text-slate-200"> · {l.subcategory.replace(/-/g, " ")}</span>}
+                      {specs.admin_third_level_slug && <span className="text-slate-600 dark:text-slate-200"> · {specs.admin_third_level_slug.replace(/-/g, " ")}</span>}
                     </td>
 
                     {/* Price */}
@@ -508,7 +561,7 @@ export function AdminListingsPage() {
                       
                       </div>
                       {sharingId===l.id&&<div className="mt-3 rounded-xl border border-orange-500 bg-[#132a48] p-4 text-white"><h4 className="mb-2 text-sm font-extrabold">Sharing &amp; trust · Listing #{l.id}</h4><div className="flex flex-wrap gap-2"><button type="button" onClick={()=>void copyAdminListingLink(l)} className="rounded-lg border border-[#6b88ab] px-3 py-2 text-xs font-bold hover:bg-[#284a70]"><Link2 className="mr-1 inline h-3.5 w-3.5"/>Copy public URL</button><a href={publicListingUrl(l)} target="_blank" rel="noopener noreferrer" className="rounded-lg border border-[#6b88ab] px-3 py-2 text-xs font-bold text-white hover:bg-[#284a70]"><ExternalLink className="mr-1 inline h-3.5 w-3.5"/>Open listing</a><a href="/admin/support" className="rounded-lg border border-orange-500 px-3 py-2 text-xs font-bold text-orange-200 hover:bg-[#284a70]"><Flag className="mr-1 inline h-3.5 w-3.5"/>Review support tickets</a></div><p className="mt-2 text-xs text-slate-200">Listing reports are submitted as support tickets. Review incoming reports in the support workspace before changing listing visibility.</p></div>}
-                      {categoryEditing===l.id && <div className="mt-2 rounded-lg border border-slate-400 bg-white p-2 dark:bg-slate-900">{categoryFields}{categoryError&&<p role="alert" className="mt-2 text-xs font-bold text-red-500">{categoryError}</p>}</div>}
+                      {categoryEditing===l.id && <div className="bz-listing-category-editor mt-2 rounded-lg border p-2">{categoryFields}{categoryError&&<p role="alert" className="mt-2 text-xs font-bold text-red-500">{categoryError}</p>}</div>}
                       {imageEditing === l.id && <div className="mt-2 rounded-lg border border-gray-200 p-2 bg-gray-50"><input autoFocus value={imageDraft} onChange={e=>setImageDraft(e.target.value)} placeholder="https://… image URL" className="w-full rounded-md border bg-white px-2 py-1.5 text-xs text-gray-800" /><div className="mt-2 flex gap-2"><button disabled={imageSaving===l.id} onClick={()=>void saveImage(l)} className="rounded-md bg-[#4A5CE8] text-white px-2 py-1 text-[10px] font-bold disabled:opacity-50">{imageSaving===l.id?"Saving…":"Save image"}</button><button onClick={()=>{setImageEditing(null);setImageDraft("");setImageError("");}} className="rounded-md border px-2 py-1 text-[10px] font-bold">Cancel</button>{l.image&&<button disabled={imageSaving===l.id} onClick={()=>void saveImage(l,"")} className="text-[10px] text-red-600 ml-auto">Remove</button>}</div>{imageError&&<p className="text-[10px] text-red-600 mt-1">{imageError}</p>}</div>}
 
                       </div>

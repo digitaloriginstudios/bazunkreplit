@@ -14,3 +14,20 @@
 .bz-admin-listing-actions [class*="bg-red-700"]{background:#b91c1c!important}
 .bz-admin-listing-actions [class*="bg-[#92400e]"]{background:#92400e!important}
 .bz-admin-listing-actions .bg-white input{color:#0f172a!important}
+
+.bazunk-admin.bazunk-admin-wordpress main .bz-listing-category-editor{
+  background:var(--admin-readable-panel)!important;
+  border-color:var(--admin-readable-border)!important;
+  color:var(--admin-readable-ink)!important;
+}
+.bazunk-admin.bazunk-admin-wordpress main .bz-listing-category-editor select{
+  background:var(--admin-readable-field)!important;
+  color:var(--admin-readable-ink)!important;
+  -webkit-text-fill-color:currentColor!important;
+}
+.bazunk-admin.bazunk-admin-wordpress main .bz-listing-category-editor [role="alert"]{
+  color:#b91c1c!important;
+}
+.dark .bazunk-admin.bazunk-admin-wordpress main .bz-listing-category-editor [role="alert"]{
+  color:#fca5a5!important;
+}
