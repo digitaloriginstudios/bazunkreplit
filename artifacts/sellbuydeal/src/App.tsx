@@ -105,6 +105,7 @@ const ImportersPage = React.lazy(() => import("@/pages/ImportersPage").then(modu
 const ImporterWorkspacePage = React.lazy(() => import("@/pages/ImporterWorkspacePage").then(module => ({ default: module.ImporterWorkspacePage })));
 import {DiscoveryPage,discoveryPages} from "@/pages/DiscoveryPage";
 import { BrowsePage } from "@/pages/BrowsePage";
+const CreatorsPage = React.lazy(() => import("@/pages/CreatorsPage").then(module => ({ default: module.CreatorsPage })));
 const ProductPollsPage = React.lazy(() => import("@/pages/ProductPollsPage").then(module => ({ default: module.ProductPollsPage })));
 const CollectionsPage = React.lazy(() => import("@/pages/CollectionsPage").then(module => ({ default: module.CollectionsPage })));
 const CollectionDetailPage = React.lazy(() => import("@/pages/CollectionsPage").then(module => ({ default: module.CollectionDetailPage })));
@@ -458,6 +459,9 @@ function Router() {
       <Route path="/collections/join">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_collections" name="Collections"><CollectionJoinPage /></FeatureGate></FeatureGate>}</Route>
       <Route path="/collections/:slug">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_collections" name="Collections"><CollectionDetailPage /></FeatureGate></FeatureGate>}</Route>
       <Route path="/collections">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_collections" name="Collections"><CollectionsPage /></FeatureGate></FeatureGate>}</Route>
+      <Route path="/creators/studio">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_creators" name="Creator storefronts"><CreatorsPage studio /></FeatureGate></FeatureGate>}</Route>
+      <Route path="/creators/:slug">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_creators" name="Creator storefronts"><CreatorsPage /></FeatureGate></FeatureGate>}</Route>
+      <Route path="/creators">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_creators" name="Creator storefronts"><CreatorsPage /></FeatureGate></FeatureGate>}</Route>
       <Route path="/social/polls/:id">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_polls" name="Product polls"><ProductPollsPage /></FeatureGate></FeatureGate>}</Route>
       <Route path="/social/polls">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_polls" name="Product polls"><ProductPollsPage /></FeatureGate></FeatureGate>}</Route>
       <Route path="/social">{() => <FeatureGate feature="social" name="Bazunk Social"><SocialPage /></FeatureGate>}</Route>

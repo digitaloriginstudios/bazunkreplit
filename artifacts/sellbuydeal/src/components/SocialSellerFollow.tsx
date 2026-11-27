@@ -3,16 +3,41 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { useFeature } from "@/components/FeatureGate";
 
-type Seller = { own: boolean; following: boolean; hasProfile: boolean };
+type SocialProfile = { own: boolean; following: boolean; hasProfile: boolean };
 
 export function SocialSellerFollow({ email }: { email: string }) {
+  const query = `email=${encodeURIComponent(email)}`;
+  return (
+    <SocialFollow
+      lookup={`seller?${query}`}
+      action={`seller/follow?${query}`}
+      label="seller"
+    />
+  );
+}
+
+export function SocialCreatorFollow({ username }: { username: string }) {
+  const lookup = `people/${encodeURIComponent(username)}`;
+  return (
+    <SocialFollow lookup={lookup} action={`${lookup}/follow`} label="creator" />
+  );
+}
+
+function SocialFollow({
+  lookup,
+  action,
+  label,
+}: {
+  lookup: string;
+  action: string;
+  label: string;
+}) {
   const { isSignedIn, getToken, userId } = useAuth();
   const social = useFeature("social");
   const profiles = useFeature("social_profiles");
   const follows = useFeature("social_follows");
   const enabled = social && profiles && follows && isSignedIn;
-  const query = `email=${encodeURIComponent(email)}`;
-  const [seller, setSeller] = useState<Seller | null>(null);
+  const [seller, setSeller] = useState<SocialProfile | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -24,7 +49,7 @@ export function SocialSellerFollow({ email }: { email: string }) {
     void (async () => {
       const token = await getToken();
       if (!token || controller.signal.aborted) return;
-      const response = await fetch(`/api/social/seller?${query}`, {
+      const response = await fetch(`/api/social/${lookup}`, {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal,
       });
@@ -33,7 +58,7 @@ export function SocialSellerFollow({ email }: { email: string }) {
       if (!controller.signal.aborted) setSeller(profile);
     })().catch(() => {});
     return () => controller.abort();
-  }, [enabled, userId, query, getToken]);
+  }, [enabled, userId, lookup, getToken]);
 
   if (!enabled || !seller || seller.own) return null;
   const button =
@@ -51,7 +76,7 @@ export function SocialSellerFollow({ email }: { email: string }) {
     try {
       const token = await getToken();
       if (!token) throw new Error("Please sign in again.");
-      const response = await fetch(`/api/social/seller/follow?${query}`, {
+      const response = await fetch(`/api/social/${action}`, {
         method: following ? "DELETE" : "PUT",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -79,7 +104,7 @@ export function SocialSellerFollow({ email }: { email: string }) {
         aria-pressed={seller.following}
         onClick={() => void toggle(seller.following)}
       >
-        {seller.following ? "Unfollow seller" : "Follow seller"}
+        {seller.following ? `Unfollow ${label}` : `Follow ${label}`}
       </button>
       {error && (
         <p className="mt-2 text-sm text-red-600" role="alert">
