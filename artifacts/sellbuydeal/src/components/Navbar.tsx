@@ -142,7 +142,7 @@ const MOBILE_NAV_LINKS = [
   { href: "/videos",           label: "Promotional Videos", icon: Film },
 ];
 
-export function Navbar() {
+export function Navbar({ watchlistCount }: { watchlistCount?: number } = {}) {
   const { user, logout } = useAuth();
   const { itemCount, openCart } = useCart();
   const { currency, setCurrency, formatPrice, country, setCountry } = useCurrency();
@@ -326,7 +326,7 @@ export function Navbar() {
           <div className="bz-mockup-top-links">
             <Link href="/support">Help</Link>
             <button type="button" onClick={() => {setMoreOpen(false);setSellOpen(false);setProtectionOpen(true)}} aria-haspopup="dialog" aria-expanded={protectionOpen}><ShieldCheck size={17}/> Buyer Protection</button>
-            <Link href="/dashboard?section=watchlist"><Heart size={18} className="text-sky-400"/> Watchlist</Link>
+            <Link href="/dashboard?section=watchlist"><Heart size={18} className="text-sky-400"/> Watchlist {watchlistCount !== undefined && watchlistCount > 0 && <span key={watchlistCount} className="bz-browse-wishlist-count">{watchlistCount}</span>}</Link>
             <button type="button" onClick={() => {setSellOpen(false);setMoreOpen(v=>!v)}} aria-haspopup="dialog" aria-expanded={moreOpen} data-testid="button-more-nav" className="bz-mockup-top-more"><Grid3X3 size={17}/> More <ChevronDown size={14} className={moreOpen?"rotate-180":""}/></button>
              <button type="button" onClick={() => {setMoreOpen(false);setSellOpen(true)}} className="bz-mockup-top-sell"><Store size={17}/> Sell on Bazunk</button>
           </div>
