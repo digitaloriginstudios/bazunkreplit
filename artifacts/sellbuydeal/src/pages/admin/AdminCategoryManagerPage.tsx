@@ -77,7 +77,7 @@ export function AdminCategoryManagerPage(){
  const proposals=useMemo(()=>category?.subcategories.flatMap(s=>thirdLevelProposals(selected,s.slug,s.name).map(n=>({name:n,subcategory:s.slug,slug:thirdLevelSlug(n)}))).filter(p=>!third.some(x=>x.category===selected&&x.subcategory===p.subcategory&&x.slug===p.slug))??[],[category,selected,third]);
  const nav:[View,string][]=[["overview","Overview"],["tree","Category Tree"],["subcategories","Subcategories"],["third","3rd-Level Taxonomy"],["hidden","Hidden Categories"],["import","Import / Export"]];
  const showEditor=view!=="hidden"&&view!=="import";
- return <AdminLayout><div className="bz-taxonomy">
+ return <AdminLayout><div id="bazunk-admin-taxonomy" className="bz-taxonomy">
   <div className="bz-taxonomy-head"><div><h1>Categories &amp; Taxonomy</h1><p>Manage your catalog structure, visibility, sorting and taxonomy rules.</p></div><div className="bz-taxonomy-actions"><button onClick={()=>window.open("/browse","_blank")}><Eye size={16}/> Preview navigation</button><button className="primary" onClick={save} disabled={saving||!dirty}><Save size={16}/>{saving?"Saving…":dirty?"Save Changes *":"All changes saved"}</button></div></div>
   {message&&<div role="status" className="bz-taxonomy-message">{message}</div>}
   <div className="bz-taxonomy-stats">{([["Main Categories",top.length,FolderTree],["Subcategories",items.filter(x=>x.subcategory_slug).length,Layers3],["3rd-Level Categories",totalThird,Layers3],["Hidden Items",hidden,EyeOff]] as [string,number,typeof FolderTree][]).map(([name,num,Icon])=><div className="bz-taxonomy-stat" key={String(name)}><Icon size={26}/><div><span>{String(name)}</span><strong>{num as number}</strong></div></div>)}</div>
