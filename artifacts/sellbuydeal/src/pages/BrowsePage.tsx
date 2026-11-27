@@ -2,7 +2,7 @@ import { BrowseSponsoredListings } from "@/components/BrowseSponsoredListings";
 import { useMarketplaceLoadingDelay } from "@/components/useMarketplaceLoadingDelay";
 import { MarketplaceLoader } from "@/components/MarketplaceLoader";
 import { useAuth as useClerkAuth } from "@clerk/react";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import { useSearch, useLocation, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
@@ -38,7 +38,9 @@ interface ApiListing {
   views: number;
   watchers: number;
   status: string;
-  created_at: string;
+  created_at?: string;
+  createdAt?: string;
+  sellerName?: string | null;
   promotions?: string[];
   publicId?: string | null;
   public_id?: string | null;
@@ -69,8 +71,8 @@ function mapApiListing(l: ApiListing): typeof ALL_PRODUCTS[0] & { subcategory?: 
     watchers: l.watchers ?? 0,
     verified: false,
     location: l.shipOriginOther || l.shipOrigin || (l.marketplaceRegion === "us" ? "USA" : l.marketplaceRegion === "uk" ? "UK" : "Location not specified"),
-    listed: l.created_at ?? new Date().toISOString(),
-    seller: { name: l.seller_name ?? "Seller", verified: false, rating: 4.5, reviews: 0 },
+    listed: l.createdAt ?? l.created_at ?? new Date().toISOString(),
+    seller: { name: l.sellerName ?? l.seller_name ?? "Seller", verified: false, rating: 4.5, reviews: 0 },
     description: "",
     tags: [],
     badges: [],
@@ -209,7 +211,7 @@ function ProductCard({ product, view, promotions = [] }: { product: typeof ALL_P
         </div>
       </div>
       <div className="bz-browse-product-details p-2.5 sm:p-3 flex flex-col flex-1">
-        <h3 className="bz-browse-product-title text-[13px] leading-[1.35rem] sm:text-sm font-bold text-slate-900 dark:text-white line-clamp-2 min-h-[2.7rem] transition-colors mb-auto break-words">{product.title}</h3>
+        <h3 className="bz-browse-product-title text-[13px] leading-[1.35rem] sm:text-sm font-bold text-slate-900 dark:text-white line-clamp-2 h-[2lh] transition-colors mb-auto break-words">{product.title}</h3>
         <div className="mt-3">
           <div className="flex min-w-0 items-center justify-between gap-1 mb-1.5">
             <span className="bz-browse-price text-xl font-extrabold tracking-tight text-orange-600">{formatPrice(product.price)}</span>
@@ -227,7 +229,13 @@ function ProductCard({ product, view, promotions = [] }: { product: typeof ALL_P
   );
 }
 
-const browseCache = new Map<string, { items: ApiListing[]; time: number }>();
+type BrowseResults = {
+  listings: ApiListing[];
+  total: number | null;
+  conditionCounts?: Record<string, number>;
+};
+
+const browseCache = new Map<string, { results: BrowseResults; time: number }>();
 const BROWSE_CACHE_TTL = 45_000;
 const BROWSE_CACHE_MAX = 30;
 function getCachedBrowse(key: string) {
@@ -236,11 +244,11 @@ function getCachedBrowse(key: string) {
     if (cached) browseCache.delete(key);
     return null;
   }
-  return cached.items;
+  return cached.results;
 }
-function cacheBrowse(key: string, items: ApiListing[]) {
+function cacheBrowse(key: string, results: BrowseResults) {
   if (browseCache.size >= BROWSE_CACHE_MAX) browseCache.delete(browseCache.keys().next().value!);
-  browseCache.set(key, { items, time: Date.now() });
+  browseCache.set(key, { results, time: Date.now() });
 }
 
 export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
@@ -281,17 +289,11 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
   const [freeShipping, setFreeShipping] = useState(params.get("freeShipping")==="true");
   const [minRating, setMinRating] = useState<number | null>(null);
   const [listedWithin, setListedWithin] = useState(params.get("listedWithin")||"any");
-  const [apiListings, setApiListings] = useState<(typeof ALL_PRODUCTS[0] & { subcategory?: string; promotions: string[] })[]>([]);
-  const [hasMoreListings, setHasMoreListings] = useState(true);
-  const [currentPage,setCurrentPage] = useState(1);
-  const [highestPage,setHighestPage] = useState(1);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const moreController = useRef<AbortController | null>(null);
-  const scopeRef = useRef("");
+  const [results, setResults] = useState<BrowseResults>({ listings: [], total: null });
+  const [pageSelection, setPageSelection] = useState({ scope: "", page: 1 });
   const [loadingListings, setLoadingListings] = useState(true);
   const delayedLoading = useMarketplaceLoadingDelay(loadingListings, "browse");
   const [listingError, setListingError] = useState<string | null>(null);
-  const [moreError, setMoreError] = useState<string | null>(null);
   const [saveOpen,setSaveOpen] = useState(false);
   const [saveName,setSaveName] = useState("");
   const [saveAlert,setSaveAlert] = useState(true);
@@ -348,8 +350,19 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
   if (shipTo.length) browseScope.set("shipTo", shipTo.join(","));
   if (freeShipping) browseScope.set("freeShipping", "true");
   if (listedWithin !== "any") browseScope.set("listedWithin", listedWithin);
+  if (verifiedOnly) browseScope.set("verifiedOnly", "true");
+  if (minRating !== null) browseScope.set("minRating", String(minRating));
   const browseScopeQuery = browseScope.toString();
-  useEffect(()=>{setCurrentPage(1);setHighestPage(1);},[browseScopeQuery]);
+  const currentPage = pageSelection.scope === browseScopeQuery ? pageSelection.page : 1;
+  useEffect(() => {
+    setPageSelection(selection => selection.scope === browseScopeQuery ? selection : { scope: browseScopeQuery, page: 1 });
+  }, [browseScopeQuery]);
+  const lastPage = results.total === null ? currentPage + Number(results.listings.length === LISTING_BATCH)
+    : Math.max(1, Math.ceil(results.total / LISTING_BATCH));
+  const pageNumbers = lastPage <= 12 ? Array.from({ length: lastPage }, (_, index) => index + 1)
+    : [...new Set([1, currentPage - 2, currentPage - 1, currentPage, currentPage + 1, currentPage + 2, lastPage])]
+      .filter(page => page > 0 && page <= lastPage);
+
 
 
   useEffect(() => {
@@ -376,56 +389,46 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
 
   useEffect(() => {
     const controller = new AbortController();
-    moreController.current?.abort();
-    scopeRef.current = browseScopeQuery;
-    setLoadingMore(false);
-    setMoreError(null);
     setListingError(null);
-    const offset = (currentPage-1)*LISTING_BATCH;
+    const offset = (currentPage - 1) * LISTING_BATCH;
     const key = `listings:${LISTING_BATCH}:${offset}:${browseScopeQuery}`;
     const cached = loadAttempt === 0 ? getCachedBrowse(key) : null;
     if (cached) {
-      setApiListings(cached.map(mapApiListing));
-      setHasMoreListings(cached.length === LISTING_BATCH);
+      setResults(cached);
       setLoadingListings(false);
-      return () => controller.abort();
+      return;
     }
     setLoadingListings(true);
-    setApiListings([]);
-    setHasMoreListings(true);
-    const timeout = setTimeout(() => controller.abort(), 12000);
-    fetch(`${API_BASE}/api/listings?limit=${LISTING_BATCH}&offset=${offset}${browseScopeQuery ? `&${browseScopeQuery}` : ""}`, { signal: controller.signal })
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`Listings API returned HTTP ${r.status}`);
-        const data: ApiListing[] = await r.json();
-        if (!Array.isArray(data)) throw new Error("Invalid listings response");
+    const timeout = setTimeout(() => controller.abort("timeout"), 12000);
+    fetch(`${API_BASE}/api/listings?includeTotals=true&limit=${LISTING_BATCH}&offset=${offset}&${browseScopeQuery}`, { signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error(`Listings API returned HTTP ${response.status}`);
+        const payload: BrowseResults | ApiListing[] = await response.json();
+        const data: BrowseResults = Array.isArray(payload) ? { listings: payload, total: null } : payload;
+        if (!Array.isArray(data?.listings)) throw new Error("Invalid listings response");
         if (controller.signal.aborted) return;
-        cacheBrowse(key, data);
-        setApiListings(data.map(mapApiListing));
-        setHasMoreListings(data.length === LISTING_BATCH);
-      })
-      .catch((error) => {
-        if (!controller.signal.aborted) setListingError(error instanceof Error ? error.message : "We couldn’t load listings. Please try again.");
-        else if (controller.signal.reason !== undefined && controller.signal.reason !== "scope-change") {
-          // Timeout: offer a retry rather than leave the loading skeleton forever.
-          setListingError("Listings are taking too long to respond. Please try again.");
+        const maxPage = data.total === null ? currentPage : Math.max(1, Math.ceil(data.total / LISTING_BATCH));
+        if (currentPage > maxPage) {
+          setPageSelection({ scope: browseScopeQuery, page: maxPage });
+          return;
         }
+        cacheBrowse(key, data);
+        setResults(data);
+      })
+      .catch(error => {
+        if (!controller.signal.aborted) setListingError(error instanceof Error ? error.message : "We couldn’t load listings. Please try again.");
+        else if (controller.signal.reason === "timeout") setListingError("Listings are taking too long to respond. Please try again.");
       })
       .finally(() => {
         clearTimeout(timeout);
-        if (scopeRef.current === browseScopeQuery) setLoadingListings(false);
+        if (controller.signal.reason !== "scope-change") setLoadingListings(false);
       });
     return () => { clearTimeout(timeout); controller.abort("scope-change"); };
   }, [loadAttempt, browseScopeQuery, currentPage]);
 
-  useEffect(() => () => moreController.current?.abort(), []);
-
-  function goToPage(page:number) {
-    if(page<1||loadingListings||page===currentPage)return;
-    if(page>highestPage && !hasMoreListings)return;
-    setHighestPage(n=>Math.max(n,page));
-    setCurrentPage(page);
-    setMoreError(null);
+  function goToPage(page: number) {
+    if (page < 1 || page > lastPage || loadingListings || page === currentPage) return;
+    setPageSelection({ scope: browseScopeQuery, page });
     window.scrollTo({top:Math.max(0,(document.querySelector(".bz-browse-results")?.getBoundingClientRect().top||0)+window.scrollY-90),behavior:"smooth"});
   }
 
@@ -457,34 +460,7 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
     }
   }, [urlCategory]);
 
-  // Public browsing must use the live listings API, not stale demo products.
-  const allListings = useMemo(() => apiListings, [apiListings]);
-
-  const filtered = useMemo(() => {
-    let result = [...allListings];
-
-    if (verifiedOnly) {
-      result = result.filter((p) => p.verified);
-    }
-    if (minRating !== null) {
-      result = result.filter((p) => ((p as unknown as Record<string, unknown>).rating as number ?? 0) >= minRating);
-    }
-
-    switch (sort) {
-      case "price-asc":
-      case "price-lowest":
-        result.sort((a, b) => a.price - b.price); break;
-      case "price-desc":
-        result.sort((a, b) => b.price - a.price); break;
-      case "views":
-        result.sort((a, b) => b.views - a.views); break;
-      case "newest":
-      default:
-        result.sort((a, b) => new Date(b.listed).getTime() - new Date(a.listed).getTime());
-    }
-
-    return result;
-  }, [allListings, query, selectedCategories, selectedSubcategories, selectedThirdLevels, selectedConditions, minPrice, maxPrice, verifiedOnly, shipFrom, shipTo, freeShipping, minRating, listedWithin, sort]);
+  const filtered = useMemo(() => results.listings.map(mapApiListing), [results.listings]);
 
   function toggleCategory(slug: string) {
     setSelectedCategories((prev) => {
@@ -646,8 +622,8 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
 
       <FilterSection title="Condition">
         <div className="space-y-1.5">
-          {Array.from(new Set([...CONDITIONS, ...allListings.map((p) => p.condition)])).map((c) => {
-            const count = allListings.filter((p) => p.condition === c).length;
+          {Array.from(new Set([...CONDITIONS, ...Object.keys(results.conditionCounts ?? {})])).map((c) => {
+            const count = results.conditionCounts ? results.conditionCounts[c] ?? 0 : "—";
             return (
               <label key={c} className="flex items-center justify-between gap-2 cursor-pointer group py-0.5">
                 <div className="flex items-center gap-2">
@@ -1020,7 +996,7 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
           <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
             <div>
               <h1 className="bz-browse-results-title text-xl font-extrabold text-[#0b2243]">{pageTitle}</h1>
-              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{loadingListings ? "Loading listings…" : listingError ? "Listings unavailable" : `Page ${currentPage} · ${filtered.length} listing${filtered.length !== 1 ? "s" : ""} shown`}</p>
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{loadingListings ? "Loading listings…" : listingError ? "Listings unavailable" : results.total === null ? `Page ${currentPage} · ${filtered.length} shown` : `${results.total.toLocaleString("en-GB")} listing${results.total === 1 ? "" : "s"} · Page ${currentPage} of ${lastPage}`}</p>
             </div>
             <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
               <button type="button" onClick={()=>{setSaveOpen(v=>!v);setSaveFeedback("");setSaveSuccess(false);}}
@@ -1098,11 +1074,17 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
             </div>
           )}
           {!loadingListings && !listingError && collection===undefined && <BrowseSponsoredListings category={selectedCategories.length===1?selectedCategories[0]:undefined} />}
-          {!loadingListings && !listingError && (currentPage>1 || hasMoreListings) && (
+          {!loadingListings && !listingError && lastPage > 1 && (
             <nav className="bz-browse-pagination" aria-label="Listing pages">
               <button type="button" disabled={currentPage===1} onClick={()=>goToPage(currentPage-1)} aria-label="Previous page">‹ <span>Previous</span></button>
-              {Array.from({length:Math.max(highestPage,currentPage+(hasMoreListings?1:0))},(_,i)=>i+1).filter(n=>n===1||n===highestPage||Math.abs(n-currentPage)<=2||n===currentPage+1&&hasMoreListings).map(n=><button type="button" key={n} aria-current={n===currentPage?"page":undefined} className={n===currentPage?"active":""} onClick={()=>goToPage(n)}>{n}</button>)}
-              <button type="button" disabled={!hasMoreListings} onClick={()=>goToPage(currentPage+1)} aria-label="Next page"><span>Next</span> ›</button>
+              {pageNumbers.map((page, index) => (
+                <span key={page} className="flex items-center gap-2">
+                  {index > 0 && page - pageNumbers[index - 1] > 1 && <span aria-hidden="true">…</span>}
+                  <button type="button" aria-label={`Page ${page}`} aria-current={page === currentPage ? "page" : undefined}
+                    className={page === currentPage ? "active" : ""} onClick={() => goToPage(page)}>{page}</button>
+                </span>
+              ))}
+              <button type="button" disabled={currentPage >= lastPage} onClick={()=>goToPage(currentPage+1)} aria-label="Next page"><span>Next</span> ›</button>
             </nav>
           )}
 
@@ -1140,7 +1122,7 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
                   onClick={() => setShowMobileFilters(false)}
                   className="w-full py-3 rounded-xl bg-[#4A5CE8] text-white font-semibold text-sm hover:opacity-90 transition-opacity"
                 >
-                  Show {filtered.length} results
+                  Show {results.total?.toLocaleString("en-GB") ?? ""} results
                 </button>
               </div>
             </motion.div>
