@@ -83,7 +83,7 @@ export function AdminFeatureFlagsPage(){
    aria-label={`Display state for ${[row.category_slug,row.subcategory_slug,third?.name].filter(Boolean).join(" / ")}`}
    className="border rounded-lg px-2 py-1 bg-white text-gray-900"
    value={third ? third.visible ? "active" : "hidden" : stateFor(row)}
-   disabled={busy!==null || !meta || meta.readOnly} onChange={event=>void toggleCategory(row,event.target.value,third?.slug)}>
+   disabled={busy!==null} onChange={event=>void toggleCategory(row,event.target.value,third?.slug)}>
    <option value="active">Active</option>
    {!third && <><option value="coming_soon">Coming Soon</option><option value="maintenance">Under Maintenance</option></>}
    <option value="hidden">Hidden Completely</option>
