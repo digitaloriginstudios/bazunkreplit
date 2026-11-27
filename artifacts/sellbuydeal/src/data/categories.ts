@@ -346,6 +346,19 @@ export const CATEGORIES: Category[] = [
     ],
   },
   {
+    name: "Legacy Digital Products",
+    slug: "digital-products",
+    icon: "MonitorSmartphone",
+    subcategories: [
+      { name: "Software", slug: "software" },
+      { name: "Ebooks", slug: "ebooks" },
+      { name: "Music Downloads", slug: "music-downloads" },
+      { name: "Stock Media", slug: "stock-media" },
+      { name: "Templates", slug: "templates" },
+      { name: "Online Courses", slug: "online-courses" },
+    ],
+  },
+  {
     name: "Jewellery & Watches", slug: "jewellery-watches", icon: "Gem", subcategories: [
       { name: "Fine Jewellery", slug: "fine-jewellery" }, { name: "Fashion Jewellery", slug: "fashion-jewellery" },
       { name: "Rings", slug: "rings" }, { name: "Necklaces", slug: "necklaces" },
@@ -399,11 +412,9 @@ export function resolveCategory(category: string, subcategory?: string | null) {
   if (alias) return alias;
   return { category: CATEGORY_ALIASES[category] ?? category, subcategory: subcategory ?? "" };
 }
-export const ACTIVE_CATEGORIES = CATEGORIES.filter(c => !["digital-products", "eco-friendly"].includes(c.slug)).map(c => ({
-  ...c,
-  subcategories: c.subcategories.filter(s => !(
-    ["electronics:gaming-consoles", "cell-phones:earphones", "clothing-shoes-jewelry:jewelry", "tools-home-improvement:safety-tools"].includes(`${c.slug}:${s.slug}`)
-  )),
+export const ACTIVE_CATEGORIES = CATEGORIES.map(category => ({
+  ...category,
+  subcategories: [...category.subcategories],
 }));
 
 /** Load display-only category settings before the storefront mounts. Permanent slugs never change. */
