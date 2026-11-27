@@ -8,12 +8,13 @@ import {
   CheckSquare, Square, ArrowDownToLine, User, Globe, Plus, FileText,
 } from "lucide-react";
 import { AdminLayout } from "./AdminLayout";
+import { catalogueTaxonomy, type CatalogueCategory } from "./catalogueTaxonomy";
 import { AliExpressPageLinks } from "./AliExpressPageLinks";
 import { AliExpressConnectionPanel } from "./AliExpressConnectionPanel";
 import { RapidApiPanel } from "./RapidApiPanel";
 import { ImportModal } from "@/components/ImporterSection";
 import { useAdmin } from "@/context/AdminContext";
-import { ACTIVE_CATEGORIES, CATEGORIES as SITE_CATEGORIES } from "@/data/categories";
+import { CATEGORIES as SITE_CATEGORIES } from "@/data/categories";
 import { CLASSIFIED_CATEGORIES } from "@/data/classifieds";
 
 type Tab = "amazon" | "aliexpress" | "ebay" | "gumtree";
@@ -78,13 +79,6 @@ interface Specs {
 
 function parseSpecs(raw: string | null): Specs {
   try { return JSON.parse(raw ?? "{}"); } catch { return {}; }
-}
-
-interface CategoryOverride {
-  category_slug: string;
-  subcategory_slug: string;
-  name: string;
-  visible: boolean;
 }
 
 interface ImportThirdLevel {
@@ -222,7 +216,7 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
   const [aliSubcategory, setAliSubcategory] = useState("");
   const [aliThird, setAliThird] = useState("");
   const [aliTaxonomy, setAliTaxonomy] = useState<{
-    overrides: CategoryOverride[];
+    items: CatalogueCategory[];
     categories: ImportThirdLevel[];
   } | null>(null);
   const [aliTaxonomyError, setAliTaxonomyError] = useState(false);
@@ -239,19 +233,15 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
       if (!overridesResponse.ok || !thirdResponse.ok) throw new Error("Taxonomy unavailable");
       const [{ overrides }, { categories }] = await Promise.all([overridesResponse.json(), thirdResponse.json()]);
       if (!Array.isArray(overrides) || !Array.isArray(categories)) throw new Error("Taxonomy unavailable");
-      if (active) setAliTaxonomy({ overrides, categories });
+      if (active) setAliTaxonomy({ items: catalogueTaxonomy(overrides), categories });
     }).catch(() => { if (active) setAliTaxonomyError(true); });
     return () => { active = false; };
   }, [tab, aliTaxonomyRetry]);
 
-  const aliSubcategories = new Map(
-    ACTIVE_CATEGORIES.find(category => category.slug === aliCategory)?.subcategories.map(sub => [sub.slug, sub.name]),
-  );
-  for (const row of aliTaxonomy?.overrides ?? []) {
-    if (row.category_slug !== aliCategory || !row.subcategory_slug) continue;
-    if (row.visible) aliSubcategories.set(row.subcategory_slug, row.name);
-    else aliSubcategories.delete(row.subcategory_slug);
-  }
+  const aliMainCategories = aliTaxonomy?.items.filter(row => !row.subcategory_slug) ?? [];
+  const aliSubcategories = aliTaxonomy?.items.filter(
+    row => row.category_slug === aliCategory && row.subcategory_slug,
+  ) ?? [];
   const aliThirdOptions = aliTaxonomy?.categories.filter(
     row => row.category === aliCategory && row.subcategory === aliSubcategory,
   ) ?? [];
@@ -709,23 +699,23 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="min-w-0 text-sm font-semibold">
           Category
-          <select value={aliCategory} onChange={e => {
+          <select value={aliCategory} disabled={!aliTaxonomy} onChange={e => {
             setAliCategory(e.target.value);
             setAliSubcategory("");
             setAliThird("");
           }} className={inputCls + " mt-1 block w-full"}>
             <option value="other">Other</option>
-            {ACTIVE_CATEGORIES.map(category => <option key={category.slug} value={category.slug}>{category.name}</option>)}
+            {aliMainCategories.map(row => <option key={row.category_slug} value={row.category_slug}>{row.name}{row.visible ? "" : " (hidden)"}</option>)}
           </select>
         </label>
         <label className="min-w-0 text-sm font-semibold">
           Subcategory
-          <select value={aliSubcategory} disabled={aliSubcategories.size === 0} onChange={e => {
+          <select value={aliSubcategory} disabled={aliSubcategories.length === 0} onChange={e => {
             setAliSubcategory(e.target.value);
             setAliThird("");
           }} className={inputCls + " mt-1 block w-full"}>
             <option value="">None</option>
-            {[...aliSubcategories].map(([slug, name]) => <option key={slug} value={slug}>{name}</option>)}
+            {aliSubcategories.map(row => <option key={row.subcategory_slug} value={row.subcategory_slug}>{row.name}{row.visible ? "" : " (hidden)"}</option>)}
           </select>
         </label>
         <label className="min-w-0 text-sm font-semibold">
@@ -737,6 +727,7 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
           </select>
         </label>
       </div>
+      {!aliTaxonomy && !aliTaxonomyError && <p role="status" className="mt-2 text-sm">Loading catalogue categories…</p>}
       {aliTaxonomyError && <p role="status" className="mt-2 text-sm">
         Could not load saved taxonomy. <button type="button" className="font-semibold underline" onClick={() => setAliTaxonomyRetry(n => n + 1)}>Retry</button>
       </p>}

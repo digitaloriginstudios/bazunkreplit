@@ -3,9 +3,9 @@ import { AdminLayout } from "./AdminLayout";
 import { useAdmin } from "@/context/AdminContext";
 import { CATEGORIES, thirdLevelProposals, thirdLevelSlug } from "@/data/categories";
 import { FolderTree, Layers3, EyeOff, Search, Plus, Save, ChevronRight, ChevronDown, Check, X, Eye, ArrowUp, ArrowDown } from "lucide-react";
+import { catalogueTaxonomy, type CatalogueCategory as Item } from "./catalogueTaxonomy";
 import "./category-workspace.css";
 
-type Item={category_slug:string;subcategory_slug:string;name:string;sort_order:number;visible:boolean};
 type Third={category:string;subcategory:string;slug:string;name:string;sort_order:number;visible:boolean};
 type Evidence={category:string;subcategory:string;count:number;titles?:string[]};
 type View="overview"|"tree"|"subcategories"|"third"|"hidden"|"import";
@@ -32,8 +32,7 @@ export function AdminCategoryManagerPage(){
   authFetch("/api/admin/taxonomy/third-level").then(r=>r.ok?r.json():{categories:[]}),
   authFetch("/api/admin/taxonomy/listing-evidence").then(r=>r.ok?r.json():{groups:[]})
  ]).then(([over,three,ev])=>{if(!active)return;
-  const map=new Map<string,Item>((over.overrides??[]).map((x:Item)=>[x.category_slug+":"+x.subcategory_slug,x]));
-  setItems(CATEGORIES.flatMap((c,i)=>[map.get(c.slug+":")??{category_slug:c.slug,subcategory_slug:"",name:c.name,visible:true,sort_order:i},...c.subcategories.map((sub,j)=>map.get(c.slug+":"+sub.slug)??{category_slug:c.slug,subcategory_slug:sub.slug,name:sub.name,visible:true,sort_order:j})]));
+  setItems(catalogueTaxonomy(over.overrides ?? []));
   setThird(three.categories??[]);setEvidence(ev.groups??[]);
  }).catch(e=>setMessage(String(e)));return()=>{active=false}},[authFetch]);
  const setGroupVisibility=(subcategory:string,visible:boolean)=>{
