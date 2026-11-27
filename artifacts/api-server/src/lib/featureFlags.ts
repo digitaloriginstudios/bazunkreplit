@@ -7,6 +7,8 @@ export const FEATURE_DEFINITIONS = [
   ["social_follows","Social follows","Community"],
   ["social_blocks","Social blocking","Community"],
   ["social_reports","Social reports","Community"],
+  ["social_stories","Seller stories","Community"],
+  ["social_polls","Product polls","Community"],
   ["social_collections","Product collections","Community"],
   ["social_wishlists","Collaborative wishlists","Community"],
   ["social_collection_follows","Collection following","Community"],

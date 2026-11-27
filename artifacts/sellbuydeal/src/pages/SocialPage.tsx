@@ -1,3 +1,4 @@
+import { SellerStories } from "@/components/SellerStories";
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "@clerk/react";
 import { Link, useSearch } from "wouter";
@@ -172,6 +173,7 @@ function SocialProfileForm() {
 
 export function SocialPage() {
   const { isLoaded, isSignedIn, userId } = useAuth();
+  const pollsEnabled = useFeature("social_polls");
   const collectionsEnabled = useFeature("social_collections");
   const profilesEnabled = useFeature("social_profiles");
   const search = useSearch();
@@ -193,6 +195,17 @@ export function SocialPage() {
             Collections & wishlists
           </Link>
         )}
+        {pollsEnabled && (
+          <Link
+            href="/social/polls"
+            className="mb-6 ml-2 inline-flex rounded-xl border px-4 py-2 font-semibold"
+          >
+            Product polls
+          </Link>
+        )}
+        <div className="mb-5 empty:hidden">
+          <SellerStories manage />
+        </div>
         {!profilesEnabled ? (
           <p>Social profiles are currently unavailable.</p>
         ) : !isLoaded ? (

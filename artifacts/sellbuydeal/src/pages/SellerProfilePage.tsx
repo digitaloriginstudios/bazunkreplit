@@ -1,3 +1,4 @@
+import { SellerStories } from "@/components/SellerStories";
 import { SocialSellerFollow } from "@/components/SocialSellerFollow";
 import {useSeoMetadata} from "@/hooks/useSeoMetadata";
 import { toast } from "@/hooks/use-toast";
@@ -129,6 +130,7 @@ export function SellerProfilePage() {
             </div>
           </section>
 
+          <div className="mb-6 empty:hidden"><SellerStories seller={sellerEmail} manage={isSeller} /></div>
           <div className="grid lg:grid-cols-[1fr_320px] gap-6">
             <section className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
               <div className="flex items-center gap-2 mb-5"><ShoppingBag className="w-5 h-5 text-[#4A5CE8]" /><h2 className="font-black text-xl text-gray-900">Items for sale</h2><span className="text-sm text-gray-400">({listings.length})</span></div>
