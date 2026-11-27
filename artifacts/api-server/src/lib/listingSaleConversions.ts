@@ -30,7 +30,7 @@ type SourceListing = {
 };
 
 export async function convertListings(settings: ConversionSettings): Promise<ListingResult[]> {
-  await ensureFeeSchema();
+  if (settings.kind === "auction") await ensureFeeSchema();
   const visible = await categoryVisibility();
   return db.transaction(async tx => {
     // This uses the same row-lock order as saving a checkout snapshot.
@@ -41,8 +41,14 @@ export async function convertListings(settings: ConversionSettings): Promise<Lis
     const prior = (await tx.execute(sql`SELECT listing_id,kind,sale_id FROM listing_sale_conversions
       WHERE listing_id = ANY(${"{" + settings.ids.join(",") + "}"}::int[])`)).rows;
     const converted = new Map(prior.map(row => [Number(row.listing_id), row]));
+    if (settings.kind === "flash") {
+      const copies = await tx.execute(sql`SELECT c.listing_id, 'flash' AS kind, c.sale_id FROM listing_flash_sale_copies c
+        JOIN flash_sales sale ON sale.id=c.sale_id
+        WHERE sale.status IN ('active','upcoming') AND sale.ends_at > NOW() AND c.listing_id = ANY(${"{" + settings.ids.join(",") + "}"}::int[])`);
+      for (const copy of copies.rows) converted.set(Number(copy.listing_id), copy);
+    }
     // Web and mobile cart sessions can remain payable for up to 24 hours.
-    const recent = (await tx.execute(sql`SELECT DISTINCT unit->>'id' AS id FROM checkout_fee_snapshots s
+    const recent = settings.kind === "flash" ? [] : (await tx.execute(sql`SELECT DISTINCT unit->>'id' AS id FROM checkout_fee_snapshots s
       CROSS JOIN LATERAL jsonb_array_elements(s.payload->'units') unit
       WHERE s.created_at >= NOW() - INTERVAL '25 hours'
         AND unit->>'id' = ANY(${"{" + settings.ids.join(",") + "}"}::text[])`)).rows;
@@ -66,8 +72,11 @@ export async function convertListings(settings: ConversionSettings): Promise<Lis
       let specs: Record<string, unknown> = {};
       try { specs = JSON.parse(row.specifications || "{}") ?? {}; } catch { /* Legacy free-text specifications. */ }
       if (specs.demo_creator === true || specs.demo_creator === "true") { skip("Demo listings cannot be converted."); continue; }
-      if (Number(row.quantity) !== 1 || [specs.aliexpress_options, specs.variants].some(value => Array.isArray(value) && value.length)) {
-        skip("Special sales support one unit without variants."); continue;
+      if ([specs.aliexpress_options, specs.variants].some(value => Array.isArray(value) && value.length)) {
+        skip("Special sales require a single product option."); continue;
+      }
+      if (settings.kind === "auction" && Number(row.quantity) !== 1) {
+        skip("Auction conversion needs exactly one unit in stock."); continue;
       }
       const source = String(specs.source ?? "");
       const region = specs.marketplace_region ?? (["Amazon UK", "eBay UK"].includes(source) ? "uk"
@@ -103,9 +112,13 @@ export async function convertListings(settings: ConversionSettings): Promise<Lis
             ${row.seller_email},${sellerName},${amount},${settings.increment.toFixed(2)},${end},
             FALSE,'active',${region},${currency},NOW(),NOW())`);
       }
-      await tx.execute(sql`INSERT INTO listing_sale_conversions (listing_id,kind,sale_id)
-        VALUES (${listingId},${settings.kind},${saleId})`);
-      await tx.execute(sql`UPDATE listings SET status='inactive', quantity=0, updated_at=NOW() WHERE id=${listingId}`);
+      if (settings.kind === "flash") {
+        await tx.execute(sql`INSERT INTO listing_flash_sale_copies (listing_id,sale_id) VALUES (${listingId},${saleId})
+          ON CONFLICT (listing_id) DO UPDATE SET sale_id=EXCLUDED.sale_id,created_at=NOW()`);
+      } else {
+        await tx.execute(sql`INSERT INTO listing_sale_conversions (listing_id,kind,sale_id) VALUES (${listingId},'auction',${saleId})`);
+        await tx.execute(sql`UPDATE listings SET status='inactive', quantity=0, updated_at=NOW() WHERE id=${listingId}`);
+      }
       results.push({ listingId, status: "converted", kind: settings.kind, saleId, amount, currency });
     }
     return results;

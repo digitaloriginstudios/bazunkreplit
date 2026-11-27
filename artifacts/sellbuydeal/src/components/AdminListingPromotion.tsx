@@ -67,7 +67,7 @@ export function AdminListingPromotion({ listingId, title, status }: { listingId:
   }
 
   return <>
-    <button type="button" onClick={() => setOpen(true)} title={`Promote ${title}`} aria-label={`Promote ${title}`} className="inline-flex items-center justify-center gap-1 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-800 px-2 h-7 text-xs font-semibold"><Megaphone className="w-3.5 h-3.5" /> Promote</button>
+    <button type="button" onClick={() => setOpen(true)} title={`Promote ${title}`} aria-label={`Promote ${title}`} className="bz-admin-promote-trigger inline-flex items-center justify-center gap-1 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-800 px-2 h-7 text-xs font-semibold"><Megaphone className="w-3.5 h-3.5" /> Promote</button>
     {createPortal(<dialog ref={dialogRef} onClose={()=>setOpen(false)} onCancel={e=>{if(busy)e.preventDefault();}} className="fixed inset-0 m-auto w-[min(94vw,34rem)] max-h-[85dvh] overflow-y-auto overscroll-contain rounded-2xl border-2 border-orange-400 bg-white p-4 sm:p-6 text-slate-900 shadow-2xl backdrop:bg-slate-950/75">
         <div className="flex items-start justify-between gap-3"><h2 className="text-xl font-bold">Promote listing</h2><button type="button" onClick={()=>setOpen(false)} disabled={busy} aria-label="Close promotion dialog" className="rounded-lg border border-slate-300 px-3 py-1 text-sm font-bold">Close</button></div>
         <p className="mt-1 mb-3 text-sm text-slate-600">{title}</p>

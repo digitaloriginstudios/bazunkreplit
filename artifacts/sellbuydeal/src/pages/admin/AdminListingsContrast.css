@@ -31,3 +31,10 @@
 .dark .bazunk-admin.bazunk-admin-wordpress main .bz-listing-category-editor [role="alert"]{
   color:#fca5a5!important;
 }
+
+.bazunk-admin main .bz-admin-listing-actions button.bz-admin-promote-trigger {
+  background:#ffedd5!important;
+  color:#7c2d12!important;
+  -webkit-text-fill-color:currentColor!important;
+  border:1px solid #fdba74!important;
+}
