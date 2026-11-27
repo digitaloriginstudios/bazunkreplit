@@ -1,14 +1,19 @@
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { ToastAction } from "@/components/ui/toast";
+import { toast } from "@/hooks/use-toast";
+import { useWatchlist } from "@/context/WatchlistContext";
+import "./browse-motion.css";
 import { BrowseSponsoredListings } from "@/components/BrowseSponsoredListings";
 import { useMarketplaceLoadingDelay } from "@/components/useMarketplaceLoadingDelay";
 import { MarketplaceLoader } from "@/components/MarketplaceLoader";
 import { useAuth as useClerkAuth } from "@clerk/react";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useId, useRef, type CSSProperties } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import { useSearch, useLocation, Link } from "wouter";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   Search, Bell, SlidersHorizontal, X, Heart, Eye, CheckCircle2,
-  Grid3X3, List, ChevronDown, ChevronUp, ArrowUpDown, Users,
+  Grid3X3, List, ChevronDown, ArrowUpDown, Users,
   MapPin, Star, ImageOff, Truck, Globe, Gavel, Zap, ShoppingBag, ShieldCheck, Tag, ArrowRight,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
@@ -51,7 +56,7 @@ interface ApiListing {
   shippingPrice?: string | number | null;
 }
 
-function mapApiListing(l: ApiListing): typeof ALL_PRODUCTS[0] & { subcategory?: string; subsubcategory?: string; promotions: string[] } {
+function mapApiListing(l: ApiListing): typeof ALL_PRODUCTS[0] & { subcategory?: string; subsubcategory?: string; promotions: string[]; publicId?: string | null } {
   return {
     id: l.id,
     title: l.title,
@@ -93,14 +98,17 @@ const CONDITION_COLORS: Record<string, string> = {
 
 function FilterSection({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
+  const panelId = useId();
+  const reducedMotion = useReducedMotion();
   return (
     <div className="border-b border-gray-100 py-4">
       <button
+        type="button" aria-expanded={open} aria-controls={panelId}
         onClick={() => setOpen(!open)}
         className="flex items-center justify-between w-full text-sm font-semibold text-gray-800 mb-0 hover:text-[#4A5CE8] transition-colors"
       >
         {title}
-        {open ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+        <ChevronDown aria-hidden="true" className="bz-filter-chevron w-4 h-4 text-gray-500" />
       </button>
       <AnimatePresence initial={false}>
         {open && (
@@ -108,7 +116,8 @@ function FilterSection({ title, children, defaultOpen = true }: { title: string;
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            id={panelId}
+            transition={{ duration: reducedMotion ? 0 : 0.26, ease: [0.22, 0.75, 0.25, 1] }}
             className="overflow-hidden"
           >
             <div className="mt-3">{children}</div>
@@ -132,9 +141,52 @@ function PromoBadge({ promotions }: { promotions: string[] }) {
   return <span className={`max-w-full truncate text-[10px] leading-4 sm:text-xs font-extrabold px-1.5 sm:px-2 py-0.5 rounded-md sm:rounded-full ${cls}`}>{label}</span>;
 }
 
-function ProductCard({ product, view, promotions = [] }: { product: typeof ALL_PRODUCTS[0] & { seller?: { name?: string } }; view: "grid" | "list"; promotions?: string[] }) {
-  const [wishlisted, setWishlisted] = useState(false);
+function ProductCard({ product, listingUrl, view, promotions = [] }: { product: typeof ALL_PRODUCTS[0] & { seller?: { name?: string } }; listingUrl: string; view: "grid" | "list"; promotions?: string[] }) {
+  const { isWatched, addToWatchlist, removeFromWatchlist } = useWatchlist();
   const { formatPrice } = useCurrency();
+  const wishlisted = isWatched(product.id);
+  const previousToast = useRef<ReturnType<typeof toast> | null>(null);
+
+  function toggleWishlist() {
+    previousToast.current?.dismiss();
+    if (wishlisted) {
+      removeFromWatchlist(product.id);
+      return;
+    }
+    addToWatchlist(product);
+    previousToast.current = toast({
+      title: "Saved to wishlist",
+      description: product.title,
+      duration: 5500,
+      action: <ToastAction altText="Undo saving to wishlist" onClick={() => removeFromWatchlist(product.id)}>Undo</ToastAction>,
+    });
+  }
+
+  const actions = (
+    <>
+      <Dialog>
+        <DialogTrigger asChild>
+          <button type="button" className="bz-listing-action bz-listing-quick" aria-label={`Quick view: ${product.title}`}>
+            <Eye aria-hidden="true" size={17} />
+          </button>
+        </DialogTrigger>
+        <DialogContent className="bz-listing-preview !rounded-2xl">
+          <DialogTitle className="pr-8">{product.title}</DialogTitle>
+          <DialogDescription className="capitalize">{product.condition} · {product.location}</DialogDescription>
+          {product.image && <img src={product.image} alt={product.title} className="h-52 w-full rounded-xl bg-slate-50 object-contain" />}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <strong className="bz-browse-price text-xl">{formatPrice(product.price)}</strong>
+            <Link href={listingUrl} className="rounded-xl bg-slate-900 px-4 py-2 font-semibold !text-white">View full listing</Link>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <button type="button" className="bz-listing-action bz-listing-heart" aria-pressed={wishlisted}
+        aria-label={wishlisted ? "Remove from favourites" : "Add to favourites"} onClick={toggleWishlist}
+        data-testid={`button-wishlist-${product.id}`}>
+        <Heart aria-hidden="true" size={17} />
+      </button>
+    </>
+  );
 
   const isFeatured = promotions.includes("featured");
   const isSpotlight = promotions.includes("spotlight");
@@ -151,13 +203,7 @@ function ProductCard({ product, view, promotions = [] }: { product: typeof ALL_P
             ? <img src={product.image} alt={product.title} loading="lazy" decoding="async" className="w-full h-full object-contain p-2 transition-opacity duration-200" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
             : <div className="w-full h-full flex items-center justify-center"><ImageOff className="w-8 h-8 text-gray-300" /></div>
           }
-          <button
-            onClick={(event) => { event.preventDefault(); event.stopPropagation(); setWishlisted(!wishlisted); }}
-            aria-label={wishlisted ? "Remove from favourites" : "Add to favourites"} title={wishlisted ? "Remove from favourites" : "Add to favourites"} aria-pressed={wishlisted} className="absolute z-20 top-1.5 right-1.5 w-9 h-9 rounded-full border-2 border-white bg-orange-600 text-white flex items-center justify-center shadow-lg hover:bg-orange-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 transition-colors"
-            data-testid={`button-wishlist-${product.id}`}
-          >
-            <Heart className={`w-3.5 h-3.5 ${wishlisted ? "fill-white text-white" : "fill-none text-white"}`} />
-          </button>
+          {actions}
         </div>
         <div className="flex-1 min-w-0 flex flex-col justify-between">
           <div>
@@ -195,17 +241,11 @@ function ProductCard({ product, view, promotions = [] }: { product: typeof ALL_P
           : <div className="w-full h-full flex items-center justify-center"><ImageOff className="w-12 h-12 text-gray-300" /></div>
         }
         {hasPromo && (
-          <div className="absolute top-1.5 left-1.5 right-11 sm:top-2.5 sm:left-2.5 sm:right-14">
+          <div className="absolute bottom-1.5 right-1.5 max-w-[55%]">
             <PromoBadge promotions={promotions} />
           </div>
         )}
-        <button
-          onClick={(event) => { event.preventDefault(); event.stopPropagation(); setWishlisted(!wishlisted); }}
-          aria-label={wishlisted ? "Remove from favourites" : "Add to favourites"} title={wishlisted ? "Remove from favourites" : "Add to favourites"} aria-pressed={wishlisted} className="absolute z-20 top-1.5 right-1.5 w-8 h-8 sm:top-2.5 sm:right-2.5 sm:w-10 sm:h-10 rounded-full border-2 border-white bg-orange-600 text-white flex items-center justify-center shadow-lg hover:bg-orange-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 transition-colors"
-          data-testid={`button-wishlist-${product.id}`}
-        >
-          <Heart className={`w-4 h-4 ${wishlisted ? "fill-white text-white" : "fill-none text-white"}`} />
-        </button>
+        {actions}
         <div className="absolute bottom-1.5 left-1.5 max-w-[calc(100%-12px)] sm:bottom-2.5 sm:left-2.5">
           <span className={`text-xs font-bold px-2 py-0.5 rounded-full capitalize ${CONDITION_COLORS[product.condition]}`}>{product.condition}</span>
         </div>
@@ -281,6 +321,9 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
   const [maxPrice, setMaxPrice] = useState(params.get("maxPrice")??"");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [sort, setSort] = useState<SortKey>((params.get("sort") as SortKey)||"newest");
+  const { items: wishlistItems } = useWatchlist();
+  const reducedMotion = useReducedMotion();
+  const [categorySearch, setCategorySearch] = useState("");
   const [view, setView] = useState<"grid" | "list">("grid");
   const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [listingTypes, setListingTypes] = useState<string[]>([]);
@@ -491,6 +534,7 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
   }
   function clearAll() {
     setQuery("");
+    setCategorySearch("");
     setSelectedCategories([]);
     setSelectedSubcategories([]);
     setSelectedThirdLevels([]);
@@ -560,13 +604,19 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
 
 
       <FilterSection title="Category">
+        <label className="bz-category-search">
+          <Search size={15} aria-hidden="true" />
+          <input aria-label="Find a category" placeholder="Find a category" value={categorySearch}
+            onChange={event => setCategorySearch(event.target.value)} />
+        </label>
         <div className="space-y-1 max-h-72 overflow-y-auto pr-1 [scrollbar-width:thin]">
-          {CATEGORIES.map((cat) => {
+          {CATEGORIES.filter(cat => !categorySearch.trim() || selectedCategories.includes(cat.slug)
+            || [cat.name, ...cat.subcategories.map(sub => sub.name)].some(name => name.toLowerCase().includes(categorySearch.trim().toLowerCase()))).map((cat) => {
             const count = categoryCounts[cat.slug] ?? 0;
             const isChecked = selectedCategories.includes(cat.slug);
             return (
               <div key={cat.slug}>
-                <label className="flex items-center justify-between gap-2 cursor-pointer group py-0.5">
+                <label className="bz-category-row flex items-center justify-between gap-2 cursor-pointer group py-0.5" data-selected={isChecked}>
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -579,13 +629,16 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
                   </div>
                   <span className="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">{!countsLoaded ? "—" : count}</span>
                 </label>
+                <AnimatePresence initial={false}>
                 {isChecked && cat.subcategories.length > 0 && (
-                  <div className="ml-5 mt-0.5 space-y-0.5 border-l-2 border-[#4A5CE8]/15 pl-2.5">
+                  <motion.div key={cat.slug} initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }} transition={{ duration: reducedMotion ? 0 : 0.24 }}
+                    className="bz-category-branch ml-3 overflow-hidden pl-2">
                     {cat.subcategories.map((sub) => {
                       const subCount = subcategoryCounts[`${cat.slug}:${sub.slug}`] ?? 0;
                       return (
                         <div key={sub.slug}>
-                        <label key={sub.slug} className="flex items-center justify-between gap-2 cursor-pointer group py-0.5">
+                        <label className="bz-category-row flex items-center justify-between gap-2 cursor-pointer group py-0.5" data-selected={selectedSubcategories.includes(sub.slug)}>
                           <div className="flex items-center gap-2">
                             <input
                               type="checkbox"
@@ -612,8 +665,9 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
                       </div>
                       );
                     })}
-                  </div>
+                  </motion.div>
                 )}
+                </AnimatePresence>
               </div>
             );
           })}
@@ -645,17 +699,21 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
 
       <FilterSection title="Price Range">
         <div className="space-y-2 mb-3">
-          <label className="block text-xs font-semibold text-slate-700">Minimum price: £{minPrice || "0"}</label>
-          <input aria-label="Minimum price slider" type="range" min="0" max="5000" step="5"
-            value={Math.min(5000, Number(minPrice) || 0)}
-            onChange={e => { const next = Number(e.target.value); setMinPrice(String(Math.min(next, Number(maxPrice) || 5000))); }}
-            className="w-full accent-orange-600" />
-          <label className="block text-xs font-semibold text-slate-700">Maximum price: £{maxPrice || "5000+"}</label>
-          <input aria-label="Maximum price slider" type="range" min="0" max="5000" step="5"
-            value={Math.min(5000, maxPrice === "" ? 5000 : Number(maxPrice))}
-            onChange={e => setMaxPrice(String(Math.max(Number(minPrice) || 0, Number(e.target.value))))}
-            className="w-full accent-blue-600" />
-          <p className="text-xs text-slate-500">Use the fields below for prices above £5,000.</p>
+          <div className="flex justify-between gap-2 text-xs font-semibold text-slate-700">
+            <span>£{minPrice || "0"}</span><span>£{maxPrice || "5000+"}</span>
+          </div>
+          <div className="bz-price-track" style={{
+            "--price-start": `${Math.min(5000, Math.max(0, Number(minPrice) || 0)) / 50}%`,
+            "--price-end": `${Math.min(5000, Math.max(0, maxPrice === "" ? 5000 : Number(maxPrice) || 0)) / 50}%`,
+          } as CSSProperties}>
+            <input aria-label="Minimum price slider" type="range" min="0" max="5000" step="5"
+              value={Math.min(5000, Number(minPrice) || 0)}
+              onChange={event => setMinPrice(String(Math.min(Number(event.target.value), maxPrice === "" ? 5000 : Number(maxPrice))))} />
+            <input aria-label="Maximum price slider" type="range" min="0" max="5000" step="5"
+              value={Math.min(5000, maxPrice === "" ? 5000 : Number(maxPrice))}
+              onChange={event => setMaxPrice(String(Math.max(Number(minPrice) || 0, Number(event.target.value))))} />
+          </div>
+          <p className="text-xs text-slate-600">Use the fields below for prices above £5,000.</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
@@ -735,22 +793,20 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
       </FilterSection>
 
       {/* Delivery */}
-      <FilterSection title="Delivery" defaultOpen={false}>
+      <FilterSection title="Delivery">
         <div className="space-y-2">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <div
-              onClick={() => setFreeShipping(!freeShipping)}
-              className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${freeShipping ? "bg-[#4A5CE8]" : "bg-gray-200"}`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${freeShipping ? "translate-x-4" : "translate-x-0"}`} />
-            </div>
+          <div className="flex items-center gap-3">
+            <button type="button" role="switch" aria-checked={freeShipping} aria-label="Free delivery"
+              onClick={() => setFreeShipping(!freeShipping)} className="bz-free-delivery-switch">
+              <span aria-hidden="true" />
+            </button>
             <div>
               <span className="text-sm text-gray-700 font-medium flex items-center gap-1.5">
-                <Truck className="w-3.5 h-3.5 text-emerald-500" /> Free Shipping
+                <Truck className="w-3.5 h-3.5 text-emerald-500" /> Free delivery
               </span>
               <p className="text-xs text-gray-400">No delivery charge</p>
             </div>
-          </label>
+          </div>
         </div>
       </FilterSection>
 
@@ -839,115 +895,7 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
 
   return (
     <div className="bz-browse-page min-h-screen bg-[#f2f7fc] flex flex-col">
-      <Navbar />
-
-      {/* Search header */}
-      <div className="bz-browse-filter-feedback bg-transparent">
-        <div className="container mx-auto max-w-[1440px] px-4 py-0">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setShowMobileFilters(true)}
-              aria-label="Open listing filters"
-              aria-expanded={showMobileFilters}
-              className="md:hidden flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:border-[#4A5CE8] transition-colors"
-              data-testid="button-mobile-filters"
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-              Filters {activeFilterCount > 0 && <span className="w-5 h-5 rounded-full bg-[#4A5CE8] text-white text-xs font-bold flex items-center justify-center">{activeFilterCount}</span>}
-            </button>
-          </div>
-
-          {saveOpen && <form onSubmit={e=>{e.preventDefault();void saveCurrentSearch();}} className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border-2 border-orange-300 bg-orange-50 p-4 text-slate-950">
-            <label className="min-w-[190px] flex-1 text-sm font-bold">Search name
-              <input maxLength={80} required value={saveName} onChange={e=>setSaveName(e.target.value)} placeholder={query||"e.g. Vintage games"} className="mt-1 w-full rounded-lg border border-slate-400 bg-white px-3 py-2 font-semibold text-slate-950"/>
-            </label>
-            <label className="flex items-center gap-2 pb-2 text-sm font-bold">
-              <input type="checkbox" checked={saveAlert} onChange={e=>setSaveAlert(e.target.checked)}/> Alert on new matching listings
-            </label>
-            <button type="submit" disabled={savingSearch} className="rounded-lg bg-orange-600 px-4 py-2.5 font-black text-white disabled:opacity-50">{savingSearch?"Saving…":"Save"}</button>
-          </form>}
-          {saveFeedback && <div role="status" className={`mb-3 rounded-lg border p-3 text-sm font-semibold ${saveSuccess?"border-green-300 bg-green-50 text-green-900":"border-red-300 bg-red-50 text-red-900"}`}>
-            {saveFeedback}{saveSuccess && <Link href="/dashboard?section=saved-searches" className="ml-2 font-black underline">View saved searches</Link>}
-          </div>}
-          {/* Active filter chips */}
-          {activeFilterCount > 0 && (
-            <div className="flex flex-wrap gap-2 mt-3">
-              {selectedCategories.map((slug) => {
-                const cat = CATEGORIES.find((c) => c.slug === slug);
-                return (
-                  <span key={slug} className="flex items-center gap-1.5 bg-[#4A5CE8]/10 text-[#4A5CE8] text-xs font-semibold px-3 py-1 rounded-full">
-                    {cat?.name ?? slug}
-                    <button type="button" aria-label="Remove category filter" onClick={() => toggleCategory(slug)}><X className="w-3 h-3" /></button>
-                  </span>
-                );
-              })}
-              {selectedSubcategories.map((slug) => {
-                let label = slug;
-                for (const cat of CATEGORIES) {
-                  const sub = cat.subcategories.find((s) => s.slug === slug);
-                  if (sub) { label = sub.name; break; }
-                }
-                return (
-                  <span key={slug} className="flex items-center gap-1.5 bg-[#4A5CE8]/5 text-[#4A5CE8] text-xs font-medium px-3 py-1 rounded-full border border-[#4A5CE8]/20">
-                    ↳ {label}
-                    <button type="button" aria-label="Remove subcategory filter" onClick={() => toggleSubcategory(slug)}><X className="w-3 h-3" /></button>
-                  </span>
-                );
-              })}
-              {selectedConditions.map((c) => (
-                <span key={c} className="flex items-center gap-1.5 bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-full capitalize">
-                  {c}<button type="button" aria-label="Remove condition filter" onClick={() => toggleCondition(c)}><X className="w-3 h-3" /></button>
-                </span>
-              ))}
-              {(minPrice || maxPrice) && (
-                <span className="flex items-center gap-1.5 bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-full">
-                  £{minPrice || "0"} – £{maxPrice || "∞"}
-                  <button type="button" aria-label="Remove price filter" onClick={() => { setMinPrice(""); setMaxPrice(""); }}><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {verifiedOnly && (
-                <span className="flex items-center gap-1.5 bg-emerald-50 text-emerald-600 text-xs font-semibold px-3 py-1 rounded-full">
-                  <CheckCircle2 className="w-3 h-3" /> Verified Only
-                  <button type="button" aria-label="Remove verified-only filter" onClick={() => setVerifiedOnly(false)}><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {shipFrom.map((f) => (
-                <span key={f} className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full">
-                  From: {f}
-                  <button type="button" aria-label="Remove ships-from filter" onClick={() => toggleArr(shipFrom, setShipFrom, f)}><X className="w-3 h-3" /></button>
-                </span>
-              ))}
-              {shipTo.map((t) => {
-                const label = SHIP_TO_OPTIONS.find((o) => o.id === t)?.label ?? t;
-                return (
-                  <span key={t} className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 text-xs font-semibold px-3 py-1 rounded-full">
-                    <Globe className="w-3 h-3" /> {label}
-                    <button type="button" aria-label="Remove ships-to filter" onClick={() => toggleArr(shipTo, setShipTo, t)}><X className="w-3 h-3" /></button>
-                  </span>
-                );
-              })}
-              {freeShipping && (
-                <span className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1 rounded-full">
-                  <Truck className="w-3 h-3" /> Free Shipping
-                  <button type="button" aria-label="Remove free-shipping filter" onClick={() => setFreeShipping(false)}><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {minRating !== null && (
-                <span className="flex items-center gap-1.5 bg-amber-50 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full">
-                  <Star className="w-3 h-3 fill-current" /> {minRating}+ stars
-                  <button type="button" aria-label="Remove rating filter" onClick={() => setMinRating(null)}><X className="w-3 h-3" /></button>
-                </span>
-              )}
-              {listedWithin !== "any" && (
-                <span className="flex items-center gap-1.5 bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-full">
-                  {{ today: "Today", week: "Last 7 days", month: "Last 30 days" }[listedWithin]}
-                  <button type="button" aria-label="Remove date filter" onClick={() => setListedWithin("any")}><X className="w-3 h-3" /></button>
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      <Navbar watchlistCount={wishlistItems.length} />
 
       <div className="bz-browse-hero-shell">
         <section className={`bz-browse-hero ${collection==="eco"?"bz-eco-hero":collection==="deals"?"bz-deals-hero":""}`} aria-label={collection==="eco"?"Eco Marketplace":collection==="deals"?"Deals on Bazunk":"Shop on Bazunk"}>
@@ -1039,8 +987,116 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
           </div>
 
           {/* Results */}
+          {/* Active filters and saved search */}
+          <div className="bz-browse-filter-feedback bg-transparent">
+            <div className="pb-3">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowMobileFilters(true)}
+                  aria-label="Open listing filters"
+                  aria-expanded={showMobileFilters}
+                  className="md:hidden flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:border-[#4A5CE8] transition-colors"
+                  data-testid="button-mobile-filters"
+                >
+                  <SlidersHorizontal className="w-4 h-4" />
+                  Filters {activeFilterCount > 0 && <span className="w-5 h-5 rounded-full bg-[#4A5CE8] text-white text-xs font-bold flex items-center justify-center">{activeFilterCount}</span>}
+                </button>
+              </div>
+
+              {saveOpen && <form onSubmit={e=>{e.preventDefault();void saveCurrentSearch();}} className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border-2 border-orange-300 bg-orange-50 p-4 text-slate-950">
+                <label className="min-w-[190px] flex-1 text-sm font-bold">Search name
+                  <input maxLength={80} required value={saveName} onChange={e=>setSaveName(e.target.value)} placeholder={query||"e.g. Vintage games"} className="mt-1 w-full rounded-lg border border-slate-400 bg-white px-3 py-2 font-semibold text-slate-950"/>
+                </label>
+                <label className="flex items-center gap-2 pb-2 text-sm font-bold">
+                  <input type="checkbox" checked={saveAlert} onChange={e=>setSaveAlert(e.target.checked)}/> Alert on new matching listings
+                </label>
+                <button type="submit" disabled={savingSearch} className="rounded-lg bg-orange-600 px-4 py-2.5 font-black text-white disabled:opacity-50">{savingSearch?"Saving…":"Save"}</button>
+              </form>}
+              {saveFeedback && <div role="status" className={`mb-3 rounded-lg border p-3 text-sm font-semibold ${saveSuccess?"border-green-300 bg-green-50 text-green-900":"border-red-300 bg-red-50 text-red-900"}`}>
+                {saveFeedback}{saveSuccess && <Link href="/dashboard?section=saved-searches" className="ml-2 font-black underline">View saved searches</Link>}
+              </div>}
+              {/* Active filter chips */}
+              {activeFilterCount > 0 && (
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {selectedCategories.map((slug) => {
+                    const cat = CATEGORIES.find((c) => c.slug === slug);
+                    return (
+                      <span key={slug} className="flex items-center gap-1.5 bg-[#4A5CE8]/10 text-[#4A5CE8] text-xs font-semibold px-3 py-1 rounded-full">
+                        {cat?.name ?? slug}
+                        <button type="button" aria-label="Remove category filter" onClick={() => toggleCategory(slug)}><X className="w-3 h-3" /></button>
+                      </span>
+                    );
+                  })}
+                  {selectedSubcategories.map((slug) => {
+                    let label = slug;
+                    for (const cat of CATEGORIES) {
+                      const sub = cat.subcategories.find((s) => s.slug === slug);
+                      if (sub) { label = sub.name; break; }
+                    }
+                    return (
+                      <span key={slug} className="flex items-center gap-1.5 bg-[#4A5CE8]/5 text-[#4A5CE8] text-xs font-medium px-3 py-1 rounded-full border border-[#4A5CE8]/20">
+                        ↳ {label}
+                        <button type="button" aria-label="Remove subcategory filter" onClick={() => toggleSubcategory(slug)}><X className="w-3 h-3" /></button>
+                      </span>
+                    );
+                  })}
+                  {selectedConditions.map((c) => (
+                    <span key={c} className="flex items-center gap-1.5 bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-full capitalize">
+                      {c}<button type="button" aria-label="Remove condition filter" onClick={() => toggleCondition(c)}><X className="w-3 h-3" /></button>
+                    </span>
+                  ))}
+                  {(minPrice || maxPrice) && (
+                    <span className="flex items-center gap-1.5 bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-full">
+                      £{minPrice || "0"} – £{maxPrice || "∞"}
+                      <button type="button" aria-label="Remove price filter" onClick={() => { setMinPrice(""); setMaxPrice(""); }}><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {verifiedOnly && (
+                    <span className="flex items-center gap-1.5 bg-emerald-50 text-emerald-600 text-xs font-semibold px-3 py-1 rounded-full">
+                      <CheckCircle2 className="w-3 h-3" /> Verified Only
+                      <button type="button" aria-label="Remove verified-only filter" onClick={() => setVerifiedOnly(false)}><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {shipFrom.map((f) => (
+                    <span key={f} className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full">
+                      From: {f}
+                      <button type="button" aria-label="Remove ships-from filter" onClick={() => toggleArr(shipFrom, setShipFrom, f)}><X className="w-3 h-3" /></button>
+                    </span>
+                  ))}
+                  {shipTo.map((t) => {
+                    const label = SHIP_TO_OPTIONS.find((o) => o.id === t)?.label ?? t;
+                    return (
+                      <span key={t} className="flex items-center gap-1.5 bg-indigo-50 text-indigo-700 text-xs font-semibold px-3 py-1 rounded-full">
+                        <Globe className="w-3 h-3" /> {label}
+                        <button type="button" aria-label="Remove ships-to filter" onClick={() => toggleArr(shipTo, setShipTo, t)}><X className="w-3 h-3" /></button>
+                      </span>
+                    );
+                  })}
+                  {freeShipping && (
+                    <span className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1 rounded-full">
+                      <Truck className="w-3 h-3" /> Free Shipping
+                      <button type="button" aria-label="Remove free-shipping filter" onClick={() => setFreeShipping(false)}><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {minRating !== null && (
+                    <span className="flex items-center gap-1.5 bg-amber-50 text-amber-700 text-xs font-semibold px-3 py-1 rounded-full">
+                      <Star className="w-3 h-3 fill-current" /> {minRating}+ stars
+                      <button type="button" aria-label="Remove rating filter" onClick={() => setMinRating(null)}><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                  {listedWithin !== "any" && (
+                    <span className="flex items-center gap-1.5 bg-gray-100 text-gray-600 text-xs font-semibold px-3 py-1 rounded-full">
+                      {{ today: "Today", week: "Last 7 days", month: "Last 30 days" }[listedWithin]}
+                      <button type="button" aria-label="Remove date filter" onClick={() => setListedWithin("any")}><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           {delayedLoading ? (
-            <div role="status" aria-label="Loading listings" className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">{Array.from({ length: 8 }, (_, i) => <div key={i} className="animate-pulse rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800"><div className="aspect-square rounded-lg bg-slate-200 dark:bg-slate-700" /><div className="mt-3 h-4 w-4/5 rounded bg-slate-200 dark:bg-slate-700" /><div className="mt-2 h-4 w-1/3 rounded bg-slate-200 dark:bg-slate-700" /></div>)}</div>
+            <div role="status" aria-label="Loading listings" className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">{Array.from({ length: 8 }, (_, i) => <div key={i} className="animate-pulse rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800"><div className="aspect-square rounded-lg bg-slate-200 dark:bg-slate-700" /><div className="mt-3 h-4 w-4/5 rounded bg-slate-200 dark:bg-slate-700" /><div className="mt-2 h-4 w-1/3 rounded bg-slate-200 dark:bg-slate-700" /></div>)}</div>
           ) : listingError ? (
             <div role="alert" className="bg-white rounded-2xl border border-orange-100 py-16 px-6 text-center">
               <h3 className="text-lg font-bold text-gray-800 mb-2">Listings couldn’t load</h3>
@@ -1063,14 +1119,21 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
             </div>
           ) : (
             <div className={view === "grid"
-              ? "grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 sm:gap-4"
+              ? "grid grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4"
               : "flex flex-col gap-3"
             }>
-              {filtered.map((product) => (
-                <Link key={product.id} href={`/listing/${'publicId' in product && product.publicId ? (product as unknown as Record<string,unknown>).publicId as string : product.id}`}>
-                  <ProductCard product={product} view={view} promotions={'promotions' in product ? (product as unknown as Record<string,unknown>).promotions as string[] : []} />
-                </Link>
-              ))}
+              {filtered.map((product, index) => {
+                const listingUrl = `/listing/${product.publicId || product.id}`;
+                return (
+                  <motion.div key={product.id} className="bz-listing-tile relative min-w-0"
+                    initial={reducedMotion ? false : { opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: reducedMotion ? 0 : 0.22, delay: reducedMotion ? 0 : Math.min(index, 6) * 0.025 }}>
+                    <Link href={listingUrl} className="bz-listing-hit-area" aria-label={`View ${product.title}`} />
+                    <ProductCard product={product} listingUrl={listingUrl} view={view} promotions={product.promotions} />
+                  </motion.div>
+                );
+              })}
             </div>
           )}
           {!loadingListings && !listingError && collection===undefined && <BrowseSponsoredListings category={selectedCategories.length===1?selectedCategories[0]:undefined} />}
@@ -1103,9 +1166,9 @@ export function BrowsePage({collection}:{collection?:"deals"|"eco"} = {}) {
               onClick={() => setShowMobileFilters(false)}
             />
             <motion.div
-              initial={{ x: "-100%" }}
+              initial={reducedMotion ? false : { x: "-100%" }}
               animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
+              exit={reducedMotion ? undefined : { x: "-100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
               role="dialog" aria-modal="true" aria-label="Filter marketplace listings" className="fixed left-0 top-0 bottom-0 w-[min(360px,90vw)] bg-white dark:bg-[#101e33] z-[100] flex flex-col shadow-2xl md:hidden"
             >
