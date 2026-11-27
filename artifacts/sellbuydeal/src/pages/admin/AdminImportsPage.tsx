@@ -703,6 +703,46 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
     } finally { setAliBulkImporting(false); }
   }
 
+  const aliBatchCategoryFields = (
+    <fieldset id="ali-batch-category" disabled={aliBulkImporting} className="scroll-mt-24 min-w-0">
+      <legend className="mb-2 text-sm font-bold">Batch category assignment</legend>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <label className="min-w-0 text-sm font-semibold">
+          Category
+          <select value={aliCategory} onChange={e => {
+            setAliCategory(e.target.value);
+            setAliSubcategory("");
+            setAliThird("");
+          }} className={inputCls + " mt-1 block w-full"}>
+            <option value="other">Other</option>
+            {ACTIVE_CATEGORIES.map(category => <option key={category.slug} value={category.slug}>{category.name}</option>)}
+          </select>
+        </label>
+        <label className="min-w-0 text-sm font-semibold">
+          Subcategory
+          <select value={aliSubcategory} disabled={aliSubcategories.size === 0} onChange={e => {
+            setAliSubcategory(e.target.value);
+            setAliThird("");
+          }} className={inputCls + " mt-1 block w-full"}>
+            <option value="">None</option>
+            {[...aliSubcategories].map(([slug, name]) => <option key={slug} value={slug}>{name}</option>)}
+          </select>
+        </label>
+        <label className="min-w-0 text-sm font-semibold">
+          Third-level category
+          <select value={aliThird} disabled={!aliSubcategory || aliThirdOptions.length === 0}
+            onChange={e => setAliThird(e.target.value)} className={inputCls + " mt-1 block w-full"}>
+            <option value="">{aliSubcategory && !aliTaxonomy && !aliTaxonomyError ? "Loading…" : "None"}</option>
+            {aliThirdOptions.map(row => <option key={row.slug} value={row.slug}>{row.name}{row.visible ? "" : " (hidden)"}</option>)}
+          </select>
+        </label>
+      </div>
+      {aliTaxonomyError && <p role="status" className="mt-2 text-sm">
+        Could not load saved taxonomy. <button type="button" className="font-semibold underline" onClick={() => setAliTaxonomyRetry(n => n + 1)}>Retry</button>
+      </p>}
+    </fieldset>
+  );
+
   const aliBatchActions = aliQueued.length > 0 && (
     <div className="flex flex-wrap items-center gap-3">
       <button type="button" onClick={() => void importAliExpressUrls(aliQueued)} disabled={aliBulkImporting}
@@ -1535,8 +1575,9 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
             </div>
             {aliQueued.length>0&&<div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 shadow-sm space-y-4">
               <div className="flex flex-wrap justify-between items-center gap-3"><div><h3 className="font-black text-gray-900">Choose products</h3><p className="text-sm text-gray-500">{aliSelected.size} of {aliQueued.length} selected</p></div><div className="flex gap-2"><button type="button" className="border rounded-lg px-3 py-2 text-sm" onClick={()=>setAliSelected(new Set(aliQueued))}>Select all</button><button type="button" className="border rounded-lg px-3 py-2 text-sm" onClick={()=>setAliSelected(new Set())}>Clear</button></div></div>
+              {aliBatchCategoryFields}
               {aliBatchActions}
-              <p className="text-sm text-gray-500">Each product becomes one listing with all its variations. <a href="#ali-batch-category" className="font-semibold underline">Set batch category</a></p>
+              <p className="text-sm text-gray-500">Each product becomes one listing with all its variations. <a href="#ali-import-settings" className="font-semibold underline">Review import settings</a></p>
               {aliNotice && <p role="status" className="whitespace-pre-line text-sm text-gray-600">{aliNotice}</p>}
               <div className="space-y-2 max-h-80 overflow-y-auto">{aliQueued.map((url,i)=><div key={url} className="flex flex-wrap sm:flex-nowrap gap-3 items-center rounded-xl border border-gray-200 p-3 text-sm"><input aria-label={`Select product ${i+1}`} type="checkbox" disabled={aliBulkImporting} checked={aliSelected.has(url)} onChange={e=>setAliSelected(prev=>{const n=new Set(prev);e.target.checked?n.add(url):n.delete(url);return n})}/><span className="min-w-0 flex-1 truncate text-gray-700">Product #{url.match(/\/(\d+)\.html/)?.[1]??i+1}</span><a href={url} target="_blank" rel="noreferrer" className="text-indigo-600" aria-label="Open AliExpress product"><ExternalLink className="w-4 h-4"/></a><button type="button" disabled={aliBulkImporting} onClick={()=>{setAliActiveUrl(url);setAliModalOpen(true)}} className="rounded-lg bg-orange-50 px-3 py-2 font-bold text-orange-700 hover:bg-orange-100">Review & import</button></div>)}</div>
             </div>}
@@ -1544,43 +1585,6 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
               <h3 className="font-black text-gray-900">Import settings</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label className="block text-sm font-bold text-gray-700 mb-2">Destination seller</label><select value={aliSeller} onChange={e=>setAliSeller(e.target.value)} className={inputCls+" w-full"}>{users.length===0?<option value={aliSeller}>{aliSeller}</option>:users.map(u=><option key={u.email} value={u.email}>{u.name?`${u.name} (${u.email})`:u.email}</option>)}</select></div>
               <div><label className="block text-sm font-bold text-gray-700 mb-2">Default markup (%)</label><input type="number" min="0" max="1000" step="1" value={aliMarkup} onChange={e=>setAliMarkup(e.target.value)} className={inputCls+" w-full"}/></div></div>
-              <fieldset id="ali-batch-category" disabled={aliBulkImporting} className="scroll-mt-24 min-w-0">
-                <legend className="mb-2 text-sm font-bold">Batch category assignment</legend>
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <label className="min-w-0 text-sm font-semibold">
-                    Category
-                    <select value={aliCategory} onChange={e => {
-                      setAliCategory(e.target.value);
-                      setAliSubcategory("");
-                      setAliThird("");
-                    }} className={inputCls + " mt-1 block w-full"}>
-                      <option value="other">Other</option>
-                      {ACTIVE_CATEGORIES.map(category => <option key={category.slug} value={category.slug}>{category.name}</option>)}
-                    </select>
-                  </label>
-                  <label className="min-w-0 text-sm font-semibold">
-                    Subcategory
-                    <select value={aliSubcategory} disabled={aliSubcategories.size === 0} onChange={e => {
-                      setAliSubcategory(e.target.value);
-                      setAliThird("");
-                    }} className={inputCls + " mt-1 block w-full"}>
-                      <option value="">None</option>
-                      {[...aliSubcategories].map(([slug, name]) => <option key={slug} value={slug}>{name}</option>)}
-                    </select>
-                  </label>
-                  <label className="min-w-0 text-sm font-semibold">
-                    Third-level category
-                    <select value={aliThird} disabled={!aliSubcategory || aliThirdOptions.length === 0}
-                      onChange={e => setAliThird(e.target.value)} className={inputCls + " mt-1 block w-full"}>
-                      <option value="">{aliSubcategory && !aliTaxonomy && !aliTaxonomyError ? "Loading…" : "None"}</option>
-                      {aliThirdOptions.map(row => <option key={row.slug} value={row.slug}>{row.name}{row.visible ? "" : " (hidden)"}</option>)}
-                    </select>
-                  </label>
-                </div>
-                {aliTaxonomyError && <p role="status" className="mt-2 text-sm">
-                  Could not load saved taxonomy. <button type="button" className="font-semibold underline" onClick={() => setAliTaxonomyRetry(n => n + 1)}>Retry</button>
-                </p>}
-              </fieldset>
               <label className="block max-w-xs text-sm font-bold text-gray-700">
                 Quantity per product
                 <input type="number" min="1" max="2147483647" step="1" value={aliQuantity} onChange={e => setAliQuantity(e.target.value)} className={inputCls + " mt-2 w-full"} />
