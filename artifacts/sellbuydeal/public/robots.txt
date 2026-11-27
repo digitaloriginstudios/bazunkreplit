@@ -5,4 +5,4 @@ Sitemap: https://www.bazunk.com/api/seo/product-sitemap.xml
 
 Sitemap: https://www.bazunk.com/api/seo/swap-sitemap.xml
 
-Sitemap: https://www.bazunk.com/api/seo/collection-sitemap.xml
+Sitemap: https://bazunk-api-ifqs.onrender.com/api/seo/collection-sitemap.xml
