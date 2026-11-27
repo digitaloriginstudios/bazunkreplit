@@ -235,18 +235,20 @@ router.put("/admin/taxonomy/category-overrides",requireAdmin,async(req,res)=>{
  }
  try{
   await db.execute(sql`CREATE TABLE IF NOT EXISTS category_display_overrides (category_slug TEXT NOT NULL, subcategory_slug TEXT NOT NULL DEFAULT '', name TEXT NOT NULL, sort_order INTEGER NOT NULL DEFAULT 0, visible BOOLEAN NOT NULL DEFAULT TRUE, PRIMARY KEY(category_slug,subcategory_slug))`);
-  if(cleaned.length){
+  if(cleaned.length) await db.transaction(async tx => {
    const overridesPayload=JSON.stringify(cleaned);
-   await db.execute(sql`INSERT INTO category_display_overrides(category_slug,subcategory_slug,name,sort_order,visible)
+   await tx.execute(sql`INSERT INTO category_display_overrides(category_slug,subcategory_slug,name,sort_order,visible)
     SELECT x.category_slug,x.subcategory_slug,x.name,x.sort_order,x.visible
     FROM jsonb_to_recordset(${overridesPayload}::jsonb) AS x(category_slug text,subcategory_slug text,name text,sort_order integer,visible boolean)
     ON CONFLICT(category_slug,subcategory_slug) DO UPDATE SET name=EXCLUDED.name,sort_order=EXCLUDED.sort_order,visible=EXCLUDED.visible`);
    const settingRows=cleaned.flatMap(v=>{const suffix=v.subcategory_slug?"__"+v.subcategory_slug:"";const state=v.visible?"active":"hidden";return [{key:"category_visible_"+v.category_slug+suffix,value:v.visible?"true":"false"},{key:"category_display_"+v.category_slug+suffix,value:state}]});
    const settingsPayload=JSON.stringify(settingRows);
-   await db.execute(sql`INSERT INTO site_settings(key,value,updated_at)
+   await tx.execute(sql`INSERT INTO site_settings(key,value,updated_at)
     SELECT x.key,x.value,NOW() FROM jsonb_to_recordset(${settingsPayload}::jsonb) AS x(key text,value text)
-    ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW()`);
-  }
+    ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW()
+    WHERE NOT starts_with(site_settings.key, 'category_display_')
+      OR (site_settings.value='active') IS DISTINCT FROM (EXCLUDED.value='active')`);
+  });
   res.json({saved:cleaned.length});
  }catch(err){logger.error({err},"Category overrides save failed");res.status(503).json({error:"Could not save categories"});}
 });

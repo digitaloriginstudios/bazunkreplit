@@ -243,6 +243,27 @@ async function runAppMigrations() {
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `, "site_settings");
+  // Apply the catalogue activation once on the production API. Later admin changes take precedence.
+  if (process.env.RENDER_SERVICE_ID === "srv-dbtl3vtbedkc7386nep0") {
+    try {
+      await db.transaction(async tx => {
+        const marker = await tx.execute(sql`INSERT INTO site_settings (key, value)
+          VALUES ('catalogue_activation_20261127', 'done') ON CONFLICT DO NOTHING RETURNING key`);
+        if (!marker.rows.length) return;
+        await tx.execute(sql`CREATE TABLE IF NOT EXISTS category_display_overrides (
+          category_slug TEXT NOT NULL, subcategory_slug TEXT NOT NULL DEFAULT '', name TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0, visible BOOLEAN NOT NULL DEFAULT TRUE,
+          PRIMARY KEY(category_slug, subcategory_slug))`);
+        await tx.execute(sql`UPDATE category_display_overrides SET visible=TRUE WHERE NOT visible`);
+        await tx.execute(sql`UPDATE third_level_categories SET visible=TRUE WHERE NOT visible`);
+        await tx.execute(sql`UPDATE site_settings SET value=CASE WHEN starts_with(key,'category_visible_')
+          THEN 'true' ELSE 'active' END, updated_at=NOW()
+          WHERE starts_with(key,'category_visible_') OR starts_with(key,'category_display_')`);
+      });
+    } catch (err) {
+      logger.error({ err }, "Could not activate catalogue visibility");
+    }
+  }
   // Owner-requested one-time Chatwoot enablement (17 Oct 2026).
   // Only the production Bazunk API may apply it; never stage/legacy services.
   // The marker prevents future restarts from overriding a later admin choice.
