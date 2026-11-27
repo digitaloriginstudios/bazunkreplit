@@ -1,4 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from "react";
+import { createPortal } from "react-dom";
 import { useRawSettings } from "@/context/SiteSettingsContext";
 import { featureForHref, isFeatureEnabled } from "@/components/FeatureGate";
 import { motion } from "framer-motion";
@@ -241,21 +242,23 @@ function SellHubArtwork({kind}:{kind:string}) {
  const palette=SELL_PALETTE[kind];
  return <div aria-hidden="true" className="bz-sell-art-circle" style={{background:palette.color}}><span className="bz-sell-art-emoji">{palette.emoji}</span></div>;
 }
+const NativeSwapSeller = lazy(() => import("@/pages/SwapPage").then(m => ({default:m.SwapListingForm})));
 const NativeDirectSeller = lazy(() => import("@/pages/DirectSalePage").then(m => ({default:m.DirectSalePage})));
 const NativeAuctionSeller = lazy(() => import("@/pages/CreateAuctionPage").then(m => ({default:m.CreateAuctionPage})));
 const NativeClassifiedSeller = lazy(() => import("@/pages/ClassifiedsPage").then(m => ({default:m.CreateClassifiedPage})));
 function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number];onClose:()=>void}) {
  useEffect(()=>{const previous=document.body.style.overflow;document.body.style.overflow="hidden";const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose()};window.addEventListener("keydown",onKey);return ()=>{document.body.style.overflow=previous;window.removeEventListener("keydown",onKey)}},[onClose]);
 
- return <div className="fixed inset-0 z-[9999] flex items-stretch justify-center bg-[#082653]/45 p-0 backdrop-blur-[2px] lg:items-center lg:justify-end lg:bg-[#082653]/20 lg:p-5" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
-  <section role="dialog" aria-modal="true" aria-label={option.title+" listing wizard"} className="flex h-[100dvh] w-full flex-col overflow-hidden bg-white shadow-[0_18px_65px_rgba(4,36,88,.35)] lg:h-[min(91dvh,900px)] lg:w-[min(47vw,760px)] lg:rounded-[24px] lg:border-2 lg:border-[#9bbff1]">
-   <header className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-b border-[#d6e5f9] bg-white px-3 py-3 text-[#082b69] sm:px-5">
-    <div className="flex min-w-0 items-center gap-3"><span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${option.colors} text-white`}><option.icon className="h-6 w-6"/></span><div className="min-w-0"><h2 className="truncate text-base font-black sm:text-xl">{option.title}</h2><p className="hidden text-xs font-medium text-[#33577c] sm:block">Create your listing with Bazunk Seller Studio</p></div></div>
+ return createPortal(<div className="fixed inset-0 z-[9999] flex items-stretch justify-center bg-[#082653]/45 p-0 backdrop-blur-[2px] lg:items-center lg:justify-end lg:bg-[#082653]/20 lg:p-5" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
+  <section role="dialog" aria-modal="true" aria-label={option.title+" listing wizard"} className="flex h-[100dvh] w-full flex-col overflow-hidden bg-background shadow-[0_18px_65px_rgba(4,36,88,.35)] lg:h-[min(91dvh,900px)] lg:w-[min(47vw,760px)] lg:rounded-[24px] lg:border-2 lg:border-[#9bbff1]">
+   <header className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 py-3 text-foreground sm:px-5">
+    <div className="flex min-w-0 items-center gap-3"><span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${option.colors} text-white`}><option.icon className="h-6 w-6"/></span><div className="min-w-0"><h2 className="truncate text-base font-black sm:text-xl">{option.title}</h2><p className="hidden text-xs font-medium text-muted-foreground sm:block">Create your listing with Bazunk Seller Studio</p></div></div>
     <div className="flex shrink-0 gap-1 sm:gap-2"><a href={option.href} target="_blank" rel="noopener noreferrer" aria-label="Open full editor in new tab" className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-800 hover:bg-blue-100"><Maximize2 className="h-5 w-5"/></a><button type="button" onClick={onClose} aria-label="Close listing window" className="flex h-10 w-10 items-center justify-center rounded-full border border-blue-200 bg-white text-[#123c66] hover:bg-orange-50"><X className="h-5 w-5"/></button></div>
    </header>
-   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white" data-testid="sell-native-wizard">
+   <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background" data-testid="sell-native-wizard">
     <Suspense fallback={<div className="p-8 text-center font-bold text-[#123c66]">Loading your listing form…</div>}>
-      {option.id==="direct" || option.id==="quick" ? <NativeDirectSeller embedded sellMode={option.id} key={option.id}/> :
+      {option.id==="swap" ? <NativeSwapSeller embedded/> :
+       option.id==="direct" || option.id==="quick" ? <NativeDirectSeller embedded sellMode={option.id} key={option.id}/> :
        option.id==="auction" ? <NativeAuctionSeller embedded/> :
        option.id==="classified" ? <NativeClassifiedSeller embedded/> :
        <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
@@ -267,7 +270,7 @@ function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number]
     </Suspense>
    </div>
   </section>
- </div>;
+ </div>, document.body);
 }
 
 export function SellPage() {
