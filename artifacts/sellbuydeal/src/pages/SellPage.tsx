@@ -260,7 +260,7 @@ function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number]
       {option.id==="swap" ? <NativeSwapSeller embedded/> :
        option.id==="direct" || option.id==="quick" ? <NativeDirectSeller embedded sellMode={option.id} key={option.id}/> :
        option.id==="auction" ? <NativeAuctionSeller embedded/> :
-       option.id==="classified" ? <NativeClassifiedSeller embedded/> :
+       option.id==="classified" ? <NativeClassifiedSeller embedded onClose={onClose}/> :
        <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
          <span className={`flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br ${option.colors} text-white`}><option.icon className="h-11 w-11"/></span>
          <h3 className="text-2xl font-black text-[#082b69]">{option.title}</h3>

@@ -5,7 +5,7 @@ import { SellerStudioProgress, SellerStudioTips } from "@/components/SellerStudi
 import { SellerStudioNav } from "@/components/SellerStudioNav";
 import { createPortal } from "react-dom";
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useLocation, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useAuth as useClerkAuth } from "@clerk/react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -354,7 +354,6 @@ function AdDetailModal({ ad, onClose }: { ad: ClassifiedAd; onClose: () => void 
               </div>
             )}
 
-            <span id="classified-contact" className="block scroll-mt-8" />
             {/* Contact */}
             <div className="bg-gradient-to-br from-[#4A5CE8]/5 to-[#4A5CE8]/10 rounded-2xl px-4 py-4">
               <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-3">Posted by</p>
@@ -457,8 +456,8 @@ function AdDetailModal({ ad, onClose }: { ad: ClassifiedAd; onClose: () => void 
 
 // ─── Post Ad Modal ─────────────────────────────────────────────────────────────
 function PostAdModal({ onClose, onPost, embedded = false }: { onClose: () => void; onPost: (ad: ClassifiedAd) => void; embedded?: boolean }) {
- const sellEmbedded = embedded || new URLSearchParams(window.location.search).get("sellEmbed") === "1";
-  const { getToken } = useClerkAuth();
+  const sellEmbedded = embedded || new URLSearchParams(window.location.search).get("sellEmbed") === "1";
+  const { getToken, isLoaded, isSignedIn } = useClerkAuth();
   const [marketRegion] = useMarketplaceRegion();
   const { formatPrice, currency } = useCurrency();
   const { user } = useAuth();
@@ -483,6 +482,14 @@ function PostAdModal({ onClose, onPost, embedded = false }: { onClose: () => voi
   const [errors, setErrors]       = useState<string[]>([]);
 
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const errorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (errors.length) {
+      errorRef.current?.scrollIntoView({ block: "nearest" });
+      errorRef.current?.focus({ preventScroll: true });
+    }
+  }, [errors]);
 
   const cat = CLASSIFIED_CATEGORIES.find((c) => c.slug === category);
 
@@ -504,13 +511,15 @@ function PostAdModal({ onClose, onPost, embedded = false }: { onClose: () => voi
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submitting) return;
     const errs: string[] = [];
     if (!title.trim())       errs.push("Title is required");
     if (!description.trim()) errs.push("Description is required");
     if (!location.trim())    errs.push("Location is required");
     if (!contactName.trim()) errs.push("Your name is required");
-    if (errs.length > 0) { setErrors(errs); window.scrollTo({ top: 0 }); return; }
+    if (errs.length > 0) { setErrors(errs); return; }
 
+    setErrors([]);
     setSubmitting(true);
     try {
       const parsedPrice = price ? parseFloat(price) : null;
@@ -538,7 +547,11 @@ function PostAdModal({ onClose, onPost, embedded = false }: { onClose: () => voi
           photos: photos.length > 0 ? photos : null,
         }),
       });
-      if (!res.ok) { setErrors(["Failed to post ad — please try again."]); return; }
+      if (!res.ok) {
+        const result = await res.json().catch(() => null);
+        setErrors([typeof result?.error === "string" ? result.error : "Failed to post ad. Please try again."]);
+        return;
+      }
       const row = await res.json() as Record<string, unknown>;
       onPost(rowToAd(row));
       setSubmitted(true);
@@ -549,6 +562,14 @@ function PostAdModal({ onClose, onPost, embedded = false }: { onClose: () => voi
     }
   }
 
+  if (sellEmbedded && (!isLoaded || !isSignedIn)) {
+    return <div className="p-4 sm:p-6">
+      {isLoaded
+        ? <Link href="/sign-in" className="inline-flex rounded-xl bg-orange-700 px-4 py-3 font-bold text-white">Sign in to post a classified ad</Link>
+        : <p role="status">Loading account…</p>}
+    </div>;
+  }
+
   if (submitted) return (
     <div className={`bz-seller-credits min-h-screen ${sellEmbedded ? "bz-sell-embedded" : ""}`}>{!sellEmbedded && <Navbar />}<main className="mx-auto max-w-3xl px-4 py-12"><AnimatePresence>
       <motion.div
@@ -557,7 +578,7 @@ function PostAdModal({ onClose, onPost, embedded = false }: { onClose: () => voi
       >
         <motion.div
           initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }}
-          aria-label="Classified ad posted" className="classified-post-dialog bg-white rounded-2xl shadow-2xl w-full max-w-md p-10 text-center text-slate-900"
+          role="status" aria-label="Classified ad posted" className={`bg-white rounded-2xl shadow-2xl w-full max-w-md p-10 text-center text-slate-900 ${sellEmbedded ? "" : "classified-post-dialog"}`}
         >
           <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", damping: 14 }}
             className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-5">
@@ -582,18 +603,18 @@ function PostAdModal({ onClose, onPost, embedded = false }: { onClose: () => voi
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="classified-post-overlay fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6"
-        onClick={(e) => e.target === e.currentTarget && onClose()}
+        className={sellEmbedded ? undefined : "classified-post-overlay fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6"}
+        onClick={sellEmbedded ? undefined : (event) => { if (event.target === event.currentTarget) onClose(); }}
       >
         <motion.div
-          initial={{ scale: 0.95, y: 20 }}
+          initial={sellEmbedded ? false : { scale: 0.95, y: 20 }}
           animate={{ scale: 1, y: 0 }}
           exit={{ scale: 0.95, y: 20 }}
           aria-label="Post a Classified Ad" className="bz-seller-panel min-w-0 bg-white rounded-2xl shadow-sm w-full overflow-visible font-sans text-slate-900"
         >
-          <div className="px-4 pt-4">{!sellEmbedded && <SellerStudioNav active="classifieds" />}</div>
+          {!sellEmbedded && <div className="px-4 pt-4"><SellerStudioNav active="classifieds" /></div>}
           {/* Gradient header */}
-          <div className={`rounded-t-3xl px-6 pt-6 pb-5 flex items-start justify-between ${
+          {!sellEmbedded && <div className={`rounded-t-3xl px-6 pt-6 pb-5 flex items-start justify-between ${
             type === "offer"
               ? "bg-gradient-to-r from-[#F26B21] to-[#e05a10]"
               : "bg-gradient-to-r from-[#4A5CE8] to-[#3B4FD8]"
@@ -605,9 +626,9 @@ function PostAdModal({ onClose, onPost, embedded = false }: { onClose: () => voi
             <button onClick={onClose} className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 transition-colors">
               <X className="w-4 h-4 text-white" />
             </button>
-          </div>
+          </div>}
 
-          <div className="min-w-0 px-4 sm:px-6 py-5 space-y-5">
+          <form onSubmit={handleSubmit} noValidate className="bz-seller-form min-w-0 px-4 sm:px-6 py-5 space-y-5">
             <SellerStudioProgress completed={[Boolean(title.trim()),Boolean(description.trim())].filter(Boolean).length} total={2} label="Classified listing essentials"/>
             <SellerStudioTips items={["Describe what you are offering or looking for","Include useful photos and a clear location","Review your contact preferences before posting"]}/>
 
@@ -616,6 +637,7 @@ function PostAdModal({ onClose, onPost, embedded = false }: { onClose: () => voi
               {errors.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  ref={errorRef} role="alert" tabIndex={-1}
                   className="p-4 bg-red-50 border border-red-200 rounded-xl"
                 >
                   <div className="flex items-start gap-2">
@@ -911,6 +933,7 @@ function PostAdModal({ onClose, onPost, embedded = false }: { onClose: () => voi
               </div>
             </div>
 
+            <span id="classified-contact" className="block scroll-mt-8" />
             {/* Contact */}
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2.5">Contact Info</p>
@@ -949,8 +972,7 @@ function PostAdModal({ onClose, onPost, embedded = false }: { onClose: () => voi
 
             <span id="classified-publish" className="block scroll-mt-8" />
             <button
-              type="button"
-              onClick={handleSubmit}
+              type="submit"
               disabled={submitting}
               className={`w-full py-4 rounded-xl text-white font-bold text-sm hover:opacity-90 transition-opacity shadow-md flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed ${
                 type === "offer"
@@ -967,7 +989,7 @@ function PostAdModal({ onClose, onPost, embedded = false }: { onClose: () => voi
             <p className="text-[10px] text-gray-400 text-center">
               By posting you agree to our Community Guidelines. Ads are reviewed within 24 hours.
             </p>
-          </div>
+          </form>
         </motion.div>
       </motion.div>
     </AnimatePresence>
@@ -1314,7 +1336,7 @@ export function ClassifiedsPage() {
   );
 }
 
-export function CreateClassifiedPage({ embedded = false }: { embedded?: boolean } = {}) {
+export function CreateClassifiedPage({ embedded = false, onClose }: { embedded?: boolean; onClose?: () => void } = {}) {
  const [, navigate] = useLocation();
- return <PostAdModal embedded={embedded} onClose={() => navigate("/classifieds")} onPost={() => {}} />;
+ return <PostAdModal embedded={embedded} onClose={onClose ?? (() => navigate("/classifieds"))} onPost={() => {}} />;
 }
