@@ -1,7 +1,7 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { useAdmin } from "@/context/AdminContext";
 
-const bookmarklet = String.raw`javascript:(()=>{if(!/(^|\.)aliexpress\.com$/i.test(location.hostname))return alert("Open an AliExpress page first.");const ids=new Set;for(const link of document.links){const url=new URL(link.href),id=url.pathname.match(/^\/item\/(\d{10,20})(?:\.html)?\/?$/i)?.[1];if(id&&url.protocol==="https:"&&/(^|\.)aliexpress\.com$/i.test(url.hostname))ids.add(id);if(ids.size>=500)break}if(!ids.size)return alert("No product links found. Scroll to load the products and try again.");location.assign("https://www.bazunk.com/admin/importers/aliexpress#ali-links="+[...ids].join(","));})();`;
+const bookmarklet = String.raw`javascript:(()=>{if(!/(^|\.)aliexpress\.com$/i.test(location.hostname))return alert("Open an AliExpress page first.");const ids=new Set;for(const link of document.links){const url=new URL(link.href),id=url.pathname.match(/^\/(?:item|i)\/(\d{10,20})(?:\.html)?\/?$/i)?.[1];if(id&&url.protocol==="https:"&&/(^|\.)aliexpress\.com$/i.test(url.hostname))ids.add(id);if(ids.size>=500)break}if(!ids.size)return alert("No product links found. Scroll to load the products and try again.");location.assign("https://www.bazunk.com/admin/importers/aliexpress#ali-links="+[...ids].join(","));})();`;
 
 function mergeLinks(current: string, links: string[]) {
   const tokens = current.trim().split(/[\s,]+/).filter(Boolean);
@@ -9,7 +9,7 @@ function mergeLinks(current: string, links: string[]) {
     try {
       const url = new URL(value);
       if (url.protocol === "https:" && /(^|\.)aliexpress\.com$/i.test(url.hostname))
-        return url.pathname.match(/^\/item\/(\d{10,20})(?:\.html)?\/?$/i)?.[1];
+        return url.pathname.match(/^\/(?:item|i)\/(\d{10,20})(?:\.html)?\/?$/i)?.[1];
     } catch { /* Keep existing manual input. */ }
     return undefined;
   }));
@@ -23,6 +23,7 @@ export function AliExpressPageLinks({ setProductUrls }: { setProductUrls: Dispat
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState(false);
+  const [showCollector, setShowCollector] = useState(false);
   const [copyNotice, setCopyNotice] = useState("");
 
   useEffect(() => {
@@ -47,6 +48,7 @@ export function AliExpressPageLinks({ setProductUrls }: { setProductUrls: Dispat
       const data = await response.json() as { links?: string[]; error?: string };
       if (!response.ok) throw new Error(data.error || "Unable to fetch product links.");
       if (!data.links?.length) {
+        setShowCollector(true);
         setNotice("The page did not expose product links to Bazunk. Use the browser bookmarklet below to collect the products you can see.");
         return;
       }
@@ -55,6 +57,7 @@ export function AliExpressPageLinks({ setProductUrls }: { setProductUrls: Dispat
       setNotice(`Found ${links.length} product links. Prepare products to review the first 50.`);
     } catch (err) {
       setError(true);
+      setShowCollector(true);
       setNotice(err instanceof Error ? err.message : "Unable to fetch product links.");
     } finally {
       setLoading(false);
@@ -73,7 +76,7 @@ export function AliExpressPageLinks({ setProductUrls }: { setProductUrls: Dispat
         </button>
       </form>
       {notice && <p role={error ? "alert" : "status"} className="text-sm">{notice}</p>}
-      <details className="text-sm">
+      <details className="text-sm" open={showCollector} onToggle={event => setShowCollector(event.currentTarget.open)}>
         <summary className="cursor-pointer font-medium">Collect from an open AliExpress tab</summary>
         <p className="my-2">Create a bookmark with this script as its URL. While signed in to Bazunk, open an AliExpress page, scroll to load the products, and click the bookmark to send the links to this importer.</p>
         <button type="button" className="rounded-lg border px-3 py-1.5" onClick={() => {

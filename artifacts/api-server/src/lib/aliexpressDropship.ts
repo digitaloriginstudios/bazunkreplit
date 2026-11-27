@@ -177,7 +177,7 @@ async function fetchDropshipProduct(id: string, destination: "GB" | "US") {
   try {
     result = await fetchById(productId);
   } catch (error) {
-    if (!(error instanceof AliExpressApiRejection) || !error.codes.includes("604") || !alternateId) throw error;
+    if (!(error instanceof AliExpressApiRejection) || !error.codes.some(code => code === "604" || code === "482") || !alternateId) throw error;
     // A storefront link can have both a global ID and a storefront ID. Try the remaining form once.
     productId = productId === id ? alternateId : id;
     result = await fetchById(productId);
