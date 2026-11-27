@@ -1921,6 +1921,34 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
   if (postage !== null && (!zone || !Number.isFinite(postage) || postage < 0 || postage > 10000)) {
     res.status(400).json({ error:"Enter a valid postage amount or leave it blank." }); return;
   }
+  const { category = "other", subcategory = "", subsubcategory = "" } = req.body ?? {};
+  const validCategory = typeof category === "string"
+    && (category === "other" || Object.hasOwn(ADMIN_LISTING_CATEGORIES, category));
+  const validSlug = (value: unknown): value is string =>
+    typeof value === "string" && (value === "" || /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value));
+  if (!validCategory || !validSlug(subcategory) || !validSlug(subsubcategory)
+    || (category === "other" && subcategory) || (subsubcategory && !subcategory)) {
+    res.status(400).json({ error: "Choose a valid category path for this batch." }); return;
+  }
+  try {
+    if (subcategory && !ADMIN_LISTING_CATEGORIES[category]?.includes(subcategory)) {
+      const custom = await db.execute(sql`SELECT 1 FROM category_display_overrides
+        WHERE category_slug=${category} AND subcategory_slug=${subcategory}`);
+      if (!custom.rows.length) {
+        res.status(400).json({ error: "Choose a subcategory within the selected category." }); return;
+      }
+    }
+    if (subsubcategory) {
+      const third = await db.execute(sql`SELECT 1 FROM third_level_categories
+        WHERE category=${category} AND subcategory=${subcategory} AND slug=${subsubcategory}`);
+      if (!third.rows.length) {
+        res.status(400).json({ error: "Choose a third-level category within the selected subcategory." }); return;
+      }
+    }
+  } catch (error) {
+    logger.error({ error }, "Could not validate AliExpress batch categories");
+    res.status(503).json({ error: "Could not validate the batch categories. Try again." }); return;
+  }
   const destination = market === "uk" ? "GB" : "US";
   const quotePostage = postage === null && shipsToCountry(zone, origin, destination);
   const listingCurrency = market === "uk" ? "GBP" : "USD";
@@ -2014,8 +2042,8 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
         source_sync:!options.length, last_synced_at:new Date().toISOString(), source_availability:p.availability });
       const publicId = "BZK-ALI-" + sourceId;
       await db.execute(sql`INSERT INTO listings
-        (public_id,title,price,price_gbp,currency,quantity,ship_origin,ship_zone,shipping_price,category,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
-        VALUES (${publicId},${String(p.title).slice(0,500)},${bazPrice},${priceGbp},${listingCurrency},${stock},${origin},${zone},${listingPostage},'other',
+        (public_id,title,price,price_gbp,currency,quantity,ship_origin,ship_zone,shipping_price,category,subcategory,subsubcategory,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
+        VALUES (${publicId},${String(p.title).slice(0,500)},${bazPrice},${priceGbp},${listingCurrency},${stock},${origin},${zone},${listingPostage},${category},${subcategory || null},${subsubcategory || null},
         ${tidyAliExpressDescription(p.description) || String(p.title).slice(0,500)},'new',${p.images?.[0]?.url ?? null},
         ${seller.email},${seller.name ?? seller.email.split("@")[0]},${specs},'active',NOW(),NOW())`);
       results.push({id,status:"imported"});
