@@ -39,13 +39,13 @@ export function BulkListingConversion({ kind, listings, onClose, onComplete }: {
       const response = await authFetch("/api/admin/listings/convert", {
         method: "POST",
         body: JSON.stringify({ kind, ids: listings.map(item => item.id), hours: Number(hours),
-          percentage: Number(percentage), increment: Number(increment) }),
+          percentage: Number(percentage), increment: Number(increment), copyStockConfirmed: flash && confirmed }),
       });
       const payload = await response.json();
       if (!response.ok || !Array.isArray(payload.results)) throw Error(payload.error || "Could not convert listings.");
       const completed: Result[] = payload.results;
       setResults(completed);
-      onComplete(completed.filter(item => item.status !== "skipped").map(item => item.listingId));
+      if (!flash) onComplete(completed.filter(item => item.status !== "skipped").map(item => item.listingId));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not convert listings.");
     } finally {
@@ -57,18 +57,20 @@ export function BulkListingConversion({ kind, listings, onClose, onComplete }: {
   return (
     <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}>
       <DialogContent className="max-w-2xl">
-        <DialogTitle>Convert to {label}</DialogTitle>
+        <DialogTitle>{flash ? "Duplicate into flash sales" : "Convert to auctions"}</DialogTitle>
         <DialogDescription>
-          Eligible listings publish immediately using {flash ? "flash-sale" : "auction"} checkout. Their original listings are paused and the single unit moves to the new sale. Listings with multiple units, variants, or recent checkouts are skipped.
+          {flash
+            ? "Publish a separate one-unit flash sale for each eligible listing. Its original listing stays active with its existing stock. Listings with variants are skipped."
+            : "Publish an auction and pause its original listing. Listings with multiple units, variants, or recent checkouts are skipped."}
         </DialogDescription>
         {results ? (
           <>
-            <p role="status" className="font-semibold">{results.filter(row => row.status === "converted").length} of {listings.length} converted</p>
+            <p role="status" className="font-semibold">{results.filter(row => row.status === "converted").length} of {listings.length} {flash ? "copied" : "converted"}</p>
             <ul className="max-h-64 space-y-2 overflow-y-auto text-sm">
               {results.map(row => (
                 <li key={row.listingId} className="rounded-lg border px-3 py-2">
                   <strong>{listings.find(item => item.id === row.listingId)?.title ?? `Listing #${row.listingId}`}</strong>
-                  <div>{row.reason ?? (row.status === "already-converted" ? "Already converted" : "Converted")}
+                  <div>{row.reason ?? (row.status === "already-converted" ? "A sale already exists" : flash ? "Copied" : "Converted")}
                     {row.saleId && <Link className="ml-2 underline" href={`/${row.kind === "flash" ? "flash-sales" : "auctions"}/${row.saleId}`}>{row.saleId}</Link>}
                   </div>
                 </li>
@@ -99,12 +101,12 @@ export function BulkListingConversion({ kind, listings, onClose, onComplete }: {
               </div>
               <label className="flex items-start gap-2 text-sm">
                 <input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} className="mt-0.5" />
-                Publish eligible listings and move their stock to {label}.
+                {flash ? "I have a separate unit available for each flash sale." : "Publish eligible auctions and move their stock."}
               </label>
             </fieldset>
             {error && <p role="alert" className="font-semibold text-red-700">{error}</p>}
             <button type="submit" disabled={!confirmed || busy} className="rounded-lg bg-blue-700 px-4 py-2 font-semibold text-white disabled:opacity-50">
-              {busy ? "Converting…" : `Convert ${listings.length} to ${label}`}
+              {busy ? "Publishing…" : `${flash ? "Duplicate" : "Convert"} ${listings.length} to ${label}`}
             </button>
           </form>
         )}

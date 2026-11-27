@@ -465,7 +465,7 @@ export function AdminListingsPage() {
         {(["flash", "auction"] as const).map(kind => (
           <button key={kind} type="button" className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white"
             onClick={() => setConversion({ kind, listings: listings.filter(listing => selectedIds.includes(String(listing.id))) })}>
-            Convert to {kind === "flash" ? "flash sales" : "auctions"}
+            {kind === "flash" ? "Duplicate into flash sales" : "Convert to auctions"}
           </button>
         ))}
       </div>}

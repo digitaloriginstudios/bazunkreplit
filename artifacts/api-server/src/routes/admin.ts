@@ -1472,7 +1472,7 @@ void db.execute(sql`UPDATE listings
  .catch(err=>logger.error({err},"Gaming furniture category migration failed"));
 
 router.post("/admin/listings/convert", async (req, res) => {
-  const { kind, ids, hours, percentage, increment = 1 } = req.body ?? {};
+  const { kind, ids, hours, percentage, increment = 1, copyStockConfirmed } = req.body ?? {};
   if ((kind !== "flash" && kind !== "auction") ||
       !Array.isArray(ids) || ids.length === 0 || ids.length > 50 || new Set(ids).size !== ids.length ||
       ids.some(id => !Number.isSafeInteger(id) || id < 1 || id > 2147483647) ||
@@ -1483,12 +1483,15 @@ router.post("/admin/listings/convert", async (req, res) => {
     res.status(400).json({ error: "Choose 1–50 listings and enter a valid duration and price setting." });
     return;
   }
+  if (kind === "flash" && copyStockConfirmed !== true) {
+    res.status(400).json({ error: "Confirm you have a separate unit for each flash sale." }); return;
+  }
   try {
     const results = await convertListings({ kind, ids, hours, percentage, increment });
     const count = results.filter(result => result.status === "converted").length;
-    if (count) await recordAdminAudit({ req, category: "listings", action: "listings.convert",
+    if (count) await recordAdminAudit({ req, category: "listings", action: kind === "flash" ? "listings.copy-to-flash" : "listings.convert",
       targetType: kind === "flash" ? "flash_sale" : "auction", targetId: "bulk",
-      summary: `Converted ${count} listings to ${kind === "flash" ? "flash sales" : "auctions"}`,
+      summary: `${kind === "flash" ? "Copied" : "Converted"} ${count} listings to ${kind === "flash" ? "flash sales" : "auctions"}`,
       after: { kind, results } });
     res.json({ count, results });
   } catch (err) {
