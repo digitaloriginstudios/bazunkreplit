@@ -1,3 +1,4 @@
+import { BulkListingConversion, type ConversionKind } from "./BulkListingConversion";
 import "./AdminListingsContrast.css";
 import { MarketplaceLoader } from "@/components/MarketplaceLoader";
 import { Fragment, useState, useEffect } from "react";
@@ -138,6 +139,7 @@ export function AdminListingsPage() {
   const [filter, setFilter] = useState<"all" | "imported" | "user">("all");
   const [offset, setOffset] = useState(0);
   const [statusFilter,setStatusFilter]=useState("all");
+  const [conversion, setConversion] = useState<{ kind: ConversionKind; listings: Listing[] } | null>(null);
   const [selectedIds,setSelectedIds]=useState<string[]>([]);
   const [bulkPromoOpen,setBulkPromoOpen]=useState(false);
   const [bulkPromoOptions,setBulkPromoOptions]=useState<{type:string;label:string;daysValid:number}[]>([]);
@@ -458,7 +460,21 @@ export function AdminListingsPage() {
         <div className="mt-3 flex flex-wrap items-center gap-3"><span className="text-sm font-semibold">{Object.keys(bulkPromoSelected).length} promotion types × {selectedIds.length} listings = {Object.keys(bulkPromoSelected).length*selectedIds.length} grants</span><button type="button" disabled={bulkPromoBusy||!Object.keys(bulkPromoSelected).length} onClick={()=>void applyBulkPromotions()} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{bulkPromoBusy?"Applying…":"Apply selected promotions"}</button></div>
         {bulkPromoMessage&&<p role="status" className="mt-3 text-sm font-semibold">{bulkPromoMessage}</p>}
       </div>}
-      {selectedIds.length>0 && <div className="mb-3"><button type="button" onClick={()=>beginCategoryEdit()} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">Change category for {selectedIds.length} selected</button></div>}
+      {selectedIds.length > 0 && <div className="mb-3 flex flex-wrap gap-2">
+        <button type="button" onClick={()=>beginCategoryEdit()} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">Change category for {selectedIds.length} selected</button>
+        {(["flash", "auction"] as const).map(kind => (
+          <button key={kind} type="button" className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white"
+            onClick={() => setConversion({ kind, listings: listings.filter(listing => selectedIds.includes(String(listing.id))) })}>
+            Convert to {kind === "flash" ? "flash sales" : "auctions"}
+          </button>
+        ))}
+      </div>}
+      {conversion && <BulkListingConversion kind={conversion.kind} listings={conversion.listings}
+        onClose={() => setConversion(null)}
+        onComplete={ids => {
+          setListings(current => current.map(row => ids.includes(row.id) ? { ...row, status: "inactive" } : row));
+          setSelectedIds(current => current.filter(id => !ids.includes(Number(id))));
+        }} />}
       {categoryEditing==="bulk"&&<div className="bz-listing-category-editor mb-3 rounded-xl border p-3"><p className="mb-2 text-xs font-bold">Change category for {selectedIds.length} selected listings</p>{categoryFields}{categoryError&&<p role="alert" className="mt-2 text-xs font-bold text-red-500">{categoryError}</p>}</div>}
       {/* Table */}
       <div className="wp-management-table-card rounded-xl border border-slate-300 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-900">

@@ -1,3 +1,4 @@
+import { convertListings } from "../lib/listingSaleConversions.js";
 import adminInternationalRouter, {publicInternationalRouter} from "./adminInternational.js";
 import { FEATURE_DEFINITIONS as PUBLIC_FEATURE_DEFINITIONS, resolveFeatureValue } from "../lib/featureFlags.js";
 import { shippingCountry, shippingZone, shipsToCountry } from "../lib/listingShipping.js";
@@ -1469,6 +1470,32 @@ void db.execute(sql`UPDATE listings
  AND title ~* '(gaming chair|gaming desk|gaming furniture|racing chair)'`)
  .then(result=>logger.info({count:result.rowCount},"Gaming furniture category migration complete"))
  .catch(err=>logger.error({err},"Gaming furniture category migration failed"));
+
+router.post("/admin/listings/convert", async (req, res) => {
+  const { kind, ids, hours, percentage, increment = 1 } = req.body ?? {};
+  if ((kind !== "flash" && kind !== "auction") ||
+      !Array.isArray(ids) || ids.length === 0 || ids.length > 50 || new Set(ids).size !== ids.length ||
+      ids.some(id => !Number.isSafeInteger(id) || id < 1 || id > 2147483647) ||
+      !Number.isInteger(hours) || hours < 1 || hours > 720 ||
+      !Number.isInteger(percentage) || percentage < 1 || percentage > (kind === "flash" ? 99 : 100) ||
+      (kind === "auction" && (typeof increment !== "number" || !Number.isFinite(increment) ||
+        increment < 0.01 || increment > 99999999.99 || Math.abs(increment * 100 - Math.round(increment * 100)) > 0.00001))) {
+    res.status(400).json({ error: "Choose 1–50 listings and enter a valid duration and price setting." });
+    return;
+  }
+  try {
+    const results = await convertListings({ kind, ids, hours, percentage, increment });
+    const count = results.filter(result => result.status === "converted").length;
+    if (count) await recordAdminAudit({ req, category: "listings", action: "listings.convert",
+      targetType: kind === "flash" ? "flash_sale" : "auction", targetId: "bulk",
+      summary: `Converted ${count} listings to ${kind === "flash" ? "flash sales" : "auctions"}`,
+      after: { kind, results } });
+    res.json({ count, results });
+  } catch (err) {
+    logger.error({ err, kind }, "Bulk listing conversion failed");
+    res.status(500).json({ error: "Could not convert the listings." });
+  }
+});
 
 router.patch("/admin/listings/categories", async (req, res) => {
   const ids = req.body?.ids;

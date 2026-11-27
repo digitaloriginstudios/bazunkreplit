@@ -188,6 +188,10 @@ async function runAppMigrations() {
     sort_order INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (category,subcategory,slug)
   )`, "third_level_categories");
+  await run(sql`CREATE TABLE IF NOT EXISTS listing_sale_conversions (
+    listing_id INTEGER PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('flash','auction')),
+    sale_id TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`, "listing_sale_conversions");
   await run(sql`ALTER TABLE listings ADD COLUMN IF NOT EXISTS subsubcategory TEXT`, "listings.subsubcategory");
   await run(sql`CREATE INDEX IF NOT EXISTS listings_category_levels_idx ON listings (category, subcategory, subsubcategory)`, "listings_category_levels_idx");
   await run(sql`ALTER TABLE listings ADD COLUMN IF NOT EXISTS ship_origin TEXT`, "listings.ship_origin");
