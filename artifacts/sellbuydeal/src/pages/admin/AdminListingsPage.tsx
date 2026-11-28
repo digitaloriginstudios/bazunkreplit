@@ -330,7 +330,7 @@ export function AdminListingsPage() {
     setReviewBusy(x.id);if(!bulk)setReviewError("");
     try{
       const enableThird=enableThirdIds.includes(x.id);
-      const r=await authFetch(`/api/admin/listings/${x.id}/category-review`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({category:x.suggestedCategory,subcategory:x.suggestedSubcategory,thirdSlug:x.suggestedThird,enableThird})});
+      const r=await authFetch(`/api/admin/listings/${x.id}/category-review`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({category:x.suggestedCategory,subcategory:x.suggestedSubcategory,thirdSlug:x.suggestedThird,enableThird,expected:{category:x.category,subcategory:x.subcategory,thirdSlug:x.currentThird}})});
       const d=await r.json().catch(()=>({}));
       if(!r.ok)throw Error(d.error||"Failed to move listing");
       setReviews(prev=>prev.map(v=>v.id===x.id?{...v,approved:true,approvedAt:new Date().toISOString(),category:x.suggestedCategory,subcategory:x.suggestedSubcategory,currentThird:x.suggestedThird}:v));
