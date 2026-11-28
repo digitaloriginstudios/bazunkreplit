@@ -91,36 +91,6 @@ export const categoryData = [
     ]
   },
   {
-    "name": "Baby Products",
-    "slug": "baby-products",
-    "subcategories": [
-      {
-        "name": "Baby Clothing (0–24 Months)",
-        "slug": "baby-clothing"
-      },
-      {
-        "name": "Feeding & Nursing",
-        "slug": "feeding"
-      },
-      {
-        "name": "Nursery Furniture",
-        "slug": "nursery"
-      },
-      {
-        "name": "Strollers & Travel",
-        "slug": "strollers"
-      },
-      {
-        "name": "Car Seats",
-        "slug": "car-seats"
-      },
-      {
-        "name": "Baby & Toddler Toys (0–3 Years)",
-        "slug": "baby-toys"
-      }
-    ]
-  },
-  {
     "name": "Beauty & Personal Care",
     "slug": "beauty-personal-care",
     "subcategories": [
