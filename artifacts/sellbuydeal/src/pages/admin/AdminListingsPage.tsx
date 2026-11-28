@@ -264,17 +264,44 @@ export function AdminListingsPage() {
     return data.categories;
   }
   const [enableThirdIds,setEnableThirdIds]=useState<number[]>([]);
-  async function checkCategories(){
-    const ids=selectedIds.length?selectedIds.map(Number):listings.map(x=>x.id);
-    if(!ids.length)return;
+  const [auditSelected,setAuditSelected]=useState<number[]>([]);
+  const [auditProgress,setAuditProgress]=useState("");
+  const [auditApplying,setAuditApplying]=useState(false);
+  const [auditFilter,setAuditFilter]=useState("changes");
+  const changed=(x:Review)=>x.category!==x.suggestedCategory||(x.subcategory||"")!==(x.suggestedSubcategory||"")||(x.currentThird||"")!==(x.suggestedThird||"");
+  async function checkCategories(all=false){
+    let ids=selectedIds.length?selectedIds.map(Number):listings.map(x=>x.id);
+    if(!all&&!ids.length)return;
+    setAuditSelected([]);setAuditProgress("");setAuditFilter("changes");
     setReviewOpen(true);setReviewLoading(true);setReviewError("");setReviews([]);setEnableThirdIds([]);
     try{
-      const [a,entries]=await Promise.all([
-       authFetch("/api/admin/listings/category-review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids})}),
-       loadThirdLevelCategories()
-      ]);
-      const d=await a.json();
-      if(!a.ok)throw Error(d.error||"Category check failed");
+      if(all){
+        const collected=new Set<number>();
+        for(let offset=0;;offset+=50){
+          const params=new URLSearchParams({limit:"50",offset:String(offset)});
+          if(search)params.set("search",search);
+          if(statusFilter!=="all")params.set("status",statusFilter);
+          if(filter==="imported")params.set("imported","1");
+          if(filter==="user")params.set("imported","0");
+          const response=await authFetch(`/api/admin/listings?${params}`);
+          if(!response.ok)throw Error("Could not enumerate listings");
+          const page=await response.json();
+          const rows=page.listings||[];
+          rows.forEach((x:Listing)=>collected.add(Number(x.id)));
+          setAuditProgress(`Found ${collected.size} listings…`);
+          if(rows.length<50||offset+rows.length>=Number(page.total))break;
+        }
+        ids=[...collected];
+      }
+      const entries=await loadThirdLevelCategories();
+      const d:{results:Review[]}={results:[]};
+      for(let i=0;i<ids.length;i+=50){
+        const response=await authFetch("/api/admin/listings/category-review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:ids.slice(i,i+50)})});
+        const batch=await response.json();
+        if(!response.ok)throw Error(batch.error||"Category check failed");
+        d.results.push(...(batch.results||[]));
+        setAuditProgress(`Scanned ${Math.min(i+50,ids.length)} / ${ids.length}`);
+      }
       const validEntries = entries.filter(row => categoryOptions.some(
         parent => parent.slug === row.category && parent.subcategories.some(child => child.slug === row.subcategory),
       ));
@@ -292,15 +319,15 @@ export function AdminListingsPage() {
       };
       setReviews((d.results||[]).map((x:Review)=>{
         const choices=validEntries.filter((v:{category:string;subcategory:string})=>v.category===x.suggestedCategory&&v.subcategory===x.suggestedSubcategory);
-        const suggestedThird=choices.some((v:{slug:string})=>v.slug===x.suggestedThird)?x.suggestedThird:suggestion(x.title,choices);
+        const suggestedThird=x.approved?x.currentThird:choices.some((v:{slug:string})=>v.slug===x.suggestedThird)?x.suggestedThird:suggestion(x.title,choices);
         return {...x,suggestedThird};
       }));
     }catch(e){setReviewError(e instanceof Error?e.message:String(e));}
     finally{setReviewLoading(false)}
   }
   const patchReview=(id:number,change:Partial<Review>)=>setReviews(prev=>prev.map(x=>x.id===id?{...x,...change}:x));
-  async function approveReview(x:Review){
-    setReviewBusy(x.id);setReviewError("");
+  async function approveReview(x:Review,bulk=false){
+    setReviewBusy(x.id);if(!bulk)setReviewError("");
     try{
       const enableThird=enableThirdIds.includes(x.id);
       const r=await authFetch(`/api/admin/listings/${x.id}/category-review`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({category:x.suggestedCategory,subcategory:x.suggestedSubcategory,thirdSlug:x.suggestedThird,enableThird})});
@@ -315,7 +342,23 @@ export function AdminListingsPage() {
         specifications: JSON.stringify({...parseSpecs(listing.specifications), admin_third_level_slug: x.suggestedThird}),
       } : listing));
       if(enableThird)setTaxonomy(prev=>prev.map(t=>t.category===x.suggestedCategory&&t.subcategory===x.suggestedSubcategory&&t.slug===x.suggestedThird?{...t,visible:true}:t));
-    }catch(e){setReviewError(e instanceof Error?e.message:String(e));}finally{setReviewBusy(null);}
+    }catch(e){if(bulk)throw e;setReviewError(e instanceof Error?e.message:String(e));}finally{setReviewBusy(null);}
+  }
+  async function applyAudit(){
+    const rows=reviews.filter(x=>auditSelected.includes(x.id)&&!x.approved&&changed(x));
+    if(!rows.length)return;
+    setAuditApplying(true);setReviewError("");
+    const failures:string[]=[];
+    try{
+      for(let i=0;i<rows.length;i++){
+        const x=rows[i];
+        setAuditProgress(`Applying ${i+1} / ${rows.length}`);
+        try{await approveReview(x,true);setAuditSelected(prev=>prev.filter(id=>id!==x.id));}
+        catch(e){failures.push(`#${x.id}: ${e instanceof Error?e.message:String(e)}`);}
+      }
+      setAuditProgress(`Applied ${rows.length-failures.length} / ${rows.length}`);
+      if(failures.length)setReviewError(failures.join("; "));
+    }finally{setAuditApplying(false);}
   }
   const [categoryEditing, setCategoryEditing] = useState<number | "bulk" | null>(null);
   const [categoryDraft, setCategoryDraft] = useState("electronics");
@@ -445,17 +488,18 @@ export function AdminListingsPage() {
         <button type="button" disabled={mediaBusy || catalogueMediaBusy || !listings.length} onClick={()=>void syncMedia(listings.filter(l=>(!selectedIds.length || selectedIds.includes(String(l.id))) && String(parseSpecs(l.specifications)?.source).toLowerCase()==="aliexpress").map(l=>l.id))} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{mediaBusy?"Syncing media…":"Sync AliExpress media (selected / page)"}</button>
         <button type="button" disabled={mediaBusy || catalogueMediaBusy} onClick={()=>void syncCatalogueMedia()} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{catalogueMediaBusy?"Refreshing catalogue…":"Sync entire AliExpress catalogue"}</button>
         {mediaMessage && <p role="status" className="text-sm text-slate-100">{mediaMessage}</p>}
-        <button type="button" onClick={()=>void checkCategories()} disabled={loading || !listings.length || reviewLoading} className="rounded-lg border-2 border-cyan-300 !bg-blue-700 px-4 py-2 text-xs font-black !text-white hover:!bg-blue-600">Suggest categories ({selectedIds.length||listings.length})</button>
+        <button type="button" onClick={()=>void checkCategories()} disabled={loading || !listings.length || reviewLoading} className="rounded-lg border-2 border-cyan-300 !bg-blue-700 px-4 py-2 text-xs font-black !text-white hover:!bg-blue-600">Suggest categories ({selectedIds.length||listings.length})</button><button type="button" disabled={reviewLoading||auditApplying} onClick={()=>void checkCategories(true)} className="rounded-lg bg-orange-600 px-4 py-2 text-xs font-bold text-white">Bulk Category Auditor — scan all matching listings</button>
         <button type="button" onClick={()=>setLocation("/admin/listings/categories")} className="rounded-lg border-2 border-blue-400 !bg-blue-700 px-4 py-2 text-xs font-black !text-white hover:!bg-blue-600">Manage categories & subcategories →</button>
         {([{id:"listings",label:"All Listings"},{id:"import-export",label:"Import / Export"}] as const).map(item=><button aria-pressed={view===item.id} key={item.id} type="button" onClick={()=>setView(item.id)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${view===item.id?"bg-blue-600 text-white border-blue-600":"border-slate-400 bg-white text-slate-950 dark:bg-slate-800 dark:text-white"}`}>{item.label}</button>)}
       </div>
       {reviewOpen&&<div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-3"><section id="bazunk-listing-category-review" role="dialog" aria-modal="true" aria-label="Review listing categories" className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border-2 border-slate-500 !bg-[#14243c] !text-white shadow-2xl">
-        <header className="flex items-center justify-between gap-3 border-b border-slate-500 p-4"><div><h2 className="text-xl font-black text-white">Review suggested categories</h2><p className="text-xs text-slate-200">Already-approved listings are marked Checked. You can still change their categories and approve again.</p></div><button className="rounded-lg border-2 border-slate-400 !bg-[#273b56] px-4 py-2 font-black !text-white" onClick={()=>setReviewOpen(false)}>Close</button></header>
+        <header className="flex items-center justify-between gap-3 border-b border-slate-500 p-4"><div><h2 className="text-xl font-black text-white">Review suggested categories</h2><p className="text-xs text-slate-200">Already-approved listings are marked Checked. You can still change their categories and approve again.</p></div><button className="rounded-lg border-2 border-slate-400 !bg-[#273b56] px-4 py-2 font-black !text-white" disabled={reviewLoading||auditApplying} onClick={()=>setReviewOpen(false)}>Close</button></header>
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-500 p-3"><span role="status">{auditProgress}</span><span>{reviews.length} reviewed · {reviews.filter(x=>!x.approved&&changed(x)).length} changes</span><select aria-label="Review filter" value={auditFilter} onChange={e=>setAuditFilter(e.target.value)} className="rounded bg-white p-2 text-slate-950"><option value="changes">Suggested changes</option><option value="all">All results</option><option value="low">Low confidence</option></select><button disabled={reviewLoading||auditApplying} onClick={()=>setAuditSelected(reviews.filter(x=>!x.approved&&changed(x)&&x.confidence==="high"&&(!x.suggestedThird||taxonomy.some(t=>t.category===x.suggestedCategory&&t.subcategory===x.suggestedSubcategory&&t.slug===x.suggestedThird&&t.visible))).map(x=>x.id))} className="rounded bg-blue-700 p-2 text-white">Select high confidence</button><button disabled={auditApplying} onClick={()=>setAuditSelected([])} className="rounded border p-2">Clear</button><button disabled={reviewLoading||auditApplying||!auditSelected.length} onClick={()=>void applyAudit()} className="rounded bg-orange-600 p-2 font-bold text-white">Apply selected ({auditSelected.length})</button></div>
         {reviewError&&<p role="alert" className="m-3 rounded-lg border border-red-400 !bg-red-900 p-3 font-bold text-white">{reviewError}</p>}
-        <div className="flex-1 space-y-3 overflow-y-auto p-4">{reviewLoading?<p className="text-white">Checking categories…</p>:reviews.map(x=>{const choices=categoryOptions.find(c=>c.slug===x.suggestedCategory)?.subcategories||[];const thirdOptions=taxonomy.filter(t=>t.category===x.suggestedCategory&&t.subcategory===x.suggestedSubcategory);const chosen=thirdOptions.find(t=>t.slug===x.suggestedThird);return <div key={x.id} className="rounded-xl border border-slate-500 !bg-[#213651] p-4 text-white">
+        <div className="flex-1 space-y-3 overflow-y-auto p-4">{reviewLoading?<p className="text-white">Checking categories…</p>:reviews.filter(x=>auditFilter==="all"||(auditFilter==="low"?x.confidence==="low":!x.approved&&changed(x))).map(x=>{const choices=categoryOptions.find(c=>c.slug===x.suggestedCategory)?.subcategories||[];const thirdOptions=taxonomy.filter(t=>t.category===x.suggestedCategory&&t.subcategory===x.suggestedSubcategory);const chosen=thirdOptions.find(t=>t.slug===x.suggestedThird);return <div key={x.id} className="rounded-xl border border-slate-500 !bg-[#213651] p-4 text-white"><label className="mb-2 flex items-center gap-2"><input type="checkbox" disabled={auditApplying||x.approved||!changed(x)} checked={auditSelected.includes(x.id)} onChange={e=>setAuditSelected(prev=>e.target.checked?[...prev,x.id]:prev.filter(id=>id!==x.id))}/> Select correction · {x.confidence} confidence</label>
           <div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div className="max-w-2xl"><strong className="text-sm text-white">{x.title}</strong><p className="mt-1 text-xs text-slate-200">Current: {categoryOptions.find(c=>c.slug===x.category)?.name||x.category} / {categoryOptions.find(c=>c.slug===x.category)?.subcategories.find(sc=>sc.slug===x.subcategory)?.name||x.subcategory||"none"} / {x.currentThird||"none"}</p></div><span className="rounded border border-sky-300 !bg-[#194b83] px-2 py-1 text-xs font-black !text-white">{x.approved?"✓ Checked · Already approved":"Suggestion confidence: "+x.confidence}</span></div>
           <div className="grid gap-2 md:grid-cols-3">{[1].map(()=> <Fragment key="fields"><label className="text-xs font-bold text-white">Main category<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedCategory} onChange={e=>{const cat=categoryOptions.find(c=>c.slug===e.target.value);patchReview(x.id,{suggestedCategory:e.target.value,suggestedSubcategory:cat?.subcategories[0]?.slug||"",suggestedThird:""});}}>{categoryOptions.map(c=><option key={c.slug} value={c.slug}>{c.name}</option>)}</select></label><label className="text-xs font-bold text-white">Subcategory<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedSubcategory} onChange={e=>patchReview(x.id,{suggestedSubcategory:e.target.value,suggestedThird:""})}>{choices.map(c=><option key={c.slug} value={c.slug}>{c.name}</option>)}</select></label><label className="text-xs font-bold text-white">Third-level category<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedThird} onChange={e=>patchReview(x.id,{suggestedThird:e.target.value})}><option value="">None / review later</option>{thirdOptions.map(t=><option key={t.slug} value={t.slug}>{t.name}{t.visible?"":" (hidden)"}</option>)}</select></label></Fragment>)}</div>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">{chosen&&!chosen.visible?<label className="flex items-center gap-2 text-xs font-bold text-white"><input type="checkbox" checked={enableThirdIds.includes(x.id)} onChange={e=>setEnableThirdIds(prev=>e.target.checked?[...prev,x.id]:prev.filter(id=>id!==x.id))}/> Enable this hidden third-level category on the site</label>:<span className="text-xs text-slate-200">{chosen?"Third-level already enabled":"No third-level selected"}</span>}<button disabled={reviewBusy===x.id} onClick={()=>void approveReview(x)} className="rounded-lg border-2 border-blue-200 !bg-[#114ab1] px-4 py-2 text-sm font-black !text-white hover:!bg-[#1d63c7]">{reviewBusy===x.id?"Saving…":x.approved?"Save Changes / Reapprove":"Approve & Mark Checked"}</button></div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">{chosen&&!chosen.visible?<label className="flex items-center gap-2 text-xs font-bold text-white"><input type="checkbox" checked={enableThirdIds.includes(x.id)} onChange={e=>setEnableThirdIds(prev=>e.target.checked?[...prev,x.id]:prev.filter(id=>id!==x.id))}/> Enable this hidden third-level category on the site</label>:<span className="text-xs text-slate-200">{chosen?"Third-level already enabled":"No third-level selected"}</span>}<button disabled={auditApplying||reviewBusy!==null} onClick={()=>void approveReview(x)} className="rounded-lg border-2 border-blue-200 !bg-[#114ab1] px-4 py-2 text-sm font-black !text-white hover:!bg-[#1d63c7]">{reviewBusy===x.id?"Saving…":x.approved?"Save Changes / Reapprove":"Approve & Mark Checked"}</button></div>
         </div>})}{!reviewLoading&&!reviewError&&!reviews.length&&<p className="text-white">No listings left to review.</p>}</div></section></div>}
       {view!=="listings" ? <AdminListingCatalogueTools section={view}/> : <>
       {actionError&&<p role="alert" className="my-2 rounded-lg border border-red-500 p-3 font-bold text-red-500">{actionError}</p>}
