@@ -1853,7 +1853,7 @@ router.post("/admin/aliexpress-sync-media", async (req, res) => {
       if (!incoming.length && !p.videoUrl) throw new Error("Supplier returned no media");
       const previous = Array.isArray(specs.admin_gallery_images) ? specs.admin_gallery_images : [];
       const images = [...new Set([row.image, ...previous, ...incoming].filter((v): v is string => typeof v === "string" && !!v))].slice(0,30);
-      const next = JSON.stringify({...specs,admin_gallery_images:images, supplier_video_url:p.videoUrl ?? specs.supplier_video_url,media_synced_at:new Date().toISOString()});
+      const next = JSON.stringify({...specs,admin_gallery_images:images, supplier_video_url:p.videoUrl ?? specs.supplier_video_url,supplier_video_poster:p.videoUrl ? p.videoPoster : specs.supplier_video_poster,media_synced_at:new Date().toISOString()});
       const updated = await db.execute(sql`UPDATE listings SET specifications=${next},updated_at=NOW() WHERE id=${id} AND specifications IS NOT DISTINCT FROM ${row.specifications as string} RETURNING id`);
       if (!updated.rows.length) throw new Error("Listing changed during sync; retry");
       results.push({id,status:"ok",images:images.length,video:Boolean(p.videoUrl)});
@@ -2029,7 +2029,7 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
         sku: String(row.sku), label: row.label.trim().slice(0, 140), quantity: row.quantity,
         price: row.sellingPrice, priceGbp: row.priceGbp, image: typeof row.image === "string" && row.image.length <= 4000 && /^https:\/\//i.test(row.image) ? row.image : null,
       }));
-      const specs = JSON.stringify({ supplier_video_url:supplierMedia?.videoUrl, admin_gallery_images:images, details, delivery_estimate:deliveryEstimate,
+      const specs = JSON.stringify({ supplier_video_url:supplierMedia?.videoUrl,supplier_video_poster:supplierMedia?.videoPoster, admin_gallery_images:images, details, delivery_estimate:deliveryEstimate,
         ships_from:origin, ships_to:shipZone, shipping_price:shippingPrice, marketplace_region:market,
         source:"AliExpress", aliexpress_id:id, aliexpress_url:rawUrl, aliexpress_options:options.length ? options : undefined,
         source_price:base.priceUsd, source_currency:"USD", exchange_rate_to_gbp:rate,
@@ -2185,7 +2185,7 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
       const bazPrice = options.length ? Math.min(...options.map(option => option.price)) : Math.round((price * listingRate * (1 + markup / 100) + shipping) * 100) / 100;
       const priceGbp = fxRates[listingCurrency] ? Math.round(bazPrice * fxRates[listingCurrency] * 100) / 100 : null;
       const sourceId = useDropship ? p.externalId : id;
-      const specs = JSON.stringify({ supplier_video_url:supplierVideoUrl(p.videoUrl), details:attributes, delivery_estimate:deliveryEstimate, admin_gallery_images:p.images?.map((image:{url:string})=>image.url).slice(0,30), aliexpress_options:options.length ? options : undefined, marketplace_region:market, source:"AliExpress", aliexpress_id:sourceId, aliexpress_url:p.sourceUrl,
+      const specs = JSON.stringify({ supplier_video_url:supplierVideoUrl(p.videoUrl),supplier_video_poster:typeof p.videoPoster === 'string' ? p.videoPoster : undefined, details:attributes, delivery_estimate:deliveryEstimate, admin_gallery_images:p.images?.map((image:{url:string})=>image.url).slice(0,30), aliexpress_options:options.length ? options : undefined, marketplace_region:market, source:"AliExpress", aliexpress_id:sourceId, aliexpress_url:p.sourceUrl,
         source_price:price, source_currency:currency, exchange_rate_to_gbp:gbpRate, markup_pct:markup, shipping_gbp:market === "uk" ? shipping : undefined, shipping_usd:market === "us" ? shipping : undefined,
         source_sync:!options.length, last_synced_at:new Date().toISOString(), source_availability:p.availability });
       const publicId = "BZK-ALI-" + sourceId;
