@@ -698,23 +698,35 @@ router.post("/admin/users", async (req, res) => {
 });
 
 // Admin-managed demo sellers are not Clerk identities and must never be treated as verified accounts.
-const DEMO_SELLER_STORES = [
-  "Copper & Fern","Northstar Finds","Bluebird Home","The Retro Attic","Willow & Wire",
-  "Harbour Goods","Pixel Pantry","Oak & Ember","Brightside Bazaar","Luna Lane",
-  "The Gadget Grove","Cedar Collective","Urban Trinkets","Sunset Supply","Moss & Maple",
-  "The Vinyl Vault","Little Lantern","Orange Orchard","Silver Sparrow","Coastal Curios"
-];
+const DEMO_SELLER_PREFIXES = ["Amber","Birch","Clover","Driftwood","Elm","Foxglove","Golden","Heather","Indigo","Juniper","Kingfisher","Lavender","Meadow","Nimbus","Olive","Pebble","Quartz","Rowan","Saffron","Thistle","Umber","Violet","Wren","Yarrow","Zephyr","Acorn","Brook","Coral","Dawn","Evergreen"];
+const DEMO_SELLER_SUFFIXES = ["Market","Collective","Treasures","Studio","Finds","Emporium","Corner","Goods","Workshop","Trading","Attic","Depot","Boutique","Exchange","Outpost","Gallery","House","Lane","Loft","Supply"];
 router.post("/admin/users/demo-sellers/bulk", async (req, res) => {
   try {
     if (req.body?.confirm !== "CREATE_20_DEMO_SELLERS") { res.status(400).json({error:"Confirmation required"}); return; }
     const batch = randomUUID().slice(0, 8);
     const created = await db.transaction(async tx => {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(82461027)`);
+      const existing = await tx.execute(sql`SELECT lower(name) AS name, lower(username) AS username FROM users`);
+      const names = new Set(existing.rows.map(row => String(row.name ?? "")));
+      const usernames = new Set(existing.rows.map(row => String(row.username ?? "")));
       const result = [];
-      for (let i = 0; i < DEMO_SELLER_STORES.length; i++) {
+      for (let i = 0; i < 20; i++) {
         const email = `demo-seller-${batch}-${String(i+1).padStart(2,"0")}@example.com`;
-        const name = DEMO_SELLER_STORES[i];
-        await tx.execute(sql`INSERT INTO users (id,email,name,credits,seller_type) VALUES (${email},${email},${name},0,'business')`);
-        result.push({email,name});
+        let name = "", username = "";
+        for (let n = 0; n < 10000; n++) {
+          const prefix = DEMO_SELLER_PREFIXES[n % DEMO_SELLER_PREFIXES.length];
+          const suffix = DEMO_SELLER_SUFFIXES[Math.floor(n / DEMO_SELLER_PREFIXES.length) % DEMO_SELLER_SUFFIXES.length];
+          const cycle = Math.floor(n / (DEMO_SELLER_PREFIXES.length * DEMO_SELLER_SUFFIXES.length));
+          name = `${prefix} ${suffix}${cycle ? " " + (cycle + 1) : ""}`;
+          username = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+          if (!names.has(name.toLowerCase()) && !usernames.has(username)) break;
+          name = "";
+        }
+        if (!name) throw new Error("Demo seller name pool exhausted");
+        await tx.execute(sql`INSERT INTO users (id,email,name,username,credits,seller_type) VALUES (${email},${email},${name},${username},0,'business')`);
+        names.add(name.toLowerCase());
+        usernames.add(username);
+        result.push({email,name,username});
       }
       return result;
     });
