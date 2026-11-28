@@ -51,19 +51,6 @@ export const CATEGORIES: Category[] = [
     ],
   },
   {
-    name: "Baby Products",
-    slug: "baby-products",
-    icon: "Baby",
-    subcategories: [
-      { name: "Baby Clothing (0–24 Months)", slug: "baby-clothing" },
-      { name: "Feeding & Nursing", slug: "feeding" },
-      { name: "Nursery Furniture", slug: "nursery" },
-      { name: "Strollers & Travel", slug: "strollers" },
-      { name: "Car Seats", slug: "car-seats" },
-      { name: "Baby & Toddler Toys (0–3 Years)", slug: "baby-toys" },
-    ],
-  },
-  {
     name: "Beauty & Personal Care",
     slug: "beauty-personal-care",
     icon: "Sparkles",
@@ -475,14 +462,6 @@ export const THIRD_LEVEL_SUGGESTIONS: Record<string, {subcategory: string; sugge
       "Brake parts",
       "Filters",
       "Engine components"
-    ]
-  },
-  "baby-products": {
-    "subcategory": "baby-clothing",
-    "suggestions": [
-      "Bodysuits",
-      "Sleepwear",
-      "Outfits"
     ]
   },
   "beauty-personal-care": {
