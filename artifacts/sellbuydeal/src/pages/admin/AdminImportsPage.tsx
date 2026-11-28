@@ -8,6 +8,7 @@ import {
   CheckSquare, Square, ArrowDownToLine, User, Globe, Plus, FileText,
 } from "lucide-react";
 import { AdminLayout } from "./AdminLayout";
+import { catalogueTaxonomy, type CatalogueCategory } from "./catalogueTaxonomy";
 import { AliExpressPageLinks } from "./AliExpressPageLinks";
 import { AliExpressConnectionPanel } from "./AliExpressConnectionPanel";
 import { RapidApiPanel } from "./RapidApiPanel";
@@ -78,6 +79,14 @@ interface Specs {
 
 function parseSpecs(raw: string | null): Specs {
   try { return JSON.parse(raw ?? "{}"); } catch { return {}; }
+}
+
+interface ImportThirdLevel {
+  category: string;
+  subcategory: string;
+  slug: string;
+  name: string;
+  visible: boolean;
 }
 
 interface UserOption { email: string; name: string | null; }
@@ -202,6 +211,40 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
   const [aliDestinations, setAliDestinations] = useState(defaultAliExpressDestinations);
   const [aliNotice, setAliNotice] = useState("");
   const [aliBulkImporting, setAliBulkImporting] = useState(false);
+
+  const [aliCategory, setAliCategory] = useState("other");
+  const [aliSubcategory, setAliSubcategory] = useState("");
+  const [aliThird, setAliThird] = useState("");
+  const [aliTaxonomy, setAliTaxonomy] = useState<{
+    items: CatalogueCategory[];
+    categories: ImportThirdLevel[];
+  } | null>(null);
+  const [aliTaxonomyError, setAliTaxonomyError] = useState(false);
+  const [aliTaxonomyRetry, setAliTaxonomyRetry] = useState(0);
+
+  useEffect(() => {
+    if (tab !== "aliexpress") return;
+    let active = true;
+    setAliTaxonomyError(false);
+    Promise.all([
+      authFetch("/api/taxonomy/category-overrides"),
+      authFetch("/api/admin/taxonomy/third-level"),
+    ]).then(async ([overridesResponse, thirdResponse]) => {
+      if (!overridesResponse.ok || !thirdResponse.ok) throw new Error("Taxonomy unavailable");
+      const [{ overrides }, { categories }] = await Promise.all([overridesResponse.json(), thirdResponse.json()]);
+      if (!Array.isArray(overrides) || !Array.isArray(categories)) throw new Error("Taxonomy unavailable");
+      if (active) setAliTaxonomy({ items: catalogueTaxonomy(overrides), categories });
+    }).catch(() => { if (active) setAliTaxonomyError(true); });
+    return () => { active = false; };
+  }, [tab, aliTaxonomyRetry]);
+
+  const aliMainCategories = aliTaxonomy?.items.filter(row => !row.subcategory_slug) ?? [];
+  const aliSubcategories = aliTaxonomy?.items.filter(
+    row => row.category_slug === aliCategory && row.subcategory_slug,
+  ) ?? [];
+  const aliThirdOptions = aliTaxonomy?.categories.filter(
+    row => row.category === aliCategory && row.subcategory === aliSubcategory,
+  ) ?? [];
 
   const PAGE_SIZE = 50;
 
@@ -625,6 +668,7 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
         try {
           const res = await authFetch("/api/admin/import-selected-aliexpress", {
             method: "POST", body: JSON.stringify({ ids:[id], requireVariantDetails:true, markup:Number(aliMarkup), sellerEmail:aliSeller,
+              category:aliCategory, subcategory:aliSubcategory, subsubcategory:aliThird,
               quantity:Number(aliQuantity), shipOrigin:aliOrigin, shipZone:aliExpressShipZone(aliDestinations), postage:aliShipping }),
           });
           const data = await res.json();
@@ -648,6 +692,48 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
       setAliNotice(`${imported} imported. ${skipped} already imported. ${batch.length - completed.size} remaining.${failed.length ? "\n" + failed.join("\n") : ""}`);
     } finally { setAliBulkImporting(false); }
   }
+
+  const aliBatchCategoryFields = (
+    <fieldset id="ali-batch-category" disabled={aliBulkImporting} className="scroll-mt-24 min-w-0">
+      <legend className="mb-2 text-sm font-bold">Batch category assignment</legend>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <label className="min-w-0 text-sm font-semibold">
+          Category
+          <select aria-label="Batch category" value={aliCategory} disabled={!aliTaxonomy} onChange={e => {
+            setAliCategory(e.target.value);
+            setAliSubcategory("");
+            setAliThird("");
+          }} className={inputCls + " mt-1 block w-full"}>
+            <option value="other">Other</option>
+            {aliMainCategories.map(row => <option key={row.category_slug} value={row.category_slug}>{row.name}{row.visible ? "" : " (hidden)"}</option>)}
+          </select>
+        </label>
+        <label className="min-w-0 text-sm font-semibold">
+          Subcategory
+          <select value={aliSubcategory} disabled={aliSubcategories.length === 0} onChange={e => {
+            setAliSubcategory(e.target.value);
+            setAliThird("");
+          }} className={inputCls + " mt-1 block w-full"}>
+            <option value="">None</option>
+            {aliSubcategories.map(row => <option key={row.subcategory_slug} value={row.subcategory_slug}>{row.name}{row.visible ? "" : " (hidden)"}</option>)}
+          </select>
+        </label>
+        <label className="min-w-0 text-sm font-semibold">
+          Third-level category
+          <select value={aliThird} disabled={!aliSubcategory || aliThirdOptions.length === 0}
+            onChange={e => setAliThird(e.target.value)} className={inputCls + " mt-1 block w-full"}>
+            <option value="">{aliSubcategory && !aliTaxonomy && !aliTaxonomyError ? "Loading…" : "None"}</option>
+            {aliThirdOptions.map(row => <option key={row.slug} value={row.slug}>{row.name}{row.visible ? "" : " (hidden)"}</option>)}
+          </select>
+        </label>
+      </div>
+      {aliTaxonomy && <p className="mt-2 text-xs text-gray-600">Categories marked (hidden) are hidden in storefront navigation and can still be assigned here.</p>}
+      {!aliTaxonomy && !aliTaxonomyError && <p role="status" className="mt-2 text-sm">Loading catalogue categories…</p>}
+      {aliTaxonomyError && <p role="status" className="mt-2 text-sm">
+        Could not load saved taxonomy. <button type="button" className="font-semibold underline" onClick={() => setAliTaxonomyRetry(n => n + 1)}>Retry</button>
+      </p>}
+    </fieldset>
+  );
 
   const aliBatchActions = aliQueued.length > 0 && (
     <div className="flex flex-wrap items-center gap-3">
@@ -1481,6 +1567,7 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
             </div>
             {aliQueued.length>0&&<div className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-5 shadow-sm space-y-4">
               <div className="flex flex-wrap justify-between items-center gap-3"><div><h3 className="font-black text-gray-900">Choose products</h3><p className="text-sm text-gray-500">{aliSelected.size} of {aliQueued.length} selected</p></div><div className="flex gap-2"><button type="button" className="border rounded-lg px-3 py-2 text-sm" onClick={()=>setAliSelected(new Set(aliQueued))}>Select all</button><button type="button" className="border rounded-lg px-3 py-2 text-sm" onClick={()=>setAliSelected(new Set())}>Clear</button></div></div>
+              {aliBatchCategoryFields}
               {aliBatchActions}
               <p className="text-sm text-gray-500">Each product becomes one listing with all its variations. <a href="#ali-import-settings" className="font-semibold underline">Review import settings</a></p>
               {aliNotice && <p role="status" className="whitespace-pre-line text-sm text-gray-600">{aliNotice}</p>}
@@ -1505,7 +1592,7 @@ export function AdminImportsPage({ source = "amazon" }: { source?: "amazon" | "e
               {!aliQueued.length && <button disabled={aliBulkImporting} onClick={()=>{setAliActiveUrl(aliQueued.find(u=>aliSelected.has(u))??"");setAliModalOpen(true)}} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-5 py-3 text-white font-bold text-sm hover:bg-orange-600"><Plus className="w-4 h-4"/>Import a product</button>}
               {aliDone>0&&<p className="text-sm text-green-700">{aliDone} product(s) imported this session.</p>}
             </div>
-            {aliModalOpen&&<ImportModal key={aliActiveUrl} initialUrl={aliActiveUrl} initialMarkup={aliMarkup} initialQuantity={aliQuantity} initialOrigin={aliOrigin} initialDestinations={aliDestinations} initialPostage={aliShipping} onClose={()=>setAliModalOpen(false)} onSuccess={()=>{setAliDone(n=>n+1);setAliSelected(prev=>{const next=new Set(prev);next.delete(aliActiveUrl);return next});setAliQueued(prev=>prev.filter(url=>url!==aliActiveUrl))}} userEmail={aliSeller} userName={users.find(u=>u.email===aliSeller)?.name??""}/>}
+            {aliModalOpen&&<ImportModal key={aliActiveUrl} adminCatalogue={aliTaxonomy?.items ?? null} initialUrl={aliActiveUrl} initialMarkup={aliMarkup} initialQuantity={aliQuantity} initialOrigin={aliOrigin} initialDestinations={aliDestinations} initialPostage={aliShipping} onClose={()=>setAliModalOpen(false)} onSuccess={()=>{setAliDone(n=>n+1);setAliSelected(prev=>{const next=new Set(prev);next.delete(aliActiveUrl);return next});setAliQueued(prev=>prev.filter(url=>url!==aliActiveUrl))}} userEmail={aliSeller} userName={users.find(u=>u.email===aliSeller)?.name??""}/>}
           </motion.div>
         )}
 

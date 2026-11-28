@@ -1,3 +1,4 @@
+import { convertListings } from "../lib/listingSaleConversions.js";
 import adminInternationalRouter, {publicInternationalRouter} from "./adminInternational.js";
 import { FEATURE_DEFINITIONS as PUBLIC_FEATURE_DEFINITIONS, resolveFeatureValue } from "../lib/featureFlags.js";
 import { shippingCountry, shippingZone, shipsToCountry } from "../lib/listingShipping.js";
@@ -262,15 +263,44 @@ router.get("/admin/category-visibility",async(_req,res)=>{
  catch(err){logger.error({err},"Category visibility load failed");res.status(500).json({error:"Could not load category visibility"});}
 });
 router.patch("/admin/category-visibility",async(req,res)=>{
- const category=String(req.body.category??"");const subcategory=String(req.body.subcategory??"");
- if(!/^[a-z0-9-]{1,80}$/.test(category)||(subcategory&&!/^[a-z0-9-]{1,80}$/.test(subcategory))||(req.body.state!==undefined?!["active","coming_soon","maintenance","hidden"].includes(req.body.state):typeof req.body.enabled!=="boolean")){res.status(400).json({error:"Invalid category visibility request"});return;}
- const key=`category_visible_${category}${subcategory?"__"+subcategory:""}`;
- try {const state=req.body.state??(req.body.enabled?"active":"coming_soon");const enabled=state==="active";
- await db.execute(sql`INSERT INTO site_settings(key,value) VALUES (${key},${enabled?"true":"false"}) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`);
- const displayKey=`category_display_${category}${subcategory?"__"+subcategory:""}`;
- await db.execute(sql`INSERT INTO site_settings(key,value) VALUES (${displayKey},${state}) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`);
- res.json({ok:true,category,subcategory,enabled,state});}
- catch(err){logger.error({err},"Category visibility update failed");res.status(500).json({error:"Could not update category visibility"});}
+ const { category = "", subcategory = "", thirdSlug = "", name, sortOrder, enabled: requestedEnabled, state: requestedState } = req.body ?? {};
+ const validSlug = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9-]{1,100}$/.test(value);
+ const state = requestedState ?? (requestedEnabled ? "active" : "coming_soon");
+ if (!validSlug(category) || (subcategory !== "" && !validSlug(subcategory)) ||
+     (thirdSlug !== "" && (!subcategory || !validSlug(thirdSlug))) ||
+     (requestedState === undefined && typeof requestedEnabled !== "boolean") ||
+     !["active","coming_soon","maintenance","hidden"].includes(state) ||
+     (thirdSlug && !["active","hidden"].includes(state))) {
+   res.status(400).json({error:"Invalid category visibility request"}); return;
+ }
+ const enabled = state === "active";
+ try {
+   if (thirdSlug) {
+     const result = await db.execute(sql`UPDATE third_level_categories SET visible=${enabled}
+       WHERE category=${category} AND subcategory=${subcategory} AND slug=${thirdSlug} RETURNING slug`);
+     if (!result.rows.length) { res.status(404).json({error:"Third-level category was not found."}); return; }
+   } else {
+     const suffix = category + (subcategory ? "__" + subcategory : "");
+     await db.transaction(async tx => {
+       if (typeof name === "string" && name.trim()) {
+         const order = Number.isInteger(sortOrder) ? Math.max(0, Math.min(9999, sortOrder)) : 9999;
+         await tx.execute(sql`INSERT INTO category_display_overrides (category_slug,subcategory_slug,name,sort_order,visible)
+           VALUES (${category},${subcategory},${name.trim().slice(0,100)},${order},${enabled})
+           ON CONFLICT (category_slug,subcategory_slug) DO UPDATE SET visible=EXCLUDED.visible`);
+       } else {
+         await tx.execute(sql`UPDATE category_display_overrides SET visible=${enabled}
+           WHERE category_slug=${category} AND subcategory_slug=${subcategory}`);
+       }
+       await tx.execute(sql`INSERT INTO site_settings(key,value,updated_at)
+         VALUES (${"category_visible_" + suffix},${String(enabled)},NOW()),(${"category_display_" + suffix},${state},NOW())
+         ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW()`);
+     });
+   }
+   res.json({ok:true,category,subcategory,thirdSlug,enabled,state});
+ } catch(err) {
+   logger.error({err},"Category visibility update failed");
+   res.status(500).json({error:"Could not update category visibility"});
+ }
 });
 
 // ── System Status ─────────────────────────────────────────────────────────────
@@ -1402,7 +1432,7 @@ router.get("/admin/listings", async (req, res) => {
         : sql`TRUE`;
 
     const rows = await db.execute(sql`
-      SELECT id, public_id, public_url_token, title, price, price_gbp, currency, category, subcategory,
+      SELECT id, public_id, public_url_token, title, price, price_gbp, currency, category, subcategory, subsubcategory,
              condition, status, seller_email, seller_username, image, specifications,
              created_at
       FROM listings
@@ -1441,6 +1471,35 @@ void db.execute(sql`UPDATE listings
  .then(result=>logger.info({count:result.rowCount},"Gaming furniture category migration complete"))
  .catch(err=>logger.error({err},"Gaming furniture category migration failed"));
 
+router.post("/admin/listings/convert", async (req, res) => {
+  const { kind, ids, hours, percentage, increment = 1, copyStockConfirmed } = req.body ?? {};
+  if ((kind !== "flash" && kind !== "auction") ||
+      !Array.isArray(ids) || ids.length === 0 || ids.length > 50 || new Set(ids).size !== ids.length ||
+      ids.some(id => !Number.isSafeInteger(id) || id < 1 || id > 2147483647) ||
+      !Number.isInteger(hours) || hours < 1 || hours > 720 ||
+      !Number.isInteger(percentage) || percentage < 1 || percentage > (kind === "flash" ? 99 : 100) ||
+      (kind === "auction" && (typeof increment !== "number" || !Number.isFinite(increment) ||
+        increment < 0.01 || increment > 99999999.99 || Math.abs(increment * 100 - Math.round(increment * 100)) > 0.00001))) {
+    res.status(400).json({ error: "Choose 1–50 listings and enter a valid duration and price setting." });
+    return;
+  }
+  if (kind === "flash" && copyStockConfirmed !== true) {
+    res.status(400).json({ error: "Confirm you have a separate unit for each flash sale." }); return;
+  }
+  try {
+    const results = await convertListings({ kind, ids, hours, percentage, increment });
+    const count = results.filter(result => result.status === "converted").length;
+    if (count) await recordAdminAudit({ req, category: "listings", action: kind === "flash" ? "listings.copy-to-flash" : "listings.convert",
+      targetType: kind === "flash" ? "flash_sale" : "auction", targetId: "bulk",
+      summary: `${kind === "flash" ? "Copied" : "Converted"} ${count} listings to ${kind === "flash" ? "flash sales" : "auctions"}`,
+      after: { kind, results } });
+    res.json({ count, results });
+  } catch (err) {
+    logger.error({ err, kind }, "Bulk listing conversion failed");
+    res.status(500).json({ error: "Could not convert the listings." });
+  }
+});
+
 router.patch("/admin/listings/categories", async (req, res) => {
   const ids = req.body?.ids;
   const category = req.body?.category;
@@ -1449,7 +1508,7 @@ router.patch("/admin/listings/categories", async (req, res) => {
   if (!Array.isArray(ids) || ids.length < 1 || ids.length > 50 || !ids.every((id: unknown) => Number.isSafeInteger(id) && (id as number) > 0) || new Set(ids).size !== ids.length) {
     res.status(400).json({error:"Choose between 1 and 50 unique listing IDs."}); return;
   }
-  if (typeof category !== "string" || typeof subcategory !== "string" || !Object.hasOwn(ADMIN_LISTING_CATEGORIES, category) || !ADMIN_LISTING_CATEGORIES[category].includes(subcategory)) {
+  if (typeof category !== "string" || typeof subcategory !== "string" || !Object.hasOwn(ADMIN_LISTING_CATEGORIES, category)) {
     res.status(400).json({error:"Choose a valid category and subcategory."}); return;
   }
   if (thirdSlug !== undefined && typeof thirdSlug !== "string") {
@@ -1457,6 +1516,10 @@ router.patch("/admin/listings/categories", async (req, res) => {
   }
   try {
     const result = await db.transaction(async tx => {
+      if (!ADMIN_LISTING_CATEGORIES[category].includes(subcategory)) {
+        const custom = await tx.execute(sql`SELECT 1 FROM category_display_overrides WHERE category_slug=${category} AND subcategory_slug=${subcategory}`);
+        if (!custom.rows.length) return {ok:false as const, error:"Choose a valid subcategory.", status:400};
+      }
       if (thirdSlug) {
         const found = await tx.execute(sql`SELECT slug FROM third_level_categories
           WHERE category=${category} AND subcategory=${subcategory} AND slug=${thirdSlug} FOR KEY SHARE`);
@@ -1471,11 +1534,14 @@ router.patch("/admin/listings/categories", async (req, res) => {
       const sameParent = sql`(category = ${category} AND subcategory = ${subcategory})`;
       const nextSpecs = thirdSlug === undefined
         ? sql`CASE WHEN ${sameParent} THEN specifications ELSE (${specs} - 'admin_third_level_slug' - 'admin_category_review_approved_at')::text END`
-        : sql`CASE WHEN ${sameParent} AND COALESCE(${specs}->>'admin_third_level_slug', '') = ${thirdSlug}
+        : sql`CASE WHEN ${sameParent} AND COALESCE(subsubcategory, ${specs}->>'admin_third_level_slug', '') = ${thirdSlug}
             THEN specifications
             ELSE jsonb_set(${specs} - 'admin_category_review_approved_at', '{admin_third_level_slug}', to_jsonb(${thirdSlug}::text))::text END`;
-      const updated = await tx.execute(sql`UPDATE listings SET category=${category}, subcategory=${subcategory},
-        specifications=${nextSpecs}, updated_at=NOW() WHERE id IN (${listingIds}) RETURNING id, category, subcategory, specifications`);
+      const nextThird = thirdSlug === undefined
+        ? sql`CASE WHEN ${sameParent} THEN COALESCE(subsubcategory, NULLIF(${specs}->>'admin_third_level_slug', '')) ELSE NULL END`
+        : sql`NULLIF(${thirdSlug}, '')`;
+      const updated = await tx.execute(sql`UPDATE listings SET category=${category}, subcategory=${subcategory}, subsubcategory=${nextThird},
+        specifications=${nextSpecs}, updated_at=NOW() WHERE id IN (${listingIds}) RETURNING id, category, subcategory, subsubcategory, specifications`);
       return {ok:true as const, updated:updated.rows};
     });
     if (!result.ok) { res.status(result.status).json({error:result.error}); return; }
@@ -1489,7 +1555,7 @@ router.post("/admin/listings/category-review", async (req,res)=>{
  const ids=req.body?.ids;
  if(!Array.isArray(ids)||ids.length<1||ids.length>50||!ids.every((x:unknown)=>Number.isSafeInteger(x)&&Number(x)>0)){res.status(400).json({error:"Select 1–50 listings"});return;}
  try{
- const rows=await db.execute(sql`SELECT l.id,l.title,l.category,l.subcategory,l.specifications, a.created_at AS historical_approved_at FROM listings l LEFT JOIN LATERAL (SELECT created_at FROM admin_audit_log WHERE action='listings.category-review' AND target_id=l.id::text AND after_data->>'category'=l.category AND after_data->>'subcategory'=COALESCE(l.subcategory,'') AND COALESCE(after_data->>'thirdSlug','')=COALESCE(NULLIF(l.specifications,'')::jsonb->>'admin_third_level_slug','') ORDER BY created_at DESC LIMIT 1) a ON TRUE WHERE l.id IN (${sql.join(ids.map((id:number)=>sql`${id}`),sql`,`)})`);
+ const rows=await db.execute(sql`SELECT l.id,l.title,l.category,l.subcategory,l.subsubcategory,l.specifications, a.created_at AS historical_approved_at FROM listings l LEFT JOIN LATERAL (SELECT created_at FROM admin_audit_log WHERE action='listings.category-review' AND target_id=l.id::text AND after_data->>'category'=l.category AND after_data->>'subcategory'=COALESCE(l.subcategory,'') AND COALESCE(after_data->>'thirdSlug','')=COALESCE(l.subsubcategory, NULLIF(l.specifications,'')::jsonb->>'admin_third_level_slug','') ORDER BY created_at DESC LIMIT 1) a ON TRUE WHERE l.id IN (${sql.join(ids.map((id:number)=>sql`${id}`),sql`,`)})`);
  const tax=await db.execute(sql`SELECT category,subcategory,slug,name,visible FROM third_level_categories`);
  const all=tax.rows as any[];
  const results=(rows.rows as any[]).map(l=>{
@@ -1521,22 +1587,26 @@ router.post("/admin/listings/category-review", async (req,res)=>{
   const inSub=all.filter(x=>x.category===proposedCat&&x.subcategory===proposedSub);
   const ranked=inSub.map(x=>{const key=String(x.name).toLowerCase().match(/[a-z0-9]+/g)||[];const meaningful=key.filter(k=>k.length>3&&!["with","parts","other","products","main"].includes(k));const titleMentionsAccessories=/\b(accessories|accessory|spare parts?|replacement parts?|attachments?)\b/.test(title);const accessoryMismatch=meaningful.includes("accessories")&&!titleMentionsAccessories;const matched=meaningful.filter(k=>words.has(k)||[...words].some(w=>w.startsWith(k)||k.startsWith(w))).length;return {...x,score:accessoryMismatch?0:meaningful.length?matched/meaningful.length:0,matched:accessoryMismatch?0:matched};}).filter(x=>x.matched>0).sort((a,b)=>b.score-a.score||b.matched-a.matched);
   const best=ranked[0];
-  return {id:l.id,title:l.title,category:l.category,subcategory:l.subcategory,currentThird:String(spec.admin_third_level_slug||""),approved,approvedAt:spec.admin_category_review_approved_at||l.historical_approved_at||null,suggestedCategory:proposedCat,suggestedSubcategory:proposedSub,suggestedThird:approved?String(spec.admin_third_level_slug||""):(best?.slug||""),thirdName:best?.name||"",thirdVisible:best?.visible??false,confidence:best?.score>=0.8?"high":best?.score>=0.5?"medium":"low",needsReview:!approved};
+  return {id:l.id,title:l.title,category:l.category,subcategory:l.subcategory,currentThird:String(l.subsubcategory||spec.admin_third_level_slug||""),approved,approvedAt:spec.admin_category_review_approved_at||l.historical_approved_at||null,suggestedCategory:proposedCat,suggestedSubcategory:proposedSub,suggestedThird:approved?String(l.subsubcategory||spec.admin_third_level_slug||""):(best?.slug||""),thirdName:best?.name||"",thirdVisible:best?.visible??false,confidence:best?.score>=0.8?"high":best?.score>=0.5?"medium":"low",needsReview:!approved};
  });
  res.json({results});
  }catch(err){logger.error({err},"Listing taxonomy review failed");res.status(503).json({error:"Category review unavailable"});}
 });
 router.patch("/admin/listings/:id/category-review",async(req,res)=>{
  const id=Number(req.params.id),{category,subcategory,thirdSlug,enableThird}=req.body||{};
- if(!Number.isSafeInteger(id)||id<1||typeof category!=="string"||typeof subcategory!=="string"||!ADMIN_LISTING_CATEGORIES[category]?.includes(subcategory)||typeof thirdSlug!=="string"||typeof enableThird!=="boolean"){res.status(400).json({error:"Invalid category update"});return;}
+ if(!Number.isSafeInteger(id)||id<1||typeof category!=="string"||typeof subcategory!=="string"||!Object.hasOwn(ADMIN_LISTING_CATEGORIES,category)||typeof thirdSlug!=="string"||typeof enableThird!=="boolean"){res.status(400).json({error:"Invalid category update"});return;}
  try{
   await db.transaction(async tx=>{
+   if (!ADMIN_LISTING_CATEGORIES[category].includes(subcategory)) {
+    const custom = await tx.execute(sql`SELECT 1 FROM category_display_overrides WHERE category_slug=${category} AND subcategory_slug=${subcategory}`);
+    if (!custom.rows.length) throw Error("Choose a valid subcategory.");
+   }
    if(thirdSlug){
     const found=await tx.execute(sql`SELECT slug FROM third_level_categories WHERE category=${category} AND subcategory=${subcategory} AND slug=${thirdSlug}`);
     if(!found.rows.length)throw Error("Selected third-level category does not exist");
     if(enableThird)await tx.execute(sql`UPDATE third_level_categories SET visible=TRUE WHERE category=${category} AND subcategory=${subcategory} AND slug=${thirdSlug}`);
    }
-   const result=await tx.execute(sql`UPDATE listings SET category=${category},subcategory=${subcategory},specifications=jsonb_set(jsonb_set(COALESCE(NULLIF(specifications::text,'')::jsonb,'{}'::jsonb),'{admin_third_level_slug}',to_jsonb(${thirdSlug}::text),true),'{admin_category_review_approved_at}',to_jsonb(NOW()::text),true),updated_at=NOW() WHERE id=${id} RETURNING id`);
+   const result=await tx.execute(sql`UPDATE listings SET category=${category},subcategory=${subcategory},subsubcategory=NULLIF(${thirdSlug}, ''),specifications=jsonb_set(jsonb_set(COALESCE(NULLIF(specifications::text,'')::jsonb,'{}'::jsonb),'{admin_third_level_slug}',to_jsonb(${thirdSlug}::text),true),'{admin_category_review_approved_at}',to_jsonb(NOW()::text),true),updated_at=NOW() WHERE id=${id} RETURNING id`);
    if(!result.rows.length)throw Error("Listing not found");
   });
   await recordAdminAudit({req,category:"listings",action:"listings.category-review",targetType:"listing",targetId:String(id),summary:"Admin approved reviewed category assignment",after:{category,subcategory,thirdSlug,enableThird}});
@@ -1946,6 +2016,34 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
   if (postage !== null && (!zone || !Number.isFinite(postage) || postage < 0 || postage > 10000)) {
     res.status(400).json({ error:"Enter a valid postage amount or leave it blank." }); return;
   }
+  const { category = "other", subcategory = "", subsubcategory = "" } = req.body ?? {};
+  const validCategory = typeof category === "string"
+    && (category === "other" || Object.hasOwn(ADMIN_LISTING_CATEGORIES, category));
+  const validSlug = (value: unknown): value is string =>
+    typeof value === "string" && (value === "" || /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value));
+  if (!validCategory || !validSlug(subcategory) || !validSlug(subsubcategory)
+    || (category === "other" && subcategory) || (subsubcategory && !subcategory)) {
+    res.status(400).json({ error: "Choose a valid category path for this batch." }); return;
+  }
+  try {
+    if (subcategory && !ADMIN_LISTING_CATEGORIES[category]?.includes(subcategory)) {
+      const custom = await db.execute(sql`SELECT 1 FROM category_display_overrides
+        WHERE category_slug=${category} AND subcategory_slug=${subcategory}`);
+      if (!custom.rows.length) {
+        res.status(400).json({ error: "Choose a subcategory within the selected category." }); return;
+      }
+    }
+    if (subsubcategory) {
+      const third = await db.execute(sql`SELECT 1 FROM third_level_categories
+        WHERE category=${category} AND subcategory=${subcategory} AND slug=${subsubcategory}`);
+      if (!third.rows.length) {
+        res.status(400).json({ error: "Choose a third-level category within the selected subcategory." }); return;
+      }
+    }
+  } catch (error) {
+    logger.error({ error }, "Could not validate AliExpress batch categories");
+    res.status(503).json({ error: "Could not validate the batch categories. Try again." }); return;
+  }
   const destination = market === "uk" ? "GB" : "US";
   const quotePostage = postage === null && shipsToCountry(zone, origin, destination);
   const listingCurrency = market === "uk" ? "GBP" : "USD";
@@ -2039,8 +2137,8 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
         source_sync:!options.length, last_synced_at:new Date().toISOString(), source_availability:p.availability });
       const publicId = "BZK-ALI-" + sourceId;
       await db.execute(sql`INSERT INTO listings
-        (public_id,title,price,price_gbp,currency,quantity,ship_origin,ship_zone,shipping_price,category,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
-        VALUES (${publicId},${String(p.title).slice(0,500)},${bazPrice},${priceGbp},${listingCurrency},${stock},${origin},${zone},${listingPostage},'other',
+        (public_id,title,price,price_gbp,currency,quantity,ship_origin,ship_zone,shipping_price,category,subcategory,subsubcategory,description,condition,image,seller_email,seller_name,specifications,status,created_at,updated_at)
+        VALUES (${publicId},${String(p.title).slice(0,500)},${bazPrice},${priceGbp},${listingCurrency},${stock},${origin},${zone},${listingPostage},${category},${subcategory || null},${subsubcategory || null},
         ${tidyAliExpressDescription(p.description) || String(p.title).slice(0,500)},'new',${p.images?.[0]?.url ?? null},
         ${seller.email},${seller.name ?? seller.email.split("@")[0]},${specs},'active',NOW(),NOW())`);
       results.push({id,status:"imported"});

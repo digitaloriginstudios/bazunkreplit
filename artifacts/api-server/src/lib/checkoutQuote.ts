@@ -135,8 +135,21 @@ export async function quoteCart(input: unknown): Promise<CheckoutQuote> {
   return quote;
 }
 export async function saveFeeSnapshot(quote:CheckoutQuote) {
-  await ensureFeeSchema(); const id=randomUUID();
-  await db.execute(sql`INSERT INTO checkout_fee_snapshots(id,payload) VALUES(${id},${JSON.stringify(quote)}::jsonb)`);return id;
+  await ensureFeeSchema();
+  const id = randomUUID();
+  const listingIds = [...new Set(quote.units.map(unit => unit.id))];
+  await db.transaction(async tx => {
+    const locked = await tx.execute(sql`SELECT id,status FROM listings
+      WHERE id = ANY(${"{" + listingIds.join(",") + "}"}::int[]) ORDER BY id FOR UPDATE`);
+    if (locked.rows.length !== listingIds.length || locked.rows.some(row => row.status !== "active")) {
+      throw new QuoteError("An item is no longer available. Please update your cart.", 409);
+    }
+    const converted = await tx.execute(sql`SELECT 1 FROM listing_sale_conversions
+      WHERE listing_id = ANY(${"{" + listingIds.join(",") + "}"}::int[]) LIMIT 1`);
+    if (converted.rows.length) throw new QuoteError("An item has moved to an auction or flash sale.", 409);
+    await tx.execute(sql`INSERT INTO checkout_fee_snapshots(id,payload) VALUES(${id},${JSON.stringify(quote)}::jsonb)`);
+  });
+  return id;
 }
 export async function getFeeSnapshot(id:string):Promise<CheckoutQuote> {
   const row=(await db.execute(sql`SELECT payload FROM checkout_fee_snapshots WHERE id=${id}`)).rows[0] as {payload?:CheckoutQuote}|undefined;

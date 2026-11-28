@@ -1,3 +1,4 @@
+import { BulkListingConversion, type ConversionKind } from "./BulkListingConversion";
 import "./AdminListingsContrast.css";
 import { MarketplaceLoader } from "@/components/MarketplaceLoader";
 import { Fragment, useState, useEffect } from "react";
@@ -6,7 +7,7 @@ import { Search, RefreshCw, ExternalLink, ShoppingCart, Loader2, Package, Pencil
 import { AdminListingPromotion } from "@/components/AdminListingPromotion";
 import { AdminLayout } from "./AdminLayout";
 import { AdminListingEditor, AdminListingCatalogueTools } from "./AdminProductsPage";
-import { ACTIVE_CATEGORIES, thirdLevelProposals, thirdLevelSlug } from "@/data/categories";
+import { catalogueTaxonomy, type CatalogueCategory } from "./catalogueTaxonomy";
 import { AdminBulkSelection } from "@/components/admin/AdminBulkSelection";
 import { AdminManagementHeader, AdminStatusTabs } from "@/components/admin/AdminUi";
 import { useAdmin } from "@/context/AdminContext";
@@ -20,6 +21,7 @@ interface Listing {
   currency: string;
   category: string;
   subcategory: string | null;
+  subsubcategory?: string | null;
   condition: string;
   status: string;
   seller_email: string;
@@ -137,6 +139,7 @@ export function AdminListingsPage() {
   const [filter, setFilter] = useState<"all" | "imported" | "user">("all");
   const [offset, setOffset] = useState(0);
   const [statusFilter,setStatusFilter]=useState("all");
+  const [conversion, setConversion] = useState<{ kind: ConversionKind; listings: Listing[] } | null>(null);
   const [selectedIds,setSelectedIds]=useState<string[]>([]);
   const [bulkPromoOpen,setBulkPromoOpen]=useState(false);
   const [bulkPromoOptions,setBulkPromoOptions]=useState<{type:string;label:string;daysValid:number}[]>([]);
@@ -189,6 +192,23 @@ export function AdminListingsPage() {
   const [reviewLoading,setReviewLoading]=useState(false);
   const [reviewError,setReviewError]=useState("");
   const [reviewBusy,setReviewBusy]=useState<number|null>(null);
+  const [catalogue, setCatalogue] = useState<CatalogueCategory[]>(() => catalogueTaxonomy([]));
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    void authFetch("/api/taxonomy/category-overrides").then(async response => {
+      if (!response.ok) return;
+      const { overrides } = await response.json();
+      if (active && Array.isArray(overrides)) setCatalogue(catalogueTaxonomy(overrides));
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [isAdmin]);
+  const categoryOptions = catalogue.filter(row => !row.subcategory_slug).map(row => ({
+    slug: row.category_slug,
+    name: row.name,
+    subcategories: catalogue.filter(sub => sub.category_slug === row.category_slug && sub.subcategory_slug)
+      .map(sub => ({ slug: sub.subcategory_slug, name: sub.name })),
+  }));
   const [taxonomy,setTaxonomy]=useState<ThirdLevelCategory[]>([]);
   async function loadThirdLevelCategories(): Promise<ThirdLevelCategory[]> {
     const response = await authFetch("/api/admin/taxonomy/third-level");
@@ -209,26 +229,10 @@ export function AdminListingsPage() {
       ]);
       const d=await a.json();
       if(!a.ok)throw Error(d.error||"Category check failed");
-      // Audit every saved third-level row against its parent. Invalid and legacy
-      // associations stay in the database for administrator review, but must not
-      // be offered as suggestions under a different product department.
-      const canonical = (category:string, subcategory:string) => {
-        const parent=ACTIVE_CATEGORIES.find(c=>c.slug===category);
-        const child=parent?.subcategories.find(x=>x.slug===subcategory);
-        if(!child)return null;
-        return new Set(thirdLevelProposals(category,subcategory,child.name).map(thirdLevelSlug));
-      };
-      const mismatched=entries.filter((row:{category:string;subcategory:string;slug:string})=>{
-        const expected=canonical(row.category,row.subcategory);
-        return !expected || !expected.has(row.slug);
-      });
-      if(mismatched.length)console.warn("Taxonomy audit: stored third-level entries need review",mismatched);
-      const validEntries=entries.filter((row:{category:string;subcategory:string;slug:string})=>{
-        const expected=canonical(row.category,row.subcategory);
-        return !!expected && expected.has(row.slug);
-      });
+      const validEntries = entries.filter(row => categoryOptions.some(
+        parent => parent.slug === row.category && parent.subcategories.some(child => child.slug === row.subcategory),
+      ));
       setTaxonomy(validEntries);
-      if(mismatched.length)setReviewError(`${mismatched.length} third-level taxonomy entries do not match their current category structure and were excluded from suggestions. Review these in Categories & Taxonomy before assigning.`);
       const suggestion=(title:string, options:typeof entries)=>{
         const normalized=(v:string)=>v.toLowerCase().replace(/[^a-z0-9]+/g," ");
         const words=new Set(normalized(title).split(" ").filter(Boolean));
@@ -261,6 +265,7 @@ export function AdminListingsPage() {
         ...listing,
         category: x.suggestedCategory,
         subcategory: x.suggestedSubcategory,
+        subsubcategory: x.suggestedThird || null,
         specifications: JSON.stringify({...parseSpecs(listing.specifications), admin_third_level_slug: x.suggestedThird}),
       } : listing));
       if(enableThird)setTaxonomy(prev=>prev.map(t=>t.category===x.suggestedCategory&&t.subcategory===x.suggestedSubcategory&&t.slug===x.suggestedThird?{...t,visible:true}:t));
@@ -275,7 +280,6 @@ export function AdminListingsPage() {
   const [categoryTaxonomyError, setCategoryTaxonomyError] = useState("");
   const [categorySaving, setCategorySaving] = useState(false);
   const [categoryError, setCategoryError] = useState("");
-  const categoryOptions = ACTIVE_CATEGORIES;
   const thirdOptions = categoryTaxonomy.filter(
     item => item.category === categoryDraft && item.subcategory === subcategoryDraft,
   );
@@ -307,7 +311,7 @@ export function AdminListingsPage() {
       const res=await authFetch("/api/admin/listings/categories",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids,category:categoryDraft,subcategory:subcategoryDraft,thirdSlug:thirdDraft})});
       const data=await res.json().catch(()=>null);
       if (!res.ok) throw new Error(data?.error || "Could not save categories.");
-      const changed = new Map<number, Pick<Listing, "category" | "subcategory" | "specifications">>(
+      const changed = new Map<number, Pick<Listing, "category" | "subcategory" | "subsubcategory" | "specifications">>(
         data.updated.map((row: Listing) => [row.id, row]),
       );
       setListings(prev => prev.map(listing => {
@@ -399,9 +403,9 @@ export function AdminListingsPage() {
       {reviewOpen&&<div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-3"><section id="bazunk-listing-category-review" role="dialog" aria-modal="true" aria-label="Review listing categories" className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border-2 border-slate-500 !bg-[#14243c] !text-white shadow-2xl">
         <header className="flex items-center justify-between gap-3 border-b border-slate-500 p-4"><div><h2 className="text-xl font-black text-white">Review suggested categories</h2><p className="text-xs text-slate-200">Already-approved listings are marked Checked. You can still change their categories and approve again.</p></div><button className="rounded-lg border-2 border-slate-400 !bg-[#273b56] px-4 py-2 font-black !text-white" onClick={()=>setReviewOpen(false)}>Close</button></header>
         {reviewError&&<p role="alert" className="m-3 rounded-lg border border-red-400 !bg-red-900 p-3 font-bold text-white">{reviewError}</p>}
-        <div className="flex-1 space-y-3 overflow-y-auto p-4">{reviewLoading?<p className="text-white">Checking categories…</p>:reviews.map(x=>{const choices=ACTIVE_CATEGORIES.find(c=>c.slug===x.suggestedCategory)?.subcategories||[];const thirdOptions=taxonomy.filter(t=>t.category===x.suggestedCategory&&t.subcategory===x.suggestedSubcategory);const chosen=thirdOptions.find(t=>t.slug===x.suggestedThird);return <div key={x.id} className="rounded-xl border border-slate-500 !bg-[#213651] p-4 text-white">
-          <div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div className="max-w-2xl"><strong className="text-sm text-white">{x.title}</strong><p className="mt-1 text-xs text-slate-200">Current: {ACTIVE_CATEGORIES.find(c=>c.slug===x.category)?.name||x.category} / {ACTIVE_CATEGORIES.find(c=>c.slug===x.category)?.subcategories.find(sc=>sc.slug===x.subcategory)?.name||x.subcategory||"none"} / {x.currentThird||"none"}</p></div><span className="rounded border border-sky-300 !bg-[#194b83] px-2 py-1 text-xs font-black !text-white">{x.approved?"✓ Checked · Already approved":"Suggestion confidence: "+x.confidence}</span></div>
-          <div className="grid gap-2 md:grid-cols-3">{[1].map(()=> <Fragment key="fields"><label className="text-xs font-bold text-white">Main category<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedCategory} onChange={e=>{const cat=ACTIVE_CATEGORIES.find(c=>c.slug===e.target.value);patchReview(x.id,{suggestedCategory:e.target.value,suggestedSubcategory:cat?.subcategories[0]?.slug||"",suggestedThird:""});}}>{ACTIVE_CATEGORIES.map(c=><option key={c.slug} value={c.slug}>{c.name}</option>)}</select></label><label className="text-xs font-bold text-white">Subcategory<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedSubcategory} onChange={e=>patchReview(x.id,{suggestedSubcategory:e.target.value,suggestedThird:""})}>{choices.map(c=><option key={c.slug} value={c.slug}>{c.name}</option>)}</select></label><label className="text-xs font-bold text-white">Third-level category<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedThird} onChange={e=>patchReview(x.id,{suggestedThird:e.target.value})}><option value="">None / review later</option>{thirdOptions.map(t=><option key={t.slug} value={t.slug}>{t.name}{t.visible?"":" (hidden)"}</option>)}</select></label></Fragment>)}</div>
+        <div className="flex-1 space-y-3 overflow-y-auto p-4">{reviewLoading?<p className="text-white">Checking categories…</p>:reviews.map(x=>{const choices=categoryOptions.find(c=>c.slug===x.suggestedCategory)?.subcategories||[];const thirdOptions=taxonomy.filter(t=>t.category===x.suggestedCategory&&t.subcategory===x.suggestedSubcategory);const chosen=thirdOptions.find(t=>t.slug===x.suggestedThird);return <div key={x.id} className="rounded-xl border border-slate-500 !bg-[#213651] p-4 text-white">
+          <div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div className="max-w-2xl"><strong className="text-sm text-white">{x.title}</strong><p className="mt-1 text-xs text-slate-200">Current: {categoryOptions.find(c=>c.slug===x.category)?.name||x.category} / {categoryOptions.find(c=>c.slug===x.category)?.subcategories.find(sc=>sc.slug===x.subcategory)?.name||x.subcategory||"none"} / {x.currentThird||"none"}</p></div><span className="rounded border border-sky-300 !bg-[#194b83] px-2 py-1 text-xs font-black !text-white">{x.approved?"✓ Checked · Already approved":"Suggestion confidence: "+x.confidence}</span></div>
+          <div className="grid gap-2 md:grid-cols-3">{[1].map(()=> <Fragment key="fields"><label className="text-xs font-bold text-white">Main category<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedCategory} onChange={e=>{const cat=categoryOptions.find(c=>c.slug===e.target.value);patchReview(x.id,{suggestedCategory:e.target.value,suggestedSubcategory:cat?.subcategories[0]?.slug||"",suggestedThird:""});}}>{categoryOptions.map(c=><option key={c.slug} value={c.slug}>{c.name}</option>)}</select></label><label className="text-xs font-bold text-white">Subcategory<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedSubcategory} onChange={e=>patchReview(x.id,{suggestedSubcategory:e.target.value,suggestedThird:""})}>{choices.map(c=><option key={c.slug} value={c.slug}>{c.name}</option>)}</select></label><label className="text-xs font-bold text-white">Third-level category<select className="mt-1 w-full rounded border-2 border-slate-400 !bg-white p-2 !text-slate-950" value={x.suggestedThird} onChange={e=>patchReview(x.id,{suggestedThird:e.target.value})}><option value="">None / review later</option>{thirdOptions.map(t=><option key={t.slug} value={t.slug}>{t.name}{t.visible?"":" (hidden)"}</option>)}</select></label></Fragment>)}</div>
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3">{chosen&&!chosen.visible?<label className="flex items-center gap-2 text-xs font-bold text-white"><input type="checkbox" checked={enableThirdIds.includes(x.id)} onChange={e=>setEnableThirdIds(prev=>e.target.checked?[...prev,x.id]:prev.filter(id=>id!==x.id))}/> Enable this hidden third-level category on the site</label>:<span className="text-xs text-slate-200">{chosen?"Third-level already enabled":"No third-level selected"}</span>}<button disabled={reviewBusy===x.id} onClick={()=>void approveReview(x)} className="rounded-lg border-2 border-blue-200 !bg-[#114ab1] px-4 py-2 text-sm font-black !text-white hover:!bg-[#1d63c7]">{reviewBusy===x.id?"Saving…":x.approved?"Save Changes / Reapprove":"Approve & Mark Checked"}</button></div>
         </div>})}{!reviewLoading&&!reviewError&&!reviews.length&&<p className="text-white">No listings left to review.</p>}</div></section></div>}
       {view!=="listings" ? <AdminListingCatalogueTools section={view}/> : <>
@@ -456,7 +460,21 @@ export function AdminListingsPage() {
         <div className="mt-3 flex flex-wrap items-center gap-3"><span className="text-sm font-semibold">{Object.keys(bulkPromoSelected).length} promotion types × {selectedIds.length} listings = {Object.keys(bulkPromoSelected).length*selectedIds.length} grants</span><button type="button" disabled={bulkPromoBusy||!Object.keys(bulkPromoSelected).length} onClick={()=>void applyBulkPromotions()} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-40">{bulkPromoBusy?"Applying…":"Apply selected promotions"}</button></div>
         {bulkPromoMessage&&<p role="status" className="mt-3 text-sm font-semibold">{bulkPromoMessage}</p>}
       </div>}
-      {selectedIds.length>0 && <div className="mb-3"><button type="button" onClick={()=>beginCategoryEdit()} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">Change category for {selectedIds.length} selected</button></div>}
+      {selectedIds.length > 0 && <div className="mb-3 flex flex-wrap gap-2">
+        <button type="button" onClick={()=>beginCategoryEdit()} className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white">Change category for {selectedIds.length} selected</button>
+        {(["flash", "auction"] as const).map(kind => (
+          <button key={kind} type="button" className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white"
+            onClick={() => setConversion({ kind, listings: listings.filter(listing => selectedIds.includes(String(listing.id))) })}>
+            {kind === "flash" ? "Duplicate into flash sales" : "Convert to auctions"}
+          </button>
+        ))}
+      </div>}
+      {conversion && <BulkListingConversion kind={conversion.kind} listings={conversion.listings}
+        onClose={() => setConversion(null)}
+        onComplete={ids => {
+          setListings(current => current.map(row => ids.includes(row.id) ? { ...row, status: "inactive" } : row));
+          setSelectedIds(current => current.filter(id => !ids.includes(Number(id))));
+        }} />}
       {categoryEditing==="bulk"&&<div className="bz-listing-category-editor mb-3 rounded-xl border p-3"><p className="mb-2 text-xs font-bold">Change category for {selectedIds.length} selected listings</p>{categoryFields}{categoryError&&<p role="alert" className="mt-2 text-xs font-bold text-red-500">{categoryError}</p>}</div>}
       {/* Table */}
       <div className="wp-management-table-card rounded-xl border border-slate-300 bg-white shadow-sm dark:border-slate-600 dark:bg-slate-900">
@@ -521,7 +539,7 @@ export function AdminListingsPage() {
                     <td className="px-2 py-3 break-words text-xs text-slate-700 dark:text-slate-200 align-top">
                       <span className="capitalize">{l.category.replace(/-/g, " ")}</span>
                       {l.subcategory && <span className="text-slate-600 dark:text-slate-200"> · {l.subcategory.replace(/-/g, " ")}</span>}
-                      {specs.admin_third_level_slug && <span className="text-slate-600 dark:text-slate-200"> · {specs.admin_third_level_slug.replace(/-/g, " ")}</span>}
+                      {(l.subsubcategory || specs.admin_third_level_slug) && <span className="text-slate-600 dark:text-slate-200"> · {(l.subsubcategory || specs.admin_third_level_slug || "").replace(/-/g, " ")}</span>}
                     </td>
 
                     {/* Price */}

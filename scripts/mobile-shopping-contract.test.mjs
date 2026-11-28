@@ -64,7 +64,7 @@ test("mobile checkout shows trustworthy total before payment without changing St
 test("mobile browse offers one-tap sorts and avoids per-card motion layout",()=>{
  assert.match(browse,/data-testid="mobile-browse-sort"/);
  assert.match(browse,/aria-pressed=\{sort===value\}/);
- assert.match(browse,/grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2\.5 sm:gap-4/);
+ assert.match(browse,/grid-cols-2 lg:grid-cols-3 gap-2\.5 sm:gap-4/);
  const cards=browse.split("function ProductCard(")[1]?.split("export function BrowsePage()")[0]||"";
  assert.ok(!cards.includes("layout\n"),"Product tiles should not force framer layout calculations");
  assert.match(cards,/loading="lazy" decoding="async"/);

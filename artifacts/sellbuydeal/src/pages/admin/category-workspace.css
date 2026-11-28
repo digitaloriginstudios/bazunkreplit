@@ -12,13 +12,6 @@
   color:var(--admin-readable-muted)!important;
   -webkit-text-fill-color:currentColor!important;
 }
-.bazunk-admin-wordpress .bz-taxonomy-listings-link{
-  color:var(--admin-readable-ink)!important;
-  font-size:12px;
-  font-weight:750;
-  text-decoration:underline;
-  text-underline-offset:3px;
-}
 .bazunk-admin-wordpress .bz-taxonomy h2{font-size:18px;font-weight:800;color:#fff!important}
 .bazunk-admin-wordpress .bz-taxonomy h3{font-size:16px;font-weight:800;color:#fff!important}
 .bazunk-admin-wordpress .bz-taxonomy p,.bazunk-admin-wordpress .bz-taxonomy small{color:#cbd5e1!important;font-size:12px}
@@ -87,3 +80,13 @@
   color:#fff!important;
   -webkit-text-fill-color:currentColor!important;
 }
+
+#bazunk-admin-taxonomy .bz-taxonomy-actions button:disabled{
+  background:#203653!important;
+  color:#e2e8f0!important;
+  -webkit-text-fill-color:currentColor!important;
+  opacity:1!important;
+}
+
+#bazunk-admin-taxonomy .bz-taxonomy-listings-link{display:inline-flex;align-items:center;min-height:36px;padding:8px 12px;border:1px solid #7eb4ff;border-radius:8px;background:#203653;color:#fff!important;-webkit-text-fill-color:#fff!important;font-size:12px;font-weight:750}
+#bazunk-admin-taxonomy .bz-taxonomy-listings-link:hover{background:#315b90}

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useAdmin } from "@/context/AdminContext";
+import type { CatalogueCategory } from "@/pages/admin/catalogueTaxonomy";
 import { ACTIVE_CATEGORIES as SITE_CATEGORIES, resolveCategory } from "@/data/categories";
 
 interface SupplierImport {
@@ -87,11 +88,12 @@ interface ImportModalProps {
   initialOrigin?: string;
   initialDestinations?: string[];
   initialPostage?: string;
+  adminCatalogue?: CatalogueCategory[] | null;
 }
 
 const CONDITIONS = ["new", "like new", "good", "fair", "poor"];
 
-export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUrl = "", initialMarkup = "30", initialQuantity = "1", initialOrigin = "CN", initialDestinations = defaultAliExpressDestinations, initialPostage = "" }: ImportModalProps) {
+export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUrl = "", initialMarkup = "30", initialQuantity = "1", initialOrigin = "CN", initialDestinations = defaultAliExpressDestinations, initialPostage = "", adminCatalogue }: ImportModalProps) {
   const { authFetch } = useAdmin();
   const [url, setUrl] = useState(initialUrl);
   const [quantity, setQuantity] = useState(initialQuantity);
@@ -224,7 +226,12 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
     ? calcBazunkPrice(usd, markupType, mv, usdToGbp)
     : null;
 
-  const subcategories = SITE_CATEGORIES.find(c => c.slug === category)?.subcategories ?? [];
+  const categories = adminCatalogue === undefined ? SITE_CATEGORIES : (adminCatalogue ?? [])
+    .filter(row => !row.subcategory_slug)
+    .map(row => ({ slug: row.category_slug, name: row.name + (row.visible ? "" : " (hidden)") }));
+  const subcategories = adminCatalogue === undefined ? SITE_CATEGORIES.find(c => c.slug === category)?.subcategories ?? []
+    : (adminCatalogue ?? []).filter(row => row.category_slug === category && row.subcategory_slug)
+      .map(row => ({ slug: row.subcategory_slug, name: row.name + (row.visible ? "" : " (hidden)") }));
   const multi = choices.length > 1;
   const variants = choices.filter(choice => variantEdits[choice.id]?.enabled).map(choice => {
     const edit = variantEdits[choice.id];
@@ -261,7 +268,7 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
           attributes,
           expectedSellingPrice: bazunkPreview,
           imageUrl: imageUrl.trim() || null,
-          ...resolveCategory(category, subcategory),
+          ...(adminCatalogue === undefined ? resolveCategory(category, subcategory) : { category, subcategory }),
           condition,
           description: description.trim() || null,
           markupType,
@@ -379,14 +386,14 @@ export function ImportModal({ onClose, onSuccess, userEmail, userName, initialUr
             </div>}
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Category <span className="text-red-400">*</span></label>
-              <select value={category} onChange={e => { setCategory(e.target.value); setSubcategory(""); }} className={`${inputCls} bg-white`}>
-                <option value="">Select category</option>
-                {SITE_CATEGORIES.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+              <select aria-label="Category" value={category} disabled={adminCatalogue === null} onChange={e => { setCategory(e.target.value); setSubcategory(""); }} className={`${inputCls} bg-white`}>
+                <option value="">{adminCatalogue === null ? "Catalogue categories unavailable" : "Select category"}</option>
+                {categories.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
               </select>
             </div>
           </div>
 
-          {/* Subcategory (same list as Direct Sale) */}
+          {/* Subcategory */}
           {subcategories.length > 0 && (
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Subcategory <span className="text-gray-400 font-normal">(optional)</span></label>

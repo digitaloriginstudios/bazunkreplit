@@ -188,6 +188,14 @@ async function runAppMigrations() {
     sort_order INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (category,subcategory,slug)
   )`, "third_level_categories");
+  await run(sql`CREATE TABLE IF NOT EXISTS listing_sale_conversions (
+    listing_id INTEGER PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('flash','auction')),
+    sale_id TEXT NOT NULL UNIQUE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`, "listing_sale_conversions");
+  await run(sql`CREATE TABLE IF NOT EXISTS listing_flash_sale_copies (
+    listing_id INTEGER PRIMARY KEY, sale_id TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`, "listing_flash_sale_copies");
   await run(sql`ALTER TABLE listings ADD COLUMN IF NOT EXISTS subsubcategory TEXT`, "listings.subsubcategory");
   await run(sql`CREATE INDEX IF NOT EXISTS listings_category_levels_idx ON listings (category, subcategory, subsubcategory)`, "listings_category_levels_idx");
   await run(sql`ALTER TABLE listings ADD COLUMN IF NOT EXISTS ship_origin TEXT`, "listings.ship_origin");
@@ -243,6 +251,27 @@ async function runAppMigrations() {
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `, "site_settings");
+  await run(sql`CREATE TABLE IF NOT EXISTS category_display_overrides (
+          category_slug TEXT NOT NULL, subcategory_slug TEXT NOT NULL DEFAULT '', name TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0, visible BOOLEAN NOT NULL DEFAULT TRUE,
+          PRIMARY KEY(category_slug, subcategory_slug))`, "category_display_overrides");
+  // Apply the catalogue activation once on the production API. Later admin changes take precedence.
+  if (process.env.RENDER_SERVICE_ID === "srv-dbtl3vtbedkc7386nep0") {
+    try {
+      await db.transaction(async tx => {
+        const marker = await tx.execute(sql`INSERT INTO site_settings (key, value)
+          VALUES ('catalogue_activation_20261127', 'done') ON CONFLICT DO NOTHING RETURNING key`);
+        if (!marker.rows.length) return;
+        await tx.execute(sql`UPDATE category_display_overrides SET visible=TRUE WHERE NOT visible`);
+        await tx.execute(sql`UPDATE third_level_categories SET visible=TRUE WHERE NOT visible`);
+        await tx.execute(sql`UPDATE site_settings SET value=CASE WHEN starts_with(key,'category_visible_')
+          THEN 'true' ELSE 'active' END, updated_at=NOW()
+          WHERE starts_with(key,'category_visible_') OR starts_with(key,'category_display_')`);
+      });
+    } catch (err) {
+      logger.error({ err }, "Could not activate catalogue visibility");
+    }
+  }
   // Owner-requested one-time Chatwoot enablement (17 Oct 2026).
   // Only the production Bazunk API may apply it; never stage/legacy services.
   // The marker prevents future restarts from overriding a later admin choice.

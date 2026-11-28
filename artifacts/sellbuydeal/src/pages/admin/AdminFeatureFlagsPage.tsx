@@ -1,4 +1,4 @@
-import { ACTIVE_CATEGORIES } from "@/data/categories";
+import { catalogueTaxonomy, type CatalogueCategory } from "./catalogueTaxonomy";
 import { LoaderSettingsPanel } from "@/components/LoaderSettingsPanel";
 import { useEffect,useMemo,useState } from "react";
 import { AdminLayout } from "./AdminLayout";
@@ -13,7 +13,26 @@ export function AdminFeatureFlagsPage(){
  const [meta,setMeta]=useState<Meta|null>(null),[history,setHistory]=useState<Change[]>([]);
  const [selectedFeature,setSelectedFeature]=useState("all"),[reason,setReason]=useState(""),[success,setSuccess]=useState(""); const [flags,setFlags]=useState<F[]>([]); const [q,setQ]=useState(""); const [busy,setBusy]=useState<string|null>(null); const [categorySettings,setCategorySettings]=useState<Record<string,boolean>>({}); const [counts,setCounts]=useState<any[]>([]); const [display,setDisplay]=useState<Record<string,string>>({}); const [expanded,setExpanded]=useState<string|null>(null); const [error,setError]=useState("");
  const load=async()=>{setError("");try{const r=await fetch(`${API_BASE}/api/admin/feature-flags`,{headers:{Authorization:`Bearer ${token}`},cache:"no-store"});const d=await r.json().catch(()=>null);if(!r.ok||!Array.isArray(d))throw new Error(d?.error||"Could not load feature flags");setFlags(d);}catch(e:any){setError(e?.message||"Could not load feature flags");}};
- const loadCategories=async()=>{try{const r=await fetch(`${API_BASE}/api/admin/category-visibility`,{headers:{Authorization:`Bearer ${token}`}});const d=await r.json();if(!r.ok)throw Error(d.error||"Could not load categories");setCategorySettings(d.settings||{});setDisplay(d.display||{});setCounts(d.counts||[]);}catch(e:any){setError(e.message||"Could not load category visibility");}};
+ const [catalogue,setCatalogue]=useState<CatalogueCategory[]>(() => catalogueTaxonomy([]));
+ type Third = { category:string;subcategory:string;slug:string;name:string;visible:boolean };
+ const [thirdLevels,setThirdLevels]=useState<Third[]>([]);
+ const loadCategories=async()=>{
+   try {
+     const headers={Authorization:`Bearer ${token}`};
+     const [visibility, overrides, third] = await Promise.all([
+       fetch(`${API_BASE}/api/admin/category-visibility`, {headers,cache:"no-store"}),
+       fetch(`${API_BASE}/api/taxonomy/category-overrides`, {headers,cache:"no-store"}),
+       fetch(`${API_BASE}/api/admin/taxonomy/third-level`, {headers,cache:"no-store"}),
+     ]);
+     if(!visibility.ok || !overrides.ok || !third.ok) throw Error("Could not load catalogue visibility");
+     const [status, saved, taxonomy] = await Promise.all([visibility.json(),overrides.json(),third.json()]);
+     setCategorySettings(status.settings || {});
+     setDisplay(status.display || {});
+     setCounts(status.counts || []);
+     setCatalogue(catalogueTaxonomy(saved.overrides ?? []));
+     setThirdLevels(taxonomy.categories ?? []);
+   } catch(error) { setError(error instanceof Error ? error.message : "Could not load category visibility"); }
+ };
  const loadControls=async()=>{
    const headers={Authorization:`Bearer ${token}`};
    // A history endpoint outage should NOT prevent loading environment metadata.
@@ -34,10 +53,45 @@ export function AdminFeatureFlagsPage(){
    }
  };
  useEffect(()=>{if(token){void load();void loadCategories();void loadControls();}},[token]);
- const visible=(category:string,sub?:string)=>categorySettings[category+(sub?"__"+sub:"")]!==false;
- const stateFor=(category:string,sub?:string)=>{const key=category+(sub?"__"+sub:"");return display[key]||(visible(category,sub)?"active":"coming_soon");};
- async function toggleCategory(category:string,subcategory:string,state:string){const key=category+(subcategory?"__"+subcategory:"");setBusy(key);setError("");try{const r=await fetch(`${API_BASE}/api/admin/category-visibility`,{method:"PATCH",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({category,subcategory,state})});const d=await r.json();if(!r.ok)throw Error(d.error||"Could not save category status");setCategorySettings(prev=>({...prev,[key]:state==="active"}));setDisplay(prev=>({...prev,[key]:state}));window.dispatchEvent(new Event("bazunk-settings-updated"));}catch(e:any){setError(e.message||"Could not save category status")}finally{setBusy(null)}}
- const stateSelect=(category:string,subcategory="")=><select aria-label={`Display state for ${category}${subcategory?" / "+subcategory:""}`} className="border rounded-lg px-2 py-1 bg-white text-gray-900" value={stateFor(category,subcategory)} disabled={busy===category+(subcategory?"__"+subcategory:"")} onChange={e=>toggleCategory(category,subcategory,e.target.value)}><option value="active">Active</option><option value="coming_soon">Coming Soon</option><option value="maintenance">Under Maintenance</option><option value="hidden">Hidden Completely</option></select>;
+ const stateFor=(row:CatalogueCategory)=>{
+   const key=row.category_slug+(row.subcategory_slug?"__"+row.subcategory_slug:"");
+   return display[key] ?? ((categorySettings[key] ?? row.visible)?"active":"coming_soon");
+ };
+ async function toggleCategory(row:CatalogueCategory, state:string, thirdSlug="") {
+   const category=row.category_slug, subcategory=row.subcategory_slug;
+   const key=category+(subcategory?"__"+subcategory:"");
+   setBusy(key);setError("");
+   try {
+     const response = await fetch(`${API_BASE}/api/admin/category-visibility`,{
+       method:"PATCH",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},
+       body:JSON.stringify({category,subcategory,thirdSlug,state,name:row.name,sortOrder:row.sort_order}),
+     });
+     const data=await response.json();
+     if(!response.ok) throw Error(data.error || "Could not save category status");
+     if (thirdSlug) {
+       setThirdLevels(previous=>previous.map(item=>item.category===category && item.subcategory===subcategory && item.slug===thirdSlug
+         ? {...item,visible:state==="active"} : item));
+     } else {
+       setCategorySettings(previous=>({...previous,[key]:state==="active"}));
+       setDisplay(previous=>({...previous,[key]:state}));
+     }
+     window.dispatchEvent(new Event("bazunk-settings-updated"));
+   } catch(error) { setError(error instanceof Error ? error.message : "Could not update category visibility"); }
+   finally {setBusy(null);}
+ }
+ const stateSelect=(row:CatalogueCategory, third?:Third)=><select
+   aria-label={`Display state for ${[row.category_slug,row.subcategory_slug,third?.name].filter(Boolean).join(" / ")}`}
+   className="border rounded-lg px-2 py-1 bg-white text-gray-900"
+   value={third ? third.visible ? "active" : "hidden" : stateFor(row)}
+   disabled={busy!==null} onChange={event=>void toggleCategory(row,event.target.value,third?.slug)}>
+   <option value="active">Active</option>
+   {!third && <><option value="coming_soon">Coming Soon</option><option value="maintenance">Under Maintenance</option></>}
+   <option value="hidden">Hidden Completely</option>
+ </select>;
+ const categoryGroups = catalogue.filter(row => !row.subcategory_slug).map(category => ({
+   category, children: catalogue.filter(row => row.category_slug===category.category_slug && row.subcategory_slug),
+ })).filter(({category,children}) => [category.name,...children.map(row=>row.name),
+   ...thirdLevels.filter(row=>row.category===category.category_slug).map(row=>row.name)].join(" ").toLowerCase().includes(q.toLowerCase()));
 
  const groups=useMemo(()=>{const m=new Map<string,F[]>(); flags.filter(f=>(f.label+' '+f.group).toLowerCase().includes(q.toLowerCase())).forEach(f=>m.set(f.group,[...(m.get(f.group)||[]),f]));return [...m.entries()]},[flags,q]);
  async function change(f:F,entry?:Change){
@@ -101,7 +155,32 @@ export function AdminFeatureFlagsPage(){
  {meta?.environment==="production"&&<p className="mt-2 text-xs font-bold text-orange-800 dark:text-orange-200">Production is LIVE. A confirmation is required before each change. Staging must be opened on its own service.</p>}
  </section>
  {success&&<p role="status" className="rounded-xl bg-emerald-50 p-3 text-sm font-bold text-emerald-900 dark:!bg-[#a7f3d0] dark:!text-[#052e24]">{success}</p>}
- <div className="relative max-w-md"><Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search features..." className="w-full pl-9 pr-3 py-2 border rounded-xl bg-white"/></div><section className="bg-white rounded-2xl border shadow-sm overflow-hidden"><div className="px-5 py-4 bg-gray-50 border-b"><h2 className="font-bold text-lg">Category Visibility</h2><p className="text-sm text-gray-500">Import in stages. Choose Active, Coming Soon, Under Maintenance or Hidden Completely for each category and subcategory. Disabled listings stay private; placeholders appear only on the Categories page.</p></div><div className="divide-y">{ACTIVE_CATEGORIES.filter(c=>(c.name+" "+c.subcategories.map(s=>s.name).join(" ")).toLowerCase().includes(q.toLowerCase())).map(c=><div key={c.slug}><div className="px-5 py-3 flex items-center justify-between gap-3"><button className="font-semibold text-left flex-1" onClick={()=>setExpanded(expanded===c.slug?null:c.slug)}>{expanded===c.slug?"▾":"▸"} {c.name} <span className="text-xs text-gray-500">({counts.filter((x:any)=>x.category===c.slug).reduce((n:number,x:any)=>n+Number(x.count||0),0)} listings)</span></button>{stateSelect(c.slug)}</div>{expanded===c.slug&&<div className="px-8 pb-4 space-y-2">{c.subcategories.map(sub=><div key={sub.slug} className="flex items-center justify-between gap-2 text-sm"><span>{sub.name} <span className="text-gray-400">({counts.filter((x:any)=>x.category===c.slug&&x.subcategory===sub.slug).reduce((n:number,x:any)=>n+Number(x.count||0),0)})</span></span>{stateSelect(c.slug,sub.slug)}</div>)}</div>}</div>)}</div></section><LoaderSettingsPanel />{groups.map(([group,items])=><section key={group} className="bg-white rounded-2xl border shadow-sm overflow-hidden"><div className="px-5 py-3 bg-gray-50 border-b font-semibold">{group}</div><div className="divide-y">{items.map(f=><div key={f.key} className="px-5 py-4 flex items-center justify-between gap-4"><div><div className="font-semibold">{f.label}</div><div className="text-xs text-gray-500 font-mono">{f.key}</div></div><div className="flex items-center gap-3"><span className={`text-xs font-semibold ${f.enabled?'text-emerald-600':'text-red-600'}`}>{f.enabled?'ON':'OFF'}</span><button role="switch" type="button" aria-checked={f.enabled} disabled={busy!==null||!meta||meta.readOnly} onClick={()=>void change(f)} aria-label={`Turn ${f.label} ${f.enabled?'off':'on'}`} title={meta?.readOnly?"This environment is read-only":`Turn ${f.label} ${f.enabled?"OFF":"ON"} (saves immediately)`} className={`relative inline-flex w-14 h-8 shrink-0 items-center rounded-full border-2 transition-colors focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${f.enabled?'border-emerald-700 bg-emerald-500 dark:border-emerald-300 dark:bg-emerald-500':'border-slate-600 bg-slate-400 dark:border-slate-300 dark:bg-slate-600'} disabled:cursor-not-allowed disabled:opacity-70`}><span className={`absolute top-0.5 h-6 w-6 rounded-full border border-slate-500 bg-white shadow-sm transition-all dark:border-slate-200 ${f.enabled?'left-6':'left-0.5'}`}/></button></div></div>)}</div></section>)}<section className="rounded-2xl border-2 border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-[#172541]">
+ <div className="relative max-w-md"><Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400"/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search features..." className="w-full pl-9 pr-3 py-2 border rounded-xl bg-white"/></div><section className="bg-white rounded-2xl border shadow-sm overflow-hidden"><div className="px-5 py-4 bg-gray-50 border-b"><h2 className="font-bold text-lg">Category Visibility</h2><p className="text-sm text-gray-500">Import in stages. Choose Active, Coming Soon, Under Maintenance or Hidden Completely for main categories and subcategories. Third-level categories can be active or hidden in navigation.</p></div><div className="divide-y">{categoryGroups.map(({category,children})=>{
+  const slug=category.category_slug;
+  return <div key={slug}>
+    <div className="px-5 py-3 flex items-center justify-between gap-3">
+      <button className="font-semibold text-left flex-1" aria-expanded={expanded===slug}
+        onClick={()=>setExpanded(expanded===slug?null:slug)}>{expanded===slug?"▾":"▸"} {category.name}
+        <span className="text-xs text-gray-500"> ({counts.filter(row=>row.category===slug).reduce((n,row)=>n+Number(row.count||0),0)} listings)</span>
+      </button>
+      {stateSelect(category)}
+    </div>
+    {expanded===slug && <div className="px-8 pb-4 space-y-2">{children.map(sub=>{
+      const levels=thirdLevels.filter(row=>row.category===slug && row.subcategory===sub.subcategory_slug);
+      return <div key={sub.subcategory_slug}>
+        <div className="flex items-center justify-between gap-2 text-sm">
+          <span>{sub.name}</span>{stateSelect(sub)}
+        </div>
+        {levels.length>0 && <details className="ml-4 mt-1 text-sm">
+          <summary className="cursor-pointer">{levels.length} third-level categories</summary>
+          <div className="space-y-2 py-2">{levels.map(row=><div key={row.slug} className="flex items-center justify-between gap-2">
+            <span>{row.name}</span>{stateSelect(sub,row)}
+          </div>)}</div>
+        </details>}
+      </div>;
+    })}</div>}
+  </div>;
+})}</div></section><LoaderSettingsPanel />{groups.map(([group,items])=><section key={group} className="bg-white rounded-2xl border shadow-sm overflow-hidden"><div className="px-5 py-3 bg-gray-50 border-b font-semibold">{group}</div><div className="divide-y">{items.map(f=><div key={f.key} className="px-5 py-4 flex items-center justify-between gap-4"><div><div className="font-semibold">{f.label}</div><div className="text-xs text-gray-500 font-mono">{f.key}</div></div><div className="flex items-center gap-3"><span className={`text-xs font-semibold ${f.enabled?'text-emerald-600':'text-red-600'}`}>{f.enabled?'ON':'OFF'}</span><button role="switch" type="button" aria-checked={f.enabled} disabled={busy!==null||!meta||meta.readOnly} onClick={()=>void change(f)} aria-label={`Turn ${f.label} ${f.enabled?'off':'on'}`} title={meta?.readOnly?"This environment is read-only":`Turn ${f.label} ${f.enabled?"OFF":"ON"} (saves immediately)`} className={`relative inline-flex w-14 h-8 shrink-0 items-center rounded-full border-2 transition-colors focus-visible:outline focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${f.enabled?'border-emerald-700 bg-emerald-500 dark:border-emerald-300 dark:bg-emerald-500':'border-slate-600 bg-slate-400 dark:border-slate-300 dark:bg-slate-600'} disabled:cursor-not-allowed disabled:opacity-70`}><span className={`absolute top-0.5 h-6 w-6 rounded-full border border-slate-500 bg-white shadow-sm transition-all dark:border-slate-200 ${f.enabled?'left-6':'left-0.5'}`}/></button></div></div>)}</div></section>)}<section className="rounded-2xl border-2 border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-[#172541]">
  <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="flex items-center gap-2 text-lg font-black text-slate-950 dark:text-white"><History className="h-5 w-5 text-orange-600"/>Toggle audit history & rollback</h2>
  <select aria-label="Filter toggle history" value={selectedFeature} onChange={e=>setSelectedFeature(e.target.value)} className="min-h-10 rounded-lg border border-slate-400 bg-white px-3 text-sm font-semibold text-slate-950 dark:border-slate-600 dark:bg-slate-800 dark:text-white">
  <option value="all">All features</option>{flags.map(f=><option key={f.key} value={f.key}>{f.label}</option>)}</select></div>
