@@ -31,11 +31,11 @@ const LIGHTNING_DURATIONS: { label: string; mins: number }[] = [
   { label: "5 min", mins: 5 }, { label: "10 min", mins: 10 }, { label: "15 min", mins: 15 },
 ];
 
-export function CreateFlashSalePage() {
+export function CreateFlashSalePage({ embedded = false, onClose }: { embedded?: boolean; onClose?: () => void } = {}) {
   const [marketRegion] = useMarketplaceRegion();
   const [, setLocation] = useLocation();
   const { user } = useAuth();
-  const { getToken } = useClerkAuth();
+  const { getToken, isLoaded, isSignedIn } = useClerkAuth();
   const { currency, formatPrice } = useCurrency();
 
   const [saleType, setSaleType] = useState<SaleType>("standard");
@@ -59,7 +59,9 @@ export function CreateFlashSalePage() {
     reader.readAsDataURL(file);
   }
 
-  useEffect(() => { if (!user) setLocation("/login"); }, [user, setLocation]);
+  useEffect(() => {
+    if (!embedded && isLoaded && !isSignedIn) setLocation("/login");
+  }, [embedded, isLoaded, isSignedIn, setLocation]);
 
   function handleMultiSelect(listings: SellerListing[]) {
     setSelectedListings(listings);
@@ -139,7 +141,7 @@ export function CreateFlashSalePage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!user) return;
+    if (!user || submitting) return;
     if (!form.startNow && !form.startsAt) { setError("Please set a start time or choose 'Start Now'"); return; }
 
     const toGBP = (n: number) => n / currency.rate;
@@ -213,16 +215,26 @@ export function CreateFlashSalePage() {
         if (!res.ok) { setError(data.error ?? "Failed to create flash sale"); return; }
         setSuccess(data.id);
       }
+    } catch {
+      setError("Unable to complete the request. Check your flash sales before trying again.");
     } finally { setSubmitting(false); }
+  }
+
+  if (embedded && (!isLoaded || !isSignedIn || !user)) {
+    return <div className="p-4 sm:p-6">
+      {isLoaded && !isSignedIn
+        ? <Link href="/sign-in" className="inline-flex rounded-xl bg-orange-700 px-4 py-3 font-bold text-white">Sign in to create a flash sale</Link>
+        : <p role="status">Loading account…</p>}
+    </div>;
   }
 
   if (success) {
     const isMultiSuccess = success.startsWith("multi:");
     const count = isMultiSuccess ? parseInt(success.split(":")[1]) : 1;
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col">
-        <Navbar />
-        <div className="flex-1 flex flex-col items-center justify-center px-4">
+      <div className={embedded ? "flex flex-col bg-background" : "min-h-screen bg-gray-50 flex flex-col"}>
+        {!embedded && <Navbar />}
+        <div className={`flex flex-1 flex-col items-center justify-center px-4 ${embedded ? "py-6" : ""}`}>
           <div className="bg-white rounded-3xl border border-gray-100 p-10 text-center max-w-md w-full">
             <div className="w-16 h-16 rounded-full bg-[#F26B21]/10 flex items-center justify-center mx-auto mb-5">
               <Zap className="w-8 h-8 text-[#F26B21] fill-[#F26B21]" />
@@ -243,25 +255,26 @@ export function CreateFlashSalePage() {
                 <button onClick={() => setLocation(`/flash-sales/${success}`)} className="w-full py-3 rounded-xl bg-[#F26B21] text-white font-bold hover:opacity-90">View Flash Sale</button>
               )}
               <button onClick={() => setLocation("/flash-sales")} className="w-full py-3 rounded-xl bg-[#F26B21] text-white font-bold hover:opacity-90">Browse All Flash Sales</button>
+              {embedded && <button type="button" onClick={onClose} className="w-full rounded-xl border border-gray-200 py-3 font-semibold text-gray-700 hover:bg-gray-50">Done</button>}
               <button onClick={() => setLocation("/dashboard")} className="w-full py-3 rounded-xl border border-gray-200 text-gray-700 font-semibold hover:bg-gray-50">Go to Dashboard</button>
             </div>
           </div>
         </div>
-        <Footer />
+        {!embedded && <Footer />}
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <Navbar />
+    <div className={embedded ? "flex flex-col bg-background" : "min-h-screen bg-gray-50 flex flex-col"}>
+      {!embedded && <Navbar />}
       <main className="flex-1 container mx-auto max-w-4xl px-4 py-8">
-        <Link href="/flash-sales" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#4A5CE8] mb-6 w-fit">
+        {!embedded && <Link href="/flash-sales" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-[#4A5CE8] mb-6 w-fit">
           <ChevronLeft className="w-4 h-4" /> Back to Flash Sales
-        </Link>
+        </Link>}
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          <div className="lg:col-span-3 bg-white rounded-3xl border border-gray-100 p-6 md:p-8">
+        <div className={`grid min-w-0 grid-cols-1 gap-6 ${embedded ? "" : "lg:grid-cols-5"}`}>
+          <div className={`min-w-0 rounded-3xl border border-gray-100 bg-white ${embedded ? "p-4 sm:p-6" : "p-6 md:p-8 lg:col-span-3"}`}>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-xl bg-[#F26B21] flex items-center justify-center shadow-lg shadow-[#F26B21]/30">
                 <Zap className="w-5 h-5 text-white fill-white" />
@@ -427,7 +440,7 @@ export function CreateFlashSalePage() {
                   </>
                 ) : (
                   <>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className={`grid gap-3 ${embedded ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-3"}`}>
                       <div>
                         <label className="text-sm font-semibold text-gray-700 block mb-1.5">Original ({currency.symbol}) *</label>
                         <input type="number" step="0.01" min="0.01" value={form.originalPrice} onChange={e => handleOriginalPrice(e.target.value)} placeholder="0.00"
@@ -512,7 +525,7 @@ export function CreateFlashSalePage() {
               </section>
 
               {error && (
-                <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 rounded-xl px-4 py-3">
+                <div role="alert" className="flex items-center gap-2 text-red-600 text-sm bg-red-50 rounded-xl px-4 py-3">
                   <AlertCircle className="w-4 h-4 shrink-0" /> {error}
                 </div>
               )}
@@ -526,7 +539,7 @@ export function CreateFlashSalePage() {
           </div>
 
           {/* Live Preview */}
-          <div className="lg:col-span-2">
+          <div className={embedded ? "min-w-0" : "lg:col-span-2"}>
             <div className="lg:sticky lg:top-4 space-y-3">
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Live Preview</p>
               <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
@@ -578,7 +591,7 @@ export function CreateFlashSalePage() {
           </div>
         </div>
       </main>
-      <Footer />
+      {!embedded && <Footer />}
     </div>
   );
 }

@@ -225,7 +225,7 @@ const SELL_HUB_OPTIONS = [
  {id:"direct",title:"Direct Sale",desc:"Create a detailed listing with pricing, shipping and offers.",href:"/sell/direct",icon:ShoppingCart,colors:"from-amber-500 to-orange-700",border:"border-[#ff9500]",label:"List item"},
  {id:"quick",title:"Quick Sale",desc:"Get your item listed quickly with the essentials.",href:"/sell/quick",icon:Zap,colors:"from-sky-400 to-blue-700",border:"border-[#087cff]",label:"List now"},
  {id:"auction",title:"List an Auction",desc:"Set a starting bid and let buyers compete.",href:"/auctions/create",icon:Gavel,colors:"from-teal-400 to-teal-700",border:"border-teal-500",label:"Create auction"},
- {id:"flash",title:"Run a Flash Sale",desc:"Create a limited-time offer for your products.",href:"/flash-sales",icon:Percent,colors:"from-pink-500 to-rose-700",border:"border-rose-400",label:"Create deal"},
+ {id:"flash",title:"Run a Flash Sale",desc:"Create a limited-time offer for your products.",href:"/flash-sales/create",icon:Percent,colors:"from-pink-500 to-rose-700",border:"border-rose-400",label:"Create deal"},
  {id:"classified",title:"List a Classified",desc:"Post a local listing, service or wanted ad.",href:"/classifieds/post",icon:Newspaper,colors:"from-lime-500 to-emerald-700",border:"border-[#00bf69]",label:"Post ad"},
  {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/live",icon:Video,colors:"from-[#14c7f4] to-[#006dce]",border:"border-[#04aeed]",label:"Start live"}
 ] as const;
@@ -245,10 +245,11 @@ function SellHubArtwork({kind}:{kind:string}) {
 const NativeSwapSeller = lazy(() => import("@/pages/SwapPage").then(m => ({default:m.SwapListingForm})));
 const NativeDirectSeller = lazy(() => import("@/pages/DirectSalePage").then(m => ({default:m.DirectSalePage})));
 const NativeAuctionSeller = lazy(() => import("@/pages/CreateAuctionPage").then(m => ({default:m.CreateAuctionPage})));
+const NativeFlashSeller = lazy(() => import("@/pages/CreateFlashSalePage").then(m => ({default:m.CreateFlashSalePage})));
 const NativeClassifiedSeller = lazy(() => import("@/pages/ClassifiedsPage").then(m => ({default:m.CreateClassifiedPage})));
 function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number];onClose:()=>void}) {
  const [expanded, setExpanded] = useState(false);
- const hasSeparateEditor = option.id === "swap" || option.id === "flash" || option.id === "live";
+ const hasSeparateEditor = option.id === "swap" || option.id === "live";
  useEffect(()=>{const previous=document.body.style.overflow;document.body.style.overflow="hidden";const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose()};window.addEventListener("keydown",onKey);return ()=>{document.body.style.overflow=previous;window.removeEventListener("keydown",onKey)}},[onClose]);
 
  return createPortal(<div className="fixed inset-0 z-[9999] flex items-stretch justify-center bg-[#082653]/45 p-0 backdrop-blur-[2px] lg:items-center lg:justify-end lg:bg-[#082653]/20 lg:p-5" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
@@ -262,6 +263,7 @@ function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number]
       {option.id==="swap" ? <NativeSwapSeller embedded/> :
        option.id==="direct" || option.id==="quick" ? <NativeDirectSeller embedded sellMode={option.id} key={option.id}/> :
        option.id==="auction" ? <NativeAuctionSeller embedded/> :
+       option.id==="flash" ? <NativeFlashSeller embedded onClose={onClose}/> :
        option.id==="classified" ? <NativeClassifiedSeller embedded onClose={onClose}/> :
        <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center">
          <span className={`flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br ${option.colors} text-white`}><option.icon className="h-11 w-11"/></span>
