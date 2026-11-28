@@ -106,6 +106,9 @@ function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & A
       listingVideo = { src: video.embed, embedded: true };
     }
     isAliExpress = typeof parsed?.source === "string" && parsed.source.toLowerCase() === "aliexpress";
+    if (!listingVideo && isAliExpress && typeof parsed?.supplier_video_url === "string") {
+      try { const u = new URL(parsed.supplier_video_url); if (u.protocol === "https:" && !u.username && !u.password && !u.port && /(^|\.)(alicdn\.com|aliexpress-media\.com|aliexpress\.com)$/i.test(u.hostname) && /\.mp4$/i.test(u.pathname)) listingVideo = {src:u.href,embedded:false}; } catch {}
+    }
     supplierOptions = Array.isArray(parsed?.aliexpress_options) ? parsed.aliexpress_options : [];
     dispatchTime = typeof parsed?.dispatch_time === "string" ? parsed.dispatch_time : undefined;
     deliveryEstimate = typeof parsed?.delivery_estimate === "string" ? parsed.delivery_estimate : undefined;
