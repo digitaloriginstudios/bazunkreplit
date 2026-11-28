@@ -1,54 +1,81 @@
 import {useSeoMetadata} from "@/hooks/useSeoMetadata";
-import { useEffect,useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link,useLocation } from "wouter";
 import { useAuth } from "@clerk/react";
 import { ArrowLeftRight,Package } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { ACTIVE_CATEGORIES } from "@/data/categories";
 type Item={id:string;title:string;description:string;category:string;condition:string;wanted:string;value_minor:number;status?:string};
 const field="w-full rounded-xl border border-slate-300 bg-white p-3 text-slate-900";
 const button="inline-flex rounded-xl bg-[#E96217] px-4 py-3 font-bold text-white disabled:opacity-50";
 const initial={title:"",description:"",category:"",condition:"good",wanted:"",value:""};
 const previewNotice="Preview: negotiate exchanges. Test-mode cash checkout only. Do not dispatch items; live exchange protection is not yet available.";
-const listingFields = [
-  { key: "title", label: "Title", minLength: 3, maxLength: 160 },
-  { key: "description", label: "Description", minLength: 1, maxLength: 5000 },
-  { key: "category", label: "Category", minLength: 1, maxLength: 100 },
-  { key: "wanted", label: "What would you like in return?", minLength: 1, maxLength: 2000 },
-] as const;
+const conditions = ["new", "like new", "good", "fair", "poor"];
 
 export function SwapListingForm({ embedded = false }: { embedded?: boolean }) {
   const [, navigate] = useLocation();
   const { isLoaded, isSignedIn, getToken } = useAuth();
+  const categoriesId = useId();
   const [draft, setDraft] = useState(initial);
+  const [files, setFiles] = useState<File[]>([]);
+  const [publishedId, setPublishedId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  function update(field: keyof typeof initial, value: string) {
+    setDraft(current => ({ ...current, [field]: value }));
+  }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
     setBusy(true);
     setError("");
+    let listingId = publishedId;
     try {
       const token = await getToken();
       if (!token) throw new Error("Sign in to continue.");
-      if (!/^\d+(\.\d{1,2})?$/.test(draft.value)) throw new Error("Enter a valid GBP value.");
-      const response = await fetch("/api/swaps", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-        body: JSON.stringify({ ...draft, valueMinor: Math.round(Number(draft.value) * 100) }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Unable to create listing");
+      if (files.length > 4) throw new Error("Choose up to four photos.");
+      const photos = await Promise.all(files.map(prepareSwapPhoto));
+      const headers = { "Content-Type": "application/json", Authorization: "Bearer " + token };
+
+      if (!listingId) {
+        if (!/^\d+(\.\d{1,2})?$/.test(draft.value)) throw new Error("Enter a valid GBP value.");
+        const response = await fetch("/api/swaps", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ ...draft, valueMinor: Math.round(Number(draft.value) * 100) }),
+        });
+        const data = await response.json() as { id?: string; error?: string };
+        if (!response.ok) throw new Error(data.error || "Unable to create listing");
+        if (typeof data.id !== "string") throw new Error("Check My swaps before trying again.");
+        listingId = data.id;
+        setPublishedId(listingId);
+      }
+
+      if (photos.length) {
+        const response = await fetch(`/api/swaps/${encodeURIComponent(listingId)}/photos`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ photos }),
+        });
+        if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          throw new Error(data?.error || "Could not upload photos.");
+        }
+      }
       navigate("/dashboard/swaps");
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Unable to create listing");
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Unable to create listing";
+      setError(listingId ? `Your listing is published. ${message} You can retry the photo upload here.` : message);
     } finally {
       setBusy(false);
     }
   }
 
   const formField = "mt-1 w-full rounded-xl border border-input bg-background p-3 text-foreground";
+  const section = "space-y-4 rounded-xl border border-border p-4";
   return (
     <div className={embedded ? "p-4 sm:p-6" : "max-w-2xl"}>
       <section className="space-y-4 rounded-2xl border border-border bg-card p-4 text-card-foreground sm:p-5">
@@ -58,27 +85,68 @@ export function SwapListingForm({ embedded = false }: { embedded?: boolean }) {
           <Link href="/sign-in" className={button}>Sign in to create a swap</Link>
         ) : (
           <form onSubmit={submit} className="space-y-4">
-            {listingFields.map(({ key, label, minLength, maxLength }) => (
-              <label key={key} className="block font-semibold">
-                {label}
-                <input className={formField} required minLength={minLength} maxLength={maxLength}
-                  value={draft[key]} onChange={event => setDraft(current => ({ ...current, [key]: event.target.value }))} />
+            <fieldset disabled={busy || publishedId !== null} className={section}>
+              <legend className="px-2 font-bold">Item details</legend>
+              <label className="block font-semibold">
+                Title
+                <input className={formField} required minLength={3} maxLength={160}
+                  value={draft.title} onChange={event => update("title", event.target.value)} />
               </label>
-            ))}
-            <label className="block font-semibold">
-              Condition
-              <select className={formField} value={draft.condition}
-                onChange={event => setDraft(current => ({ ...current, condition: event.target.value }))}>
-                {["new", "like new", "good", "fair", "poor"].map(condition => <option key={condition}>{condition}</option>)}
-              </select>
-            </label>
-            <label className="block font-semibold">
-              Estimated value (GBP)
-              <input className={formField} type="number" min="0" max="100000" step=".01" required value={draft.value}
-                onChange={event => setDraft(current => ({ ...current, value: event.target.value }))} />
-            </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block font-semibold">
+                  Category
+                  <input className={formField} list={categoriesId} required maxLength={100}
+                    value={draft.category} onChange={event => update("category", event.target.value)} />
+                  <datalist id={categoriesId}>
+                    {ACTIVE_CATEGORIES.map(category => <option key={category.slug} value={category.name} />)}
+                  </datalist>
+                </label>
+                <label className="block font-semibold">
+                  Condition
+                  <select className={formField} value={draft.condition} onChange={event => update("condition", event.target.value)}>
+                    {conditions.map(condition => <option key={condition} value={condition}>{condition[0].toUpperCase() + condition.slice(1)}</option>)}
+                  </select>
+                </label>
+              </div>
+              <label className="block font-semibold">
+                Description
+                <textarea className={formField} rows={4} required maxLength={5000} placeholder="Include the brand, model, accessories and any signs of wear."
+                  value={draft.description} onChange={event => update("description", event.target.value)} />
+              </label>
+            </fieldset>
+
+            <fieldset disabled={busy} className={section}>
+              <legend className="px-2 font-bold">Photos</legend>
+              <label className="block font-semibold">
+                Add up to four photos (optional)
+                <input className={formField} type="file" accept="image/jpeg,image/png,image/webp" multiple
+                  onChange={event => setFiles(Array.from(event.target.files ?? []))} />
+              </label>
+              <p className="text-sm text-muted-foreground">Use JPEG, PNG or WebP, up to 12 MB each. The first photo is the cover.</p>
+            </fieldset>
+
+            <fieldset disabled={busy || publishedId !== null} className={section}>
+              <legend className="px-2 font-bold">What you want in return</legend>
+              <label className="block font-semibold">
+                What would you like in return?
+                <textarea className={formField} rows={3} required maxLength={2000} placeholder="Describe the items, condition or alternatives you’d consider."
+                  value={draft.wanted} onChange={event => update("wanted", event.target.value)} />
+              </label>
+              <label className="block font-semibold">
+                Estimated item value (GBP)
+                <input className={formField} type="number" min="0" max="100000" step=".01" required value={draft.value}
+                  onChange={event => update("value", event.target.value)} />
+              </label>
+            </fieldset>
+
             {error && <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-800">{error}</p>}
-            <button type="submit" className={button} disabled={busy}>{busy ? "Publishing…" : "Publish swap listing"}</button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="submit" className={button} disabled={busy || files.length > 4 || (publishedId !== null && files.length === 0)}>
+                {busy ? "Saving…" : publishedId ? "Retry photo upload" : "Publish swap listing"}
+              </button>
+              {publishedId && <Link href="/dashboard/swaps" className="font-bold underline">Go to My swaps</Link>}
+            </div>
+            {files.length > 4 && <p role="alert" className="text-sm text-destructive">Choose up to four photos.</p>}
           </form>
         )}
       </section>
