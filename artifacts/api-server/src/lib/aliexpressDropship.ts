@@ -15,6 +15,7 @@ type Product = {
   description: string;
   images: { url: string }[];
   videoUrl?: string;
+  videoPoster?: string;
   price: { amount: number; currency: string };
   sourceUrl: string;
   rating: number;
@@ -48,6 +49,7 @@ function normalize(p: any): Product {
   const amount = Number(p.targetSalePrice ?? p.target_sale_price ?? skuPrice ?? p.price ?? 0);
   const stock = skus.map(sku => Number(sku.sku_available_stock)).filter(Number.isFinite);
   return {
+    videoPoster: [p.video_cover_url,p.ae_multimedia_info_dto?.video_cover_url,p.ae_multimedia_info_dto?.video_cover].map(absolute).find(Boolean),
     videoUrl: [p.video_url,p.videoUrl,p.ae_multimedia_info_dto?.video_url,p.ae_multimedia_info_dto?.videoUrl,...(Array.isArray(p.ae_multimedia_info_dto?.video_list) ? p.ae_multimedia_info_dto.video_list.map((v:any)=>v?.video_url ?? v?.url) : [])].map(supplierVideoUrl).find(Boolean),
     externalId: id,
     title: String(p.title ?? p.product_title ?? p.ae_item_base_info_dto?.subject ?? ""),
