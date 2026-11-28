@@ -1812,6 +1812,13 @@ router.get("/admin/search-aliexpress", async (req, res) => {
   res.status(503).json({ error: "Bazunk AliExpress Scraper Engine is not configured. RapidAPI has been retired." });
 });
 
+function supplierVideoUrl(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length > 4000) return;
+  try { const u = new URL(value.startsWith("//") ? "https:"+value : value);
+    if (u.protocol === "https:" && !u.username && !u.password && !u.port && /(^|\.)(alicdn\.com|aliexpress-media\.com|aliexpress\.com)$/i.test(u.hostname) && /\.mp4$/i.test(u.pathname)) return u.href;
+  } catch {}
+}
+
 // Media-only refresh: never update prices, inventory or seller details.
 router.post("/admin/aliexpress-sync-media", async (req, res) => {
   const ids = req.body?.listingIds;
@@ -1830,13 +1837,13 @@ router.post("/admin/aliexpress-sync-media", async (req, res) => {
       if (!sourceId) throw new Error("Missing supplier product ID");
       const p = await getDropshipProduct(sourceId, specs.marketplace_region === "us" ? "US" : "GB");
       const incoming = p.images.map(image => image.url).filter(url => /^https:\/\//i.test(url));
-      if (!incoming.length) throw new Error("Supplier returned no images");
+      if (!incoming.length && !p.videoUrl) throw new Error("Supplier returned no media");
       const previous = Array.isArray(specs.admin_gallery_images) ? specs.admin_gallery_images : [];
       const images = [...new Set([row.image, ...previous, ...incoming].filter((v): v is string => typeof v === "string" && !!v))].slice(0,30);
-      const next = JSON.stringify({...specs,admin_gallery_images:images,media_synced_at:new Date().toISOString()});
+      const next = JSON.stringify({...specs,admin_gallery_images:images, supplier_video_url:p.videoUrl ?? specs.supplier_video_url,media_synced_at:new Date().toISOString()});
       const updated = await db.execute(sql`UPDATE listings SET specifications=${next},updated_at=NOW() WHERE id=${id} AND specifications IS NOT DISTINCT FROM ${row.specifications as string} RETURNING id`);
       if (!updated.rows.length) throw new Error("Listing changed during sync; retry");
-      results.push({id,status:"ok",images:images.length});
+      results.push({id,status:"ok",images:images.length,video:Boolean(p.videoUrl)});
     } catch(error) { results.push({id,status:"failed",error:error instanceof Error ? error.message : "Media sync failed"}); }
   }
   res.json({results});
@@ -1853,7 +1860,7 @@ router.get("/admin/aliexpress-product-preview", async (req, res) => {
       const { product: p, ...details } = await previewDropshipProduct(id, destination, sku);
       res.setHeader("Cache-Control", "no-store");
       res.json({ ...details, id, title: p.title, description: tidyAliExpressDescription(p.description),
-        imageUrl: p.images[0]?.url ?? "", images: [...new Set(p.images.map(image => image.url))].slice(0, 30),
+        videoUrl:p.videoUrl, imageUrl: p.images[0]?.url ?? "", images: [...new Set(p.images.map(image => image.url))].slice(0, 30),
         supplierPrice: p.price.amount || null, currency: p.price.currency, sourceUrl: p.sourceUrl });
     }
     catch(error){logger.warn({error},"AliExpress Dropshipping preview failed");res.status(502).json({error:error instanceof Error?error.message:"AliExpress product lookup failed"});}return;
@@ -2162,7 +2169,7 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
       const bazPrice = options.length ? Math.min(...options.map(option => option.price)) : Math.round((price * listingRate * (1 + markup / 100) + shipping) * 100) / 100;
       const priceGbp = fxRates[listingCurrency] ? Math.round(bazPrice * fxRates[listingCurrency] * 100) / 100 : null;
       const sourceId = useDropship ? p.externalId : id;
-      const specs = JSON.stringify({ details:attributes, delivery_estimate:deliveryEstimate, admin_gallery_images:p.images?.map((image:{url:string})=>image.url).slice(0,30), aliexpress_options:options.length ? options : undefined, marketplace_region:market, source:"AliExpress", aliexpress_id:sourceId, aliexpress_url:p.sourceUrl,
+      const specs = JSON.stringify({ supplier_video_url:supplierVideoUrl(p.videoUrl), details:attributes, delivery_estimate:deliveryEstimate, admin_gallery_images:p.images?.map((image:{url:string})=>image.url).slice(0,30), aliexpress_options:options.length ? options : undefined, marketplace_region:market, source:"AliExpress", aliexpress_id:sourceId, aliexpress_url:p.sourceUrl,
         source_price:price, source_currency:currency, exchange_rate_to_gbp:gbpRate, markup_pct:markup, shipping_gbp:market === "uk" ? shipping : undefined, shipping_usd:market === "us" ? shipping : undefined,
         source_sync:!options.length, last_synced_at:new Date().toISOString(), source_availability:p.availability });
       const publicId = "BZK-ALI-" + sourceId;
