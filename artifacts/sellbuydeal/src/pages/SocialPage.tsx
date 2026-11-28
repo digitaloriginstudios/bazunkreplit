@@ -173,6 +173,7 @@ function SocialProfileForm() {
 
 export function SocialPage() {
   const { isLoaded, isSignedIn, userId } = useAuth();
+  const creatorsEnabled = useFeature("social_creators");
   const pollsEnabled = useFeature("social_polls");
   const collectionsEnabled = useFeature("social_collections");
   const profilesEnabled = useFeature("social_profiles");
@@ -201,6 +202,14 @@ export function SocialPage() {
             className="mb-6 ml-2 inline-flex rounded-xl border px-4 py-2 font-semibold"
           >
             Product polls
+          </Link>
+        )}
+        {creatorsEnabled && (
+          <Link
+            href="/creators"
+            className="mb-6 ml-2 inline-flex rounded-xl border px-4 py-2 font-semibold"
+          >
+            Shop My Style
           </Link>
         )}
         <div className="mb-5 empty:hidden">
