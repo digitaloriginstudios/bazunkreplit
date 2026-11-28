@@ -1618,6 +1618,14 @@ router.patch("/admin/listings/:id/category-review",async(req,res)=>{
     if(!found.rows.length)throw Error("Selected third-level category does not exist");
     if(enableThird)await tx.execute(sql`UPDATE third_level_categories SET visible=TRUE WHERE category=${category} AND subcategory=${subcategory} AND slug=${thirdSlug}`);
    }
+   const expected=req.body?.expected;
+   if(expected){
+    const current=await tx.execute(sql`SELECT category,subcategory,subsubcategory,specifications FROM listings WHERE id=${id} FOR UPDATE`);
+    const row=current.rows[0];
+    if(!row)throw Error("Listing not found");
+    const spec=typeof row.specifications==="string"?JSON.parse(row.specifications||"{}"):(row.specifications||{});
+    if(row.category!==expected.category||String(row.subcategory||"")!==String(expected.subcategory||"")||String(row.subsubcategory||(spec as any).admin_third_level_slug||"")!==String(expected.thirdSlug||""))throw Error("Category changed since scan; rescan before applying");
+   }
    const result=await tx.execute(sql`UPDATE listings SET category=${category},subcategory=${subcategory},subsubcategory=NULLIF(${thirdSlug}, ''),specifications=jsonb_set(jsonb_set(COALESCE(NULLIF(specifications::text,'')::jsonb,'{}'::jsonb),'{admin_third_level_slug}',to_jsonb(${thirdSlug}::text),true),'{admin_category_review_approved_at}',to_jsonb(NOW()::text),true),updated_at=NOW() WHERE id=${id} RETURNING id`);
    if(!result.rows.length)throw Error("Listing not found");
   });
