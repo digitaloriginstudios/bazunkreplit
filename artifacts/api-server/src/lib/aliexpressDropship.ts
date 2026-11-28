@@ -14,6 +14,7 @@ type Product = {
   title: string;
   description: string;
   images: { url: string }[];
+  videoUrl?: string;
   price: { amount: number; currency: string };
   sourceUrl: string;
   rating: number;
@@ -24,6 +25,13 @@ const absolute = (value: unknown): string => {
   const url = String(value ?? "");
   return url.startsWith("//") ? "https:" + url : /^https:\/\//i.test(url) ? url : "";
 };
+
+function supplierVideoUrl(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length > 4000) return;
+  try { const u = new URL(value.startsWith("//") ? "https:"+value : value);
+    if (u.protocol === "https:" && !u.username && !u.password && !u.port && /(^|\.)(alicdn\.com|aliexpress-media\.com|aliexpress\.com)$/i.test(u.hostname) && /\.mp4$/i.test(u.pathname)) return u.href;
+  } catch {}
+}
 
 function normalize(p: any): Product {
   const id = String(p.itemId ?? p.product_id ?? p.productId ?? p.ae_item_base_info_dto?.product_id ?? "");
@@ -40,6 +48,7 @@ function normalize(p: any): Product {
   const amount = Number(p.targetSalePrice ?? p.target_sale_price ?? skuPrice ?? p.price ?? 0);
   const stock = skus.map(sku => Number(sku.sku_available_stock)).filter(Number.isFinite);
   return {
+    videoUrl: [p.video_url,p.videoUrl,p.ae_multimedia_info_dto?.video_url,p.ae_multimedia_info_dto?.videoUrl,...(Array.isArray(p.ae_multimedia_info_dto?.video_list) ? p.ae_multimedia_info_dto.video_list.map((v:any)=>v?.video_url ?? v?.url) : [])].map(supplierVideoUrl).find(Boolean),
     externalId: id,
     title: String(p.title ?? p.product_title ?? p.ae_item_base_info_dto?.subject ?? ""),
     description: String(p.description ?? p.ae_item_base_info_dto?.detail ?? ""),
