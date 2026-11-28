@@ -141,6 +141,25 @@ export function AdminListingsPage() {
   const [statusFilter,setStatusFilter]=useState("all");
   const [conversion, setConversion] = useState<{ kind: ConversionKind; listings: Listing[] } | null>(null);
   const [selectedIds,setSelectedIds]=useState<string[]>([]);
+  const [mediaBusy,setMediaBusy]=useState(false);
+  const [mediaMessage,setMediaMessage]=useState("");
+  async function syncMedia(ids:number[]) {
+    if(mediaBusy || !ids.length) return;
+    setMediaBusy(true); setMediaMessage("Refreshing supplier media…");
+    let ok=0, failed=0; const errors:string[]=[];
+    try {
+      for(let i=0;i<ids.length;i+=20){
+        const batch=ids.slice(i,i+20);
+        const r=await authFetch("/api/admin/aliexpress-sync-media",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({listingIds:batch})});
+        const data=await r.json();
+        if(!r.ok) throw new Error(data.error || "Media sync failed");
+        for(const item of data.results ?? []) { if(item.status==="ok") ok++; else {failed++; errors.push(String(item.id)+": "+String(item.error));} }
+        setMediaMessage("Media sync: "+ok+" updated, "+failed+" failed; "+Math.min(i+20,ids.length)+"/"+ids.length+" processed.");
+      }
+    } catch(e){errors.push(e instanceof Error?e.message:"Media sync failed");}
+    finally {setMediaBusy(false);setMediaMessage(ok+" updated, "+failed+" failed."+ (errors.length?" "+errors.slice(0,5).join("; "):""));}
+  }
+
   const [bulkPromoOpen,setBulkPromoOpen]=useState(false);
   const [bulkPromoOptions,setBulkPromoOptions]=useState<{type:string;label:string;daysValid:number}[]>([]);
   const [bulkPromoSelected,setBulkPromoSelected]=useState<Record<string,number>>({});
@@ -396,6 +415,8 @@ export function AdminListingsPage() {
         {value:"draft",label:"Drafts"},{value:"suspended",label:"Suspended"},{value:"inactive",label:"Inactive"},{value:"sold",label:"Sold"}
       ]}/>
       <div className="mb-4 flex flex-wrap gap-2">
+        <button type="button" disabled={mediaBusy || !listings.length} onClick={()=>void syncMedia(listings.filter(l=>(!selectedIds.length || selectedIds.includes(String(l.id))) && String(parseSpecs(l.specifications)?.source).toLowerCase()==="aliexpress").map(l=>l.id))} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{mediaBusy?"Syncing media…":"Sync AliExpress media (selected / page)"}</button>
+        {mediaMessage && <p role="status" className="text-sm text-slate-100">{mediaMessage}</p>}
         <button type="button" onClick={()=>void checkCategories()} disabled={loading || !listings.length || reviewLoading} className="rounded-lg border-2 border-cyan-300 !bg-blue-700 px-4 py-2 text-xs font-black !text-white hover:!bg-blue-600">Suggest categories ({selectedIds.length||listings.length})</button>
         <button type="button" onClick={()=>setLocation("/admin/listings/categories")} className="rounded-lg border-2 border-blue-400 !bg-blue-700 px-4 py-2 text-xs font-black !text-white hover:!bg-blue-600">Manage categories & subcategories →</button>
         {([{id:"listings",label:"All Listings"},{id:"import-export",label:"Import / Export"}] as const).map(item=><button aria-pressed={view===item.id} key={item.id} type="button" onClick={()=>setView(item.id)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${view===item.id?"bg-blue-600 text-white border-blue-600":"border-slate-400 bg-white text-slate-950 dark:bg-slate-800 dark:text-white"}`}>{item.label}</button>)}
@@ -566,6 +587,7 @@ export function AdminListingsPage() {
                       </div>
                       <div className="mt-3 flex flex-wrap items-center gap-2" aria-label={`Actions for ${l.title}`}>
                         <a href={`/listing/${l.public_url_token||l.public_id||l.id}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center rounded-lg border-2 border-white bg-[#334155] px-3 py-2 text-xs font-black !text-white hover:bg-[#475569]">View on Bazunk</a>
+                        {aliExpressUrl && <button type="button" disabled={mediaBusy} onClick={()=>void syncMedia([l.id])} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">Sync Media</button>}
                         {aliExpressUrl && <a href={aliExpressUrl} target="_blank" rel="noopener noreferrer"
                           className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border-2 border-white bg-[#334155] px-3 py-2 text-xs font-black !text-white hover:bg-[#475569]">
                           <ExternalLink className="h-3 w-3" /> View on AliExpress
