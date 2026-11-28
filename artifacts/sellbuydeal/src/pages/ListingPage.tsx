@@ -77,7 +77,7 @@ function normaliseCondition(raw: unknown): string {
 
 type SpecRow = { key: string; value: string };
 type SupplierOption = { sku: string; label: string; quantity: number; price: number; priceGbp: number | null; image?: string | null };
-type ApiListingExtra = { listingVideo?: { src: string; embedded: boolean }; supplierOptions?: SupplierOption[]; _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string; isAliExpress?: boolean; aliExpressOptions?: { token: string; label: string; quantity: number | null }[]; dispatchTime?: string; deliveryEstimate?: string };
+type ApiListingExtra = { listingVideo?: { src: string; embedded: boolean; poster?: string }; supplierOptions?: SupplierOption[]; _publicUrlToken?: string | null; _gallery?: string[]; _sellerEmail?: string; _sellerName?: string; _sellerUsername?: string; _publicId?: string | null; _promotions?: string[]; _tags?: string[]; _specifications?: SpecRow[]; subcategory?: string; extra_categories?: string; shipOrigin?: string; shipOriginOther?: string; shipZone?: string; carrier?: string; shippingPrice?: number; handlingCharge?: number; quantity?: number; sku?: string; listingCurrency?: string; isAliExpress?: boolean; aliExpressOptions?: { token: string; label: string; quantity: number | null }[]; dispatchTime?: string; deliveryEstimate?: string };
 
 const TAG_COLORS = [
   "bg-[#4A5CE8]/10 text-[#4A5CE8]",
@@ -107,7 +107,7 @@ function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & A
     }
     isAliExpress = typeof parsed?.source === "string" && parsed.source.toLowerCase() === "aliexpress";
     if (!listingVideo && isAliExpress && typeof parsed?.supplier_video_url === "string") {
-      try { const u = new URL(parsed.supplier_video_url); if (u.protocol === "https:" && !u.username && !u.password && !u.port && /(^|\.)(alicdn\.com|aliexpress-media\.com|aliexpress\.com)$/i.test(u.hostname) && /\.mp4$/i.test(u.pathname)) listingVideo = {src:u.href,embedded:false}; } catch {}
+      try { const u = new URL(parsed.supplier_video_url); if (u.protocol === "https:" && !u.username && !u.password && !u.port && /(^|\.)(alicdn\.com|aliexpress-media\.com|aliexpress\.com)$/i.test(u.hostname) && /\.mp4$/i.test(u.pathname)) listingVideo = {src:u.href,embedded:false,poster:typeof parsed.supplier_video_poster === 'string' && /^https:\/\//i.test(parsed.supplier_video_poster) ? parsed.supplier_video_poster : undefined}; } catch {}
     }
     supplierOptions = Array.isArray(parsed?.aliexpress_options) ? parsed.aliexpress_options : [];
     dispatchTime = typeof parsed?.dispatch_time === "string" ? parsed.dispatch_time : undefined;
@@ -611,7 +611,7 @@ export function ListingPage() {
               {richProduct.listingVideo.embedded
                 ? <iframe title="Product video" src={richProduct.listingVideo.src} loading="lazy" allowFullScreen
                     className="aspect-video w-full rounded-lg bg-black" />
-                : <video aria-label="Product video" src={richProduct.listingVideo.src} controls playsInline preload="metadata"
+                : <video aria-label="Product video" src={richProduct.listingVideo.src} poster={richProduct.listingVideo.poster} controls playsInline preload="metadata"
                     className="max-h-96 w-full rounded-lg bg-black" />}
             </section>}
 
