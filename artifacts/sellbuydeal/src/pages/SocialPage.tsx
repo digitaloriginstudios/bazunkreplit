@@ -173,6 +173,7 @@ function SocialProfileForm() {
 
 export function SocialPage() {
   const { isLoaded, isSignedIn, userId } = useAuth();
+  const shortsEnabled = useFeature("social_shorts");
   const creatorsEnabled = useFeature("social_creators");
   const pollsEnabled = useFeature("social_polls");
   const collectionsEnabled = useFeature("social_collections");
@@ -210,6 +211,14 @@ export function SocialPage() {
             className="mb-6 ml-2 inline-flex rounded-xl border px-4 py-2 font-semibold"
           >
             Shop My Style
+          </Link>
+        )}
+        {shortsEnabled && (
+          <Link
+            href="/social/shorts"
+            className="mb-6 ml-2 inline-flex rounded-xl border px-4 py-2 font-semibold"
+          >
+            Shorts & unboxings
           </Link>
         )}
         <div className="mb-5 empty:hidden">

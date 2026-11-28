@@ -7,6 +7,7 @@ export const FEATURE_DEFINITIONS = [
   ["social_follows","Social follows","Community"],
   ["social_blocks","Social blocking","Community"],
   ["social_reports","Social reports","Community"],
+  ["social_shorts","Bazunk Shorts and unboxings","Community"],
   ["social_creators","Creator storefronts and Shop My Style","Community"],
   ["social_stories","Seller stories","Community"],
   ["social_polls","Product polls","Community"],
