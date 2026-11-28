@@ -140,7 +140,7 @@ function normaliseProductResponse(
     (multiImage?.["image_list"] as string[] | undefined) ??
     [];
   const imageUrl = typeof imgList[0] === "string" ? imgList[0] : "";
-  const additionalImages = imgList.slice(1, 5).filter((x) => typeof x === "string");
+  const additionalImages = imgList.slice(1, 30).filter((x) => typeof x === "string");
 
   // Category
   const crumbs =
