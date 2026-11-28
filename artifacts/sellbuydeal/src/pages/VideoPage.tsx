@@ -5,6 +5,7 @@ import { Footer } from "@/components/Footer";
 import "./VideoPage.css";
 
 const videos = [
+  { title: "Bazunk. You can't bring it with you", file: "bazunk-you-cant-bring-it-with-you", description: "Life is expensive. Give your unwanted stuff a second life on Bazunk.", category: "Buying & Selling" },
   { title: "Bazunk Promo", file: "bazunk-promo", description: "Discover buying, selling and rewards on Bazunk.", category: "Platform Updates" },
   { title: "Bazunk, RIP Fluffy Advert", file: "bazunk-fluffy-advert", description: "Our first advert: a very special send-off for Fluffy.", category: "Announcements" },
   { title: "The Bazunk Chainsaw", file: "bazunk-chainsaw", description: "One branch. One chainsaw. Several extremely expensive consequences.", category: "Buying & Selling" },
