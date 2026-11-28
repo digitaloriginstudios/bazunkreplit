@@ -725,7 +725,6 @@ async function runAppMigrations() {
       ('fee_rate_books',                 '5', NOW()),
       ('fee_rate_cds-vinyl',             '5', NOW()),
       ('fee_rate_beauty-personal-care',  '5', NOW()),
-      ('fee_rate_baby-products',         '5', NOW()),
       ('fee_rate_health-household',      '5', NOW()),
       ('fee_rate_arts-crafts-sewing',    '5', NOW()),
       ('fee_rate_appliances',            '5', NOW()),
