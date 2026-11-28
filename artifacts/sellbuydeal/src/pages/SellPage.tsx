@@ -170,7 +170,7 @@ const SELL_HUB_OPTIONS = [
  {id:"classified",title:"List a Classified",desc:"Post a local listing, service or wanted ad.",href:"/classifieds/post",icon:Newspaper,colors:"from-lime-500 to-emerald-700",label:"Post ad"},
  {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/live",icon:Video,colors:"from-[#14c7f4] to-[#006dce]",label:"Start live"}
 ] as const;
-const SELL_PALETTE: = {
+const SELL_PALETTE = {
  swap:{color:"#2563eb",light:"#dbeafe"},
  direct:{color:"#c2410c",light:"#ffedd5"},
  quick:{color:"#0369a1",light:"#e0f2fe"},
