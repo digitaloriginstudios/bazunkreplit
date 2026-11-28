@@ -43,7 +43,7 @@ function normalize(p: any): Product {
     externalId: id,
     title: String(p.title ?? p.product_title ?? p.ae_item_base_info_dto?.subject ?? ""),
     description: String(p.description ?? p.ae_item_base_info_dto?.detail ?? ""),
-    images: images.map(url => ({ url })),
+    images: [...new Set([...images, ...skus.flatMap(sku => { const props = sku.ae_sku_property_dtos; const rows = Array.isArray(props) ? props : props?.ae_sku_property_d_t_o; return Array.isArray(rows) ? rows.map((prop: any) => absolute(prop.sku_image)) : []; })].filter(Boolean))].slice(0, 30).map(url => ({ url })),
     price: {
       amount: Number.isFinite(amount) ? amount : 0,
       currency: String(p.targetSalePriceCurrency ?? p.target_sale_price_currency ?? "USD").toUpperCase(),
