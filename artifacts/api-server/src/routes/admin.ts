@@ -1563,16 +1563,13 @@ router.patch("/admin/listings/categories", async (req, res) => {
 });
 
 // Review-first category diagnostics. No classification is applied until an admin confirms it.
-router.post("/admin/listings/category-review", async (req,res)=>{
- const ids=req.body?.ids;
- if(!Array.isArray(ids)||ids.length<1||ids.length>50||!ids.every((x:unknown)=>Number.isSafeInteger(x)&&Number(x)>0)){res.status(400).json({error:"Select 1–50 listings"});return;}
- try{
+async function classifyCategoryBatch(ids:number[]){
  const rows=await db.execute(sql`SELECT l.id,l.title,l.category,l.subcategory,l.subsubcategory,l.specifications, a.created_at AS historical_approved_at FROM listings l LEFT JOIN LATERAL (SELECT created_at FROM admin_audit_log WHERE action='listings.category-review' AND target_id=l.id::text AND after_data->>'category'=l.category AND after_data->>'subcategory'=COALESCE(l.subcategory,'') AND COALESCE(after_data->>'thirdSlug','')=COALESCE(l.subsubcategory, NULLIF(l.specifications,'')::jsonb->>'admin_third_level_slug','') ORDER BY created_at DESC LIMIT 1) a ON TRUE WHERE l.id IN (${sql.join(ids.map((id:number)=>sql`${id}`),sql`,`)})`);
  const tax=await db.execute(sql`SELECT category,subcategory,slug,name,visible FROM third_level_categories`);
  const all=tax.rows as any[];
  const results=(rows.rows as any[]).map(l=>{
   const title=String(l.title||"").toLowerCase();
-  const spec=typeof l.specifications==="string"?JSON.parse(l.specifications||"{}"):(l.specifications||{});
+  let spec:any={};try{spec=typeof l.specifications==="string"?JSON.parse(l.specifications||"{}"):(l.specifications||{});}catch{}
   const approved=Boolean(spec.admin_category_review_approved_at||l.historical_approved_at);
   const words=new Set(title.match(/[a-z0-9]+/g)||[]);
   // Conservative product-type cues: only override an existing parent when a clear product signal is present.
@@ -1601,8 +1598,62 @@ router.post("/admin/listings/category-review", async (req,res)=>{
   const best=ranked[0];
   return {id:l.id,title:l.title,category:l.category,subcategory:l.subcategory,currentThird:String(l.subsubcategory||spec.admin_third_level_slug||""),approved,approvedAt:spec.admin_category_review_approved_at||l.historical_approved_at||null,suggestedCategory:proposedCat,suggestedSubcategory:proposedSub,suggestedThird:approved?String(l.subsubcategory||spec.admin_third_level_slug||""):(best?.slug||""),thirdName:best?.name||"",thirdVisible:best?.visible??false,confidence:best?.score>=0.8?"high":best?.score>=0.5?"medium":"low",needsReview:!approved};
  });
- res.json({results});
- }catch(err){logger.error({err},"Listing taxonomy review failed");res.status(503).json({error:"Category review unavailable"});}
+
+ return results;
+}
+router.post("/admin/listings/category-review",async(req,res)=>{
+ const ids=req.body?.ids;
+ if(!Array.isArray(ids)||ids.length<1||ids.length>50||!ids.every((x:unknown)=>Number.isSafeInteger(x)&&Number(x)>0)){res.status(400).json({error:"Select 1–50 listings"});return;}
+ try{res.json({results:await classifyCategoryBatch(ids)});}catch(err){logger.error({err},"Listing taxonomy review failed");res.status(503).json({error:"Category review unavailable"});}
+});
+async function ensureCategoryAuditJobs(){
+ await db.execute(sql`CREATE TABLE IF NOT EXISTS category_audit_jobs(id uuid PRIMARY KEY,status text NOT NULL DEFAULT 'queued',listing_ids jsonb NOT NULL,processed integer NOT NULL DEFAULT 0,results jsonb NOT NULL DEFAULT '[]'::jsonb,error text,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now())`);
+}
+let categoryAuditRunning=false;
+async function processCategoryAuditJobs(){
+ if(categoryAuditRunning)return;
+ categoryAuditRunning=true;
+ try{
+ await ensureCategoryAuditJobs();
+ for(let n=0;n<10;n++){
+  const worked=await db.transaction(async tx=>{
+   const job=(await tx.execute(sql`SELECT * FROM category_audit_jobs WHERE status IN ('queued','running') ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1`)).rows[0];
+   if(!job)return false;
+   const ids=job.listing_ids as number[], offset=Number(job.processed);
+   const batch=ids.slice(offset,offset+50);
+   try{
+    const results=batch.length?await classifyCategoryBatch(batch):[];
+    const next=offset+batch.length;
+    await tx.execute(sql`UPDATE category_audit_jobs SET processed=${next},results=results || ${JSON.stringify(results)}::jsonb,status=${next>=ids.length?"completed":"running"},updated_at=now() WHERE id=${String(job.id)}::uuid`);
+   }catch(err){await tx.execute(sql`UPDATE category_audit_jobs SET status='failed',error=${err instanceof Error?err.message:"Scan failed"},updated_at=now() WHERE id=${String(job.id)}::uuid`);}
+   return true;
+  });
+  if(!worked)break;
+ }
+ }catch(err){logger.error({err},"Category audit worker failed");}finally{categoryAuditRunning=false;}
+}
+const categoryAuditTimer=setInterval(()=>void processCategoryAuditJobs(),5000);
+categoryAuditTimer.unref();
+router.post("/admin/listings/category-audits",requireAdmin,async(req,res)=>{
+ try{
+ await ensureCategoryAuditJobs();
+ const ids=req.body?.ids;
+ if(!Array.isArray(ids)||!ids.length||ids.length>100000||!ids.every((x:unknown)=>Number.isSafeInteger(x)&&Number(x)>0)){res.status(400).json({error:"Select 1–100000 listings"});return;}
+ const id=randomUUID(),unique=[...new Set<number>(ids)];
+ await db.execute(sql`INSERT INTO category_audit_jobs(id,listing_ids) VALUES(${id}::uuid,${JSON.stringify(unique)}::jsonb)`);
+ res.json({id,total:unique.length});void processCategoryAuditJobs();
+ }catch(err){logger.error({err},"Create category audit failed");res.status(500).json({error:"Could not create audit"});}
+});
+router.get("/admin/listings/category-audits",requireAdmin,async(req,res)=>{
+ try{await ensureCategoryAuditJobs();const jobs=await db.execute(sql`SELECT id,status,processed,jsonb_array_length(listing_ids) AS total,created_at,updated_at,error FROM category_audit_jobs ORDER BY created_at DESC LIMIT 30`);res.json({jobs:jobs.rows});}catch{res.status(500).json({error:"Could not load audits"});}
+});
+router.get("/admin/listings/category-audits/:id",requireAdmin,async(req,res)=>{
+ try{await ensureCategoryAuditJobs();const job=(await db.execute(sql`SELECT id,status,processed,jsonb_array_length(listing_ids) AS total,results,error FROM category_audit_jobs WHERE id=${req.params.id}::uuid`)).rows[0];if(!job){res.status(404).json({error:"Audit not found"});return;}res.json(job);}catch{res.status(400).json({error:"Could not load audit"});}
+});
+router.patch("/admin/listings/category-audits/:id",requireAdmin,async(req,res)=>{
+ const action=req.body?.action;
+ if(!["pause","resume","cancel"].includes(action)){res.status(400).json({error:"Invalid action"});return;}
+ try{await ensureCategoryAuditJobs();const from=action==="resume"?["paused","failed"]:["queued","running","paused"];const status=action==="resume"?"queued":action==="pause"?"paused":"cancelled";const rows=await db.execute(sql`UPDATE category_audit_jobs SET status=${status},error=NULL,updated_at=now() WHERE id=${req.params.id}::uuid AND status IN (${sql.join(from.map(x=>sql`${x}`),sql`,`)}) RETURNING id`);if(!rows.rows.length){res.status(409).json({error:"Audit cannot change state"});return;}res.json({status});}catch{res.status(400).json({error:"Could not update audit"});}
 });
 router.patch("/admin/listings/:id/category-review",async(req,res)=>{
  const id=Number(req.params.id),{category,subcategory,thirdSlug,enableThird}=req.body||{};
