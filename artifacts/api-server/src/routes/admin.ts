@@ -1819,6 +1819,19 @@ function supplierVideoUrl(value: unknown): string | undefined {
   } catch {}
 }
 
+// Paginated catalogue enumeration for explicit administrator media refresh.
+router.get("/admin/aliexpress-media-listings", async (req,res) => {
+  const after = Number(req.query.after ?? 0);
+  if (!Number.isSafeInteger(after) || after < 0) {res.status(400).json({error:"Invalid cursor"});return;}
+  try {
+    const rows = await db.execute(sql`SELECT id FROM listings WHERE id > ${after}
+      AND (LOWER(COALESCE(specifications::text,'')) LIKE '%"aliexpress"%'
+        OR public_id LIKE 'BZK-ALI-%') ORDER BY id LIMIT 100`);
+    const ids = rows.rows.map(row=>Number(row.id));
+    res.json({ids,next:ids.length===100?ids[ids.length-1]:null});
+  } catch(error) {logger.warn({error},"AliExpress media catalogue lookup failed");res.status(500).json({error:"Catalogue lookup failed"});}
+});
+
 // Media-only refresh: never update prices, inventory or seller details.
 router.post("/admin/aliexpress-sync-media", async (req, res) => {
   const ids = req.body?.listingIds;
