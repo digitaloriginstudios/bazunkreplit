@@ -47,7 +47,7 @@ export function SwapListingForm({ embedded = false }: { embedded?: boolean }) {
           headers,
           body: JSON.stringify({ ...draft, valueMinor: Math.round(Number(draft.value) * 100) }),
         });
-        const data = await response.json();
+        const data = await response.json() as { id?: string; error?: string };
         if (!response.ok) throw new Error(data.error || "Unable to create listing");
         if (typeof data.id !== "string") throw new Error("Check My swaps before trying again.");
         listingId = data.id;
