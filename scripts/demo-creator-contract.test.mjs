@@ -18,7 +18,7 @@ test('demo creator is routed behind admin authentication',()=>{
 });
 test('demo visibility defaults off and public listing query respects approval',()=>{
  assert.match(demo,/demo_creator_settings \(key TEXT PRIMARY KEY, enabled BOOLEAN NOT NULL DEFAULT FALSE\)/);
- assert.match(listings,/import \{ categoryVisibility \} from/);
+ assert.match(listings,/import \{[^}]*\bcategoryVisibility\b[^}]*\} from "\.\.\/lib\/listingVisibility\.js"/);
  assert.match(visibility,/NOT d\.enabled/);
  assert.match(visibility,/key='master'/);
  assert.match(visibility,/key='listings'/);
