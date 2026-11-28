@@ -1,3 +1,4 @@
+import { featureEnabled } from "../lib/featureFlags.js";
 import { randomUUID } from "node:crypto";
 import { Router, type Response } from "express";
 import { db } from "@workspace/db";
@@ -9,6 +10,7 @@ import {
   productIds,
   socialActivityId,
   socialProduct,
+  socialSponsor,
   socialText,
   socialUnblocked,
 } from "../lib/socialCatalog.js";
@@ -27,14 +29,14 @@ const author = sql`s.author_id`;
 const paidOrder = sql`o.status = 'delivered' AND o.delivered_at IS NOT NULL
   AND left(o.stripe_session_id, 8) = 'cs_live_' AND coalesce(o.refunded_total,0) = 0
   AND o.seller_email IS NOT NULL AND lower(o.buyer_email) <> lower(o.seller_email)`;
-const verified = sql`(s.kind = 'short' OR EXISTS (
+export const verifiedShort = sql`(s.kind = 'short' OR EXISTS (
   SELECT 1 FROM orders o JOIN users buyer ON buyer.id = s.author_id
   WHERE o.id = s.order_id AND lower(o.buyer_email) = lower(buyer.email) AND ${paidOrder}
 ))`;
 
 function visible(viewer: string) {
   return sql`FROM social_shorts s JOIN users owner ON owner.id = s.author_id
-    WHERE s.status = 'published' AND NOT owner.banned AND ${socialUnblocked(viewer, author)} AND ${verified}`;
+    WHERE s.status = 'published' AND NOT owner.banned AND ${socialUnblocked(viewer, author)} AND ${verifiedShort}`;
 }
 
 function providerUnavailable(res: Response) {
@@ -48,6 +50,12 @@ shorts.get("/", async (req, res) => {
   if (!viewer) return;
   const page = req.query.page ?? "0";
   const kind = req.query.kind;
+  const focus = req.query.focus;
+  if (
+    focus !== undefined &&
+    (typeof focus !== "string" || !socialActivityId.test(focus))
+  )
+    return void res.sendStatus(400);
   if (
     typeof page !== "string" ||
     !/^\d{1,4}$/.test(page) ||
@@ -55,14 +63,16 @@ shorts.get("/", async (req, res) => {
   )
     return void res.sendStatus(400);
   const visibility = await categoryVisibility();
+  const sponsored = await featureEnabled("social_placements");
   const { rows } = await db.execute(sql`
-    SELECT s.id, s.caption, s.kind, p.username, p.display_name AS "displayName",
+    SELECT s.id, s.caption, ${socialSponsor(sponsored, "short", sql`s.id`)} AS sponsor, s.kind, p.username, p.display_name AS "displayName",
       ARRAY(SELECT ${socialProduct(visibility)} FROM social_short_products sp
         JOIN listings ON listings.id = sp.listing_id WHERE sp.short_id = s.id ORDER BY sp.listing_id) AS products
     FROM social_shorts s JOIN users owner ON owner.id = s.author_id
     JOIN social_profiles p ON p.user_id = s.author_id
-    WHERE s.status = 'published' AND NOT owner.banned AND ${socialUnblocked(viewer, author)} AND ${verified}
+    WHERE s.status = 'published' AND NOT owner.banned AND ${socialUnblocked(viewer, author)} AND ${verifiedShort}
       ${kind ? sql`AND s.kind = ${kind}` : sql.empty()}
+      ${focus ? sql`AND s.id = ${focus}` : sql.empty()}
     ORDER BY s.published_at DESC, s.id DESC LIMIT 13 OFFSET ${Number(page) * 12}
   `);
   res.json({
@@ -307,7 +317,7 @@ admin.get("/", async (_req, res) => {
     SELECT s.id, s.caption, s.kind, s.status, p.username, s.created_at AS "createdAt",
       ARRAY(SELECT r.reason FROM social_short_reports r WHERE r.short_id = s.id AND r.resolved_at IS NULL
         ORDER BY r.created_at LIMIT 50) AS reports,
-      ${verified} AS verified
+      ${verifiedShort} AS verified
     FROM social_shorts s JOIN social_profiles p ON p.user_id = s.author_id
     WHERE s.status = 'review' OR EXISTS (SELECT 1 FROM social_short_reports r WHERE r.short_id = s.id AND r.resolved_at IS NULL)
     ORDER BY s.created_at LIMIT 80`);
@@ -345,7 +355,7 @@ admin.patch("/:id", async (req, res) => {
       status: string;
       approved: boolean;
     }>(sql`
-      SELECT s.status, s.stream_uid IS NOT NULL AND s.captions_ready AND NOT owner.banned AND ${verified} AS approved
+      SELECT s.status, s.stream_uid IS NOT NULL AND s.captions_ready AND NOT owner.banned AND ${verifiedShort} AS approved
       FROM social_shorts s JOIN users owner ON owner.id = s.author_id WHERE s.id = ${id} FOR UPDATE OF s`);
     const video = lock.rows[0];
     if (!video) return null;

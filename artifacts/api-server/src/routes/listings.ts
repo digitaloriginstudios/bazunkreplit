@@ -1,4 +1,4 @@
-import { categoryVisibility } from "../lib/listingVisibility.js";
+import { categoryVisibility, listingRegionFilter } from "../lib/listingVisibility.js";
 import { listingShipping as globalListingShipping, shippingCountry as globalShippingCountry, shipsToCountry as globalShipsToCountry } from "../lib/listingShipping.js";
 import { featureEnabled } from "../lib/featureFlags.js";
 import { recordCreditEconomy } from "../lib/creditEconomy.js";
@@ -35,20 +35,6 @@ const latestPriceDrop=sql`(SELECT h.old_price FROM listing_price_history h WHERE
 const listingMediaUrl=(value:unknown):unknown=>typeof value==="string"&&value.startsWith("/api/listing-media/")?"https://bazunk-api-ifqs.onrender.com"+value:value;
 const normalizeListingMedia=<T extends Record<string,any>>(item:T):T=>({...item,image:listingMediaUrl(item.image)});
 
-
-// Region is a browsing scope, not an account or permissions boundary.
-function listingRegionFilter(region: unknown) {
-  if (region !== "uk" && region !== "us") return undefined;
-  // Explicit region wins. Older UK/US supplier imports have a verifiable
-  // source-market identifier; store currency alone is never location evidence.
-  // Unassigned Shopify and manually created listings remain out of regional
-  // discovery until the seller/admin confirms their shipping market.
-  const specs = sql`CASE WHEN COALESCE(${listingsTable.specifications}, '') ~ '^\\s*\\{' THEN ${listingsTable.specifications}::jsonb ELSE '{}'::jsonb END`;
-  const source = sql`(${specs}->>'source')`;
-  const explicit = sql`(${specs}->>'marketplace_region')`;
-  const origins = region === "uk" ? ["eBay UK", "Amazon UK"] : ["eBay US", "Amazon US"];
-  return sql`(${explicit} = ${region} OR (${explicit} IS NULL AND ${source} IN (${sql.join(origins.map(v => sql`${v}`), sql`, `)})))`;
-}
 
 function makePublicId(id: number): string {
   return `BZL-${id}`;

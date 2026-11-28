@@ -1,3 +1,4 @@
+import { featureEnabled } from "../lib/featureFlags.js";
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { db } from "@workspace/db";
@@ -9,6 +10,7 @@ import {
   productIds,
   socialActivityId,
   socialProduct,
+  socialSponsor,
   socialText,
   socialUnblocked,
 } from "../lib/socialCatalog.js";
@@ -22,7 +24,12 @@ const author = sql`s.seller_id`;
 stories.get("/", async (req, res) => {
   const viewer = await profileOwner(req, res);
   if (!viewer) return;
-  const { seller, mine } = req.query;
+  const { seller, mine, focus } = req.query;
+  if (
+    focus !== undefined &&
+    (typeof focus !== "string" || !socialActivityId.test(focus))
+  )
+    return void res.sendStatus(400);
   if (
     seller !== undefined &&
     (typeof seller !== "string" || seller.length > 320 || !seller.includes("@"))
@@ -35,8 +42,9 @@ stories.get("/", async (req, res) => {
     typeof seller === "string"
       ? sql`AND lower(owner.email) = ${seller.trim().toLowerCase()}`
       : sql.empty();
+  const sponsored = await featureEnabled("social_placements");
   const { rows } = await db.execute(sql`
-    SELECT s.id, s.caption, s.media_type AS "mediaType", s.media_url AS "mediaUrl", s.promo_url AS "promoUrl",
+    SELECT s.id, s.caption, ${socialSponsor(sponsored, "story", sql`s.id`)} AS sponsor, s.media_type AS "mediaType", s.media_url AS "mediaUrl", s.promo_url AS "promoUrl",
       s.expires_at AS "expiresAt", s.expires_at <= now() AS expired, p.username, p.display_name AS "displayName",
       ARRAY(SELECT ${socialProduct(visibility)} FROM social_story_products sp
         JOIN listings ON listings.id = sp.listing_id WHERE sp.story_id = s.id ORDER BY sp.listing_id) AS products,
@@ -51,6 +59,7 @@ stories.get("/", async (req, res) => {
     WHERE NOT owner.banned AND ${socialUnblocked(viewer, author)}
       AND ${owned ? sql`s.seller_id = ${viewer}` : sql`s.expires_at > now()`}
       ${sellerFilter}
+      ${focus ? sql`AND s.id = ${focus}` : sql.empty()}
     ORDER BY s.created_at DESC, s.id LIMIT 40
   `);
   res.json({ stories: rows });
@@ -85,12 +94,10 @@ stories.post("/", async (req, res) => {
     (req.body?.promoUrl && !promo) ||
     (kind === "video" && !embed && !/\.(mp4|webm)$/i.test(url.pathname))
   ) {
-    return void res
-      .status(400)
-      .json({
-        error:
-          "Use an HTTPS image, MP4, WebM, YouTube or Vimeo link and up to four of your products.",
-      });
+    return void res.status(400).json({
+      error:
+        "Use an HTTPS image, MP4, WebM, YouTube or Vimeo link and up to four of your products.",
+    });
   }
   const visibility = await categoryVisibility();
   const id = randomUUID();
@@ -133,12 +140,10 @@ stories.post("/", async (req, res) => {
       .status(403)
       .json({ error: "Set up your social profile first." });
   if (result === "products")
-    return void res
-      .status(403)
-      .json({
-        error:
-          "Stories require an active seller listing. Tags must be your active products.",
-      });
+    return void res.status(403).json({
+      error:
+        "Stories require an active seller listing. Tags must be your active products.",
+    });
   if (result === "limit")
     return void res
       .status(409)

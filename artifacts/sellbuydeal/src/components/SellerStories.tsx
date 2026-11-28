@@ -12,6 +12,7 @@ import {
 } from "@/lib/socialActivity";
 
 type Story = {
+  sponsor?: string | null;
   id: string;
   caption: string;
   mediaType: "image" | "video" | "embed";
@@ -149,7 +150,15 @@ function StoryComposer({
   );
 }
 
-function StoryPanel({ seller, manage }: { seller?: string; manage: boolean }) {
+function StoryPanel({
+  seller,
+  manage,
+  focus,
+}: {
+  seller?: string;
+  manage: boolean;
+  focus?: string;
+}) {
   const request = useSocialActivity();
   const [stories, setStories] = useState<Story[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
@@ -164,6 +173,7 @@ function StoryPanel({ seller, manage }: { seller?: string; manage: boolean }) {
       const query = new URLSearchParams();
       if (seller && !analytics) query.set("seller", seller);
       if (analytics) query.set("mine", "1");
+      else if (focus) query.set("focus", focus);
       const data = await request<{ stories: Story[] }>(`stories?${query}`, {
         signal,
       });
@@ -172,13 +182,13 @@ function StoryPanel({ seller, manage }: { seller?: string; manage: boolean }) {
         setStories(data.stories);
       }
     },
-    [seller, analytics, request],
+    [seller, analytics, request, focus],
   );
 
   useEffect(() => {
     const controller = new AbortController();
     setStories([]);
-    setSelected(null);
+    setSelected(analytics ? null : (focus ?? null));
     setError("");
     void refresh(controller.signal).catch((err) => {
       if (!controller.signal.aborted) setError(activityError(err));
@@ -192,7 +202,7 @@ function StoryPanel({ seller, manage }: { seller?: string; manage: boolean }) {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [refresh]);
+  }, [refresh, analytics, focus]);
 
   useEffect(() => {
     if (!manage) return;
@@ -322,6 +332,11 @@ function StoryPanel({ seller, manage }: { seller?: string; manage: boolean }) {
         <article className="space-y-3 rounded-xl border p-3">
           <header className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold">@{current.username}</p>
+            {current.sponsor && (
+              <p className="text-sm font-semibold">
+                Sponsored by {current.sponsor}
+              </p>
+            )}
             <button
               className={activityButton}
               onClick={() => setSelected(null)}
@@ -446,9 +461,11 @@ function StoryPanel({ seller, manage }: { seller?: string; manage: boolean }) {
 export function SellerStories({
   seller,
   manage = false,
+  focus,
 }: {
   seller?: string;
   manage?: boolean;
+  focus?: string;
 }) {
   const { isSignedIn, userId } = useAuth();
   const social = useFeature("social");
@@ -459,6 +476,7 @@ export function SellerStories({
       key={`${userId}:${seller ?? "all"}`}
       seller={seller}
       manage={manage}
+      focus={focus}
     />
   );
 }
