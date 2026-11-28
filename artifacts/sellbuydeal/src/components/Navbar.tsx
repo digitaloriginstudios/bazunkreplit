@@ -168,7 +168,6 @@ export function Navbar({ watchlistCount }: { watchlistCount?: number } = {}) {
   const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [marketRegion, changeMarketRegion] = useMarketplaceRegion();
-  const [sellOpen, setSellOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [protectionOpen,setProtectionOpen] = useState(false);
   const [rewardsPopover, setRewardsPopover] = useState(false);
@@ -186,7 +185,6 @@ export function Navbar({ watchlistCount }: { watchlistCount?: number } = {}) {
     return()=>{window.removeEventListener("resize",reposition);window.removeEventListener("scroll",reposition,true);};
   },[searchOpen]);
   const userMenuRef = useRef<HTMLDivElement>(null);
-  const sellRef = useRef<HTMLDivElement>(null);
   const moreRef = useRef<HTMLDivElement>(null);
   const rewardsRef = useRef<HTMLDivElement>(null);
 
@@ -207,7 +205,6 @@ export function Navbar({ watchlistCount }: { watchlistCount?: number } = {}) {
       if ((e.target as Element)?.closest?.(".bz-mega-panel")) return;
       if (searchRef.current && !searchRef.current.contains(e.target as Node) && !(e.target as Element)?.closest?.(".bz-search-popover")) setSearchOpen(false);
       if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setUserMenuOpen(false);
-      if (sellRef.current && !sellRef.current.contains(e.target as Node)) setSellOpen(false);
       if (moreRef.current && !moreRef.current.contains(e.target as Node)) setMoreOpen(false);
       if (rewardsRef.current && !rewardsRef.current.contains(e.target as Node)) setRewardsPopover(false);
     }
@@ -325,10 +322,10 @@ export function Navbar({ watchlistCount }: { watchlistCount?: number } = {}) {
           </div>
           <div className="bz-mockup-top-links">
             <Link href="/support">Help</Link>
-            <button type="button" onClick={() => {setMoreOpen(false);setSellOpen(false);setProtectionOpen(true)}} aria-haspopup="dialog" aria-expanded={protectionOpen}><ShieldCheck size={17}/> Buyer Protection</button>
+            <button type="button" onClick={() => {setMoreOpen(false);setProtectionOpen(true)}} aria-haspopup="dialog" aria-expanded={protectionOpen}><ShieldCheck size={17}/> Buyer Protection</button>
             <Link href="/dashboard?section=watchlist"><Heart size={18} className="text-sky-400"/> Watchlist {watchlistCount !== undefined && watchlistCount > 0 && <span key={watchlistCount} className="bz-browse-wishlist-count">{watchlistCount}</span>}</Link>
-            <button type="button" onClick={() => {setSellOpen(false);setMoreOpen(v=>!v)}} aria-haspopup="dialog" aria-expanded={moreOpen} data-testid="button-more-nav" className="bz-mockup-top-more"><Grid3X3 size={17}/> More <ChevronDown size={14} className={moreOpen?"rotate-180":""}/></button>
-             <button type="button" onClick={() => {setMoreOpen(false);setSellOpen(true)}} className="bz-mockup-top-sell"><Store size={17}/> Sell on Bazunk</button>
+            <button type="button" onClick={() => setMoreOpen(v=>!v)} aria-haspopup="dialog" aria-expanded={moreOpen} data-testid="button-more-nav" className="bz-mockup-top-more"><Grid3X3 size={17}/> More <ChevronDown size={14} className={moreOpen?"rotate-180":""}/></button>
+             <Link href="/sell" className="bz-mockup-top-sell inline-flex items-center gap-[7px]"><Store size={17}/> Sell on Bazunk</Link>
           </div>
         </div>
         <div className="mx-auto w-full max-w-[1920px] px-4 lg:px-7 h-16 md:h-20 flex items-center gap-3 lg:gap-4 bz-mockup-mainbar">
@@ -620,7 +617,7 @@ export function Navbar({ watchlistCount }: { watchlistCount?: number } = {}) {
       </nav>
 
       <BuyerProtectionModal open={protectionOpen} onClose={() => setProtectionOpen(false)} />
-      <HeaderMegaModals kind={sellOpen ? "sell" : moreOpen ? "more" : null} onClose={() => {setSellOpen(false);setMoreOpen(false)}} />
+      <HeaderMegaModals kind={moreOpen ? "more" : null} onClose={() => setMoreOpen(false)} />
 
       {/* Render the mobile drawer at document root so page stacking contexts cannot cover it. */}
       {typeof document !== "undefined" && createPortal(

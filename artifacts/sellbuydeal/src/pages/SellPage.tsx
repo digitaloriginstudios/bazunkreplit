@@ -1,9 +1,9 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { useRawSettings } from "@/context/SiteSettingsContext";
 import { featureForHref, isFeatureEnabled } from "@/components/FeatureGate";
 import { motion } from "framer-motion";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import {
   ArrowLeftRight, Camera,
   ShoppingCart,
@@ -24,7 +24,7 @@ import {
   Banknote,
   Percent,
   Info,
-  Zap, Video, X, Maximize2, Package, Users, Truck, Star, Sparkles, Timer, BadgePercent, ClipboardList, Play, Gift, ShoppingBag,
+  Zap, Video, X, Maximize2, Minimize2, Package, Users, Truck, Star, Sparkles, Timer, BadgePercent, ClipboardList, Play, Gift, ShoppingBag,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
@@ -247,13 +247,15 @@ const NativeDirectSeller = lazy(() => import("@/pages/DirectSalePage").then(m =>
 const NativeAuctionSeller = lazy(() => import("@/pages/CreateAuctionPage").then(m => ({default:m.CreateAuctionPage})));
 const NativeClassifiedSeller = lazy(() => import("@/pages/ClassifiedsPage").then(m => ({default:m.CreateClassifiedPage})));
 function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number];onClose:()=>void}) {
+ const [expanded, setExpanded] = useState(false);
+ const hasSeparateEditor = option.id === "swap" || option.id === "flash" || option.id === "live";
  useEffect(()=>{const previous=document.body.style.overflow;document.body.style.overflow="hidden";const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape")onClose()};window.addEventListener("keydown",onKey);return ()=>{document.body.style.overflow=previous;window.removeEventListener("keydown",onKey)}},[onClose]);
 
  return createPortal(<div className="fixed inset-0 z-[9999] flex items-stretch justify-center bg-[#082653]/45 p-0 backdrop-blur-[2px] lg:items-center lg:justify-end lg:bg-[#082653]/20 lg:p-5" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
-  <section role="dialog" aria-modal="true" aria-label={option.title+" listing wizard"} className="flex h-[100dvh] w-full flex-col overflow-hidden bg-background shadow-[0_18px_65px_rgba(4,36,88,.35)] lg:h-[min(91dvh,900px)] lg:w-[min(47vw,760px)] lg:rounded-[24px] lg:border-2 lg:border-[#9bbff1]">
+  <section role="dialog" aria-modal="true" aria-label={option.title+" listing wizard"} className={`flex h-[100dvh] w-full flex-col overflow-hidden bg-background shadow-[0_18px_65px_rgba(4,36,88,.35)] lg:h-[min(91dvh,900px)] lg:rounded-[24px] lg:border-2 lg:border-[#9bbff1] ${expanded ? "lg:w-full" : "lg:w-[min(47vw,760px)]"}`}>
    <header className="flex min-h-16 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 py-3 text-foreground sm:px-5">
     <div className="flex min-w-0 items-center gap-3"><span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${option.colors} text-white`}><option.icon className="h-6 w-6"/></span><div className="min-w-0"><h2 className="truncate text-base font-black sm:text-xl">{option.title}</h2><p className="hidden text-xs font-medium text-muted-foreground sm:block">Create your listing with Bazunk Seller Studio</p></div></div>
-    <div className="flex shrink-0 gap-1 sm:gap-2"><a href={option.href} target="_blank" rel="noopener noreferrer" aria-label="Open full editor in new tab" className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-800 hover:bg-blue-100"><Maximize2 className="h-5 w-5"/></a><button type="button" onClick={onClose} aria-label="Close listing window" className="flex h-10 w-10 items-center justify-center rounded-full border border-blue-200 bg-white text-[#123c66] hover:bg-orange-50"><X className="h-5 w-5"/></button></div>
+    <div className="flex shrink-0 gap-1 sm:gap-2">{hasSeparateEditor ? <a href={option.href} target="_blank" rel="noopener noreferrer" aria-label="Open full editor in new tab" className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-800 hover:bg-blue-100"><Maximize2 className="h-5 w-5"/></a> : <button type="button" onClick={() => setExpanded(current => !current)} aria-label={expanded ? "Restore listing panel" : "Expand listing panel"} className="hidden h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-800 hover:bg-blue-100 lg:flex">{expanded ? <Minimize2 className="h-5 w-5"/> : <Maximize2 className="h-5 w-5"/>}</button>}<button type="button" onClick={onClose} aria-label="Close listing window" className="flex h-10 w-10 items-center justify-center rounded-full border border-blue-200 bg-white text-[#123c66] hover:bg-orange-50"><X className="h-5 w-5"/></button></div>
    </header>
    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-background" data-testid="sell-native-wizard">
     <Suspense fallback={<div className="p-8 text-center font-bold text-[#123c66]">Loading your listing form…</div>}>
@@ -274,9 +276,17 @@ function SellHubModal({option,onClose}:{option:(typeof SELL_HUB_OPTIONS)[number]
 }
 
 export function SellPage() {
-  const [selectedSellOption,setSelectedSellOption] = useState<(typeof SELL_HUB_OPTIONS)[number] | null>(null);
+  const [, navigate] = useLocation();
+  const search = useSearch();
   const { formatPrice, currency } = useCurrency();
   const rawSettings = useRawSettings();
+  const availableOptions = SELL_HUB_OPTIONS.filter(option => {
+    const feature = featureForHref(option.href);
+    return !feature || isFeatureEnabled(rawSettings, feature);
+  });
+  const createMode = new URLSearchParams(search).get("create");
+  const selectedSellOption = availableOptions.find(option => option.id === createMode);
+  const closeListing = useCallback(() => navigate("/sell", { replace: true }), [navigate]);
   const mktRate = useMktRate(rawSettings);
   const mktRatePct = Math.round(mktRate * 100);
   const FEE_ROWS = buildFeeRows(mktRatePct);
@@ -300,7 +310,7 @@ export function SellPage() {
 
             </div>
             <div className="relative flex flex-wrap justify-center gap-4 sm:gap-6">
-              {SELL_HUB_OPTIONS.filter(option => !featureForHref(option.href) || isFeatureEnabled(rawSettings,featureForHref(option.href)!)).map(option => {const Icon=option.icon;return <button type="button" key={option.id} onClick={()=>setSelectedSellOption(option)} data-testid={`sell-hub-${option.id}`} style={{background:SELL_PALETTE[option.id].light,borderColor:SELL_PALETTE[option.id].color}} className={`bz-sell-playful-card group relative flex min-w-0 flex-[1_1_210px] max-w-[340px] flex-col items-center overflow-hidden rounded-[32px] border-2 ${option.border} bg-white p-5 text-center shadow-[0_7px_18px_rgba(12,58,116,.14)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_14px_26px_rgba(12,58,116,.2)] focus-visible:outline focus-visible:outline-4 focus-visible:outline-orange-500 sm:p-6`}>
+              {availableOptions.map(option => {const Icon=option.icon;return <button type="button" key={option.id} onClick={()=>navigate(`/sell?create=${option.id}`, { replace: true })} data-testid={`sell-hub-${option.id}`} style={{background:SELL_PALETTE[option.id].light,borderColor:SELL_PALETTE[option.id].color}} className={`bz-sell-playful-card group relative flex min-w-0 flex-[1_1_210px] max-w-[340px] flex-col items-center overflow-hidden rounded-[32px] border-2 ${option.border} bg-white p-5 text-center shadow-[0_7px_18px_rgba(12,58,116,.14)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_14px_26px_rgba(12,58,116,.2)] focus-visible:outline focus-visible:outline-4 focus-visible:outline-orange-500 sm:p-6`}>
                 
                 <SellHubArtwork kind={option.id}/>
                 <h3 className="relative text-xl font-black tracking-tight text-[#092b68] sm:text-[25px]">{option.title}</h3>
@@ -349,7 +359,7 @@ export function SellPage() {
           </section>
         </div>
       </main>
-      {selectedSellOption && <SellHubModal option={selectedSellOption} onClose={()=>setSelectedSellOption(null)}/>}
+      {selectedSellOption && <SellHubModal option={selectedSellOption} key={selectedSellOption.id} onClose={closeListing}/>}
       <Footer />
     </div>
   );

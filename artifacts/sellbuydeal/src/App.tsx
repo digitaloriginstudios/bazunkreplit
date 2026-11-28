@@ -95,7 +95,6 @@ import { RewardsTeaser } from "@/components/RewardsTeaser";
 import { AdSlot } from "@/components/AdSlot";
 import { CategoriesPage } from "@/pages/CategoriesPage";
 const SellPage = React.lazy(() => import("@/pages/SellPage").then(module => ({ default: module.SellPage })));
-const DirectSalePage = React.lazy(() => import("@/pages/DirectSalePage").then(module => ({ default: module.DirectSalePage })));
 const SnapSellPage = React.lazy(() => import("@/pages/SnapSellPage").then(module => ({ default: module.SnapSellPage })));
 const DealPilotPage = React.lazy(() => import("@/pages/DealPilotPage").then(module => ({ default: module.DealPilotPage })));
 const FindItPage = React.lazy(() => import("@/pages/FindItPage").then(module => ({ default: module.FindItPage })));
@@ -118,7 +117,6 @@ const MobileNotificationsPage = React.lazy(() => import("@/pages/MobileNotificat
 import { MobileShopNav } from "@/components/MobileShopNav";
 const BundlePage = React.lazy(() => import("@/pages/BundlePage").then(module => ({ default: module.BundlePage })));
 const ClassifiedsPage = React.lazy(() => import("@/pages/ClassifiedsPage").then(module => ({ default: module.ClassifiedsPage })));
-const CreateClassifiedPage = React.lazy(() => import("@/pages/ClassifiedsPage").then(module => ({ default: module.CreateClassifiedPage })));
 const MessagesPage = React.lazy(() => import("@/pages/MessagesPage").then(module => ({ default: module.MessagesPage })));
 const SellerProfilePage = React.lazy(() => import("@/pages/SellerProfilePage").then(module => ({ default: module.SellerProfilePage })));
 const CreditsPage = React.lazy(() => import("@/pages/CreditsPage").then(module => ({ default: module.CreditsPage })));
@@ -184,7 +182,6 @@ const AdminReturnsPage = React.lazy(() => import("@/pages/admin/AdminReturnsPage
 const AdminAuctionsPage = React.lazy(() => import("@/pages/admin/AdminAuctionsPage").then(module => ({ default: module.AdminAuctionsPage })));
 const AuctionsPage = React.lazy(() => import("@/pages/AuctionsPage").then(module => ({ default: module.AuctionsPage })));
 const AuctionDetailPage = React.lazy(() => import("@/pages/AuctionDetailPage").then(module => ({ default: module.AuctionDetailPage })));
-const CreateAuctionPage = React.lazy(() => import("@/pages/CreateAuctionPage").then(module => ({ default: module.CreateAuctionPage })));
 const FlashSalesPage = React.lazy(() => import("@/pages/FlashSalesPage").then(module => ({ default: module.FlashSalesPage })));
 const FlashSaleDetailPage = React.lazy(() => import("@/pages/FlashSaleDetailPage").then(module => ({ default: module.FlashSaleDetailPage })));
 const CreateFlashSalePage = React.lazy(() => import("@/pages/CreateFlashSalePage").then(module => ({ default: module.CreateFlashSalePage })));
@@ -471,8 +468,8 @@ function Router() {
       <Route path="/dashboard/swaps">{() => <FeatureGate feature="swaps" name="Bazunk Swap"><SwapPage /></FeatureGate>}</Route>
       <Route path="/sell/import" component={BulkImportPage} />
       <Route path="/sell/snap">{() => <FeatureGate feature="snap_sell" name="Snap & Sell"><SnapSellPage /></FeatureGate>}</Route>
-      <Route path="/sell/direct">{() => <FeatureGate feature="quick_sell" name="Direct Sale"><DirectSalePage /></FeatureGate>}</Route>
-      <Route path="/sell/quick">{() => <FeatureGate feature="quick_sell" name="Quick Sale"><DirectSalePage /></FeatureGate>}</Route>
+      <Route path="/sell/direct"><Redirect to="/sell?create=direct" replace /></Route>
+      <Route path="/sell/quick"><Redirect to="/sell?create=quick" replace /></Route>
       <Route path="/trust-proof">{() => <FeatureGate feature="trust_proof" name="TrustProof"><TrustProofPage /></FeatureGate>}</Route>
       <Route path="/deal-pilot">{() => <FeatureGate feature="deal_pilot" name="DealPilot"><DealPilotPage /></FeatureGate>}</Route>
       <Route path="/find-it">{() => <FeatureGate feature="find_it" name="Find It"><FindItPage /></FeatureGate>}</Route>
@@ -491,7 +488,7 @@ function Router() {
       <Route path="/checkout" component={CheckoutPage} />
       <Route path="/notifications" component={MobileNotificationsPage} />
       <Route path="/bundle">{() => <FeatureGate feature="bundles" name="Bundles"><BundlePage /></FeatureGate>}</Route>
-      <Route path="/classifieds/post">{() => <FeatureGate feature="classifieds" name="Classifieds"><CreateClassifiedPage /></FeatureGate>}</Route>
+      <Route path="/classifieds/post"><Redirect to="/sell?create=classified" replace /></Route>
       <Route path="/classifieds">{() => <FeatureGate feature="classifieds" name="Classifieds"><ClassifiedsPage /></FeatureGate>}</Route>
       <Route path="/messages">{() => <FeatureGate feature="messaging" name="Messaging"><MessagesPage /></FeatureGate>}</Route>
       <Route path="/seller/:id" component={SellerProfilePage} />
@@ -560,7 +557,7 @@ function Router() {
       <Route path="/admin/settings"><AdminSettingsPage /></Route>
       <Route path="/admin/advertising"><AdminAdvertisingPage /></Route>
       <Route path="/admin/emails" component={AdminEmailsPage} />
-      <Route path="/auctions/create">{() => <FeatureGate feature="auctions" name="Auctions"><CreateAuctionPage /></FeatureGate>}</Route>
+      <Route path="/auctions/create"><Redirect to="/sell?create=auction" replace /></Route>
       <Route path="/auctions/:id">{() => <FeatureGate feature="auctions" name="Auctions"><AuctionDetailPage /></FeatureGate>}</Route>
       <Route path="/auctions">{() => <FeatureGate feature="auctions" name="Auctions"><AuctionsPage /></FeatureGate>}</Route>
       <Route path="/flash-sales/create">{() => <FeatureGate feature="flash_sales" name="Flash Sales"><CreateFlashSalePage /></FeatureGate>}</Route>
