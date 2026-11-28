@@ -1995,7 +1995,10 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
     res.status(409).json({ error: "The listing price changed. Review the updated prices before importing.", usdToGbp: rate });
     return;
   }
-  const images = [...new Set([imageUrl, ...gallery].filter(Boolean))].slice(0, 30);
+  let supplierMedia: Awaited<ReturnType<typeof getDropshipProduct>> | undefined;
+  try { if (await dropshipConfigured()) supplierMedia = await getDropshipProduct(id, destination); }
+  catch (error) { logger.warn({error}, "Optional AliExpress media lookup failed"); }
+  const images = [...new Set([imageUrl, ...gallery, ...(supplierMedia?.images.map(image=>image.url) ?? [])].filter(Boolean))].slice(0, 30);
   try {
     const imported = await db.transaction(async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${sellerEmail}), hashtext(${id}))`);
@@ -2013,7 +2016,7 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
         sku: String(row.sku), label: row.label.trim().slice(0, 140), quantity: row.quantity,
         price: row.sellingPrice, priceGbp: row.priceGbp, image: typeof row.image === "string" && row.image.length <= 4000 && /^https:\/\//i.test(row.image) ? row.image : null,
       }));
-      const specs = JSON.stringify({ admin_gallery_images:images, details, delivery_estimate:deliveryEstimate,
+      const specs = JSON.stringify({ supplier_video_url:supplierMedia?.videoUrl, admin_gallery_images:images, details, delivery_estimate:deliveryEstimate,
         ships_from:origin, ships_to:shipZone, shipping_price:shippingPrice, marketplace_region:market,
         source:"AliExpress", aliexpress_id:id, aliexpress_url:rawUrl, aliexpress_options:options.length ? options : undefined,
         source_price:base.priceUsd, source_currency:"USD", exchange_rate_to_gbp:rate,
