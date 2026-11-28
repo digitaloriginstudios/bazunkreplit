@@ -23,7 +23,6 @@ const FEE_CATEGORIES = [
   { name: "Books", slug: "books", defaultRate: "5" },
   { name: "CDs, Vinyl & Music", slug: "cds-vinyl", defaultRate: "5" },
   { name: "Beauty & Personal Care", slug: "beauty-personal-care", defaultRate: "5" },
-  { name: "Baby Products", slug: "baby-products", defaultRate: "5" },
   { name: "Health & Household", slug: "health-household", defaultRate: "5" },
   { name: "Arts, Crafts & Sewing", slug: "arts-crafts-sewing", defaultRate: "5" },
   { name: "Appliances", slug: "appliances", defaultRate: "5" },
