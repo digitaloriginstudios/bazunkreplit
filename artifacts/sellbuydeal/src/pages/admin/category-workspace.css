@@ -87,3 +87,6 @@
   -webkit-text-fill-color:currentColor!important;
   opacity:1!important;
 }
+
+#bazunk-admin-taxonomy .bz-taxonomy-listings-link{display:inline-flex;align-items:center;min-height:36px;padding:8px 12px;border:1px solid #7eb4ff;border-radius:8px;background:#203653;color:#fff!important;-webkit-text-fill-color:#fff!important;font-size:12px;font-weight:750}
+#bazunk-admin-taxonomy .bz-taxonomy-listings-link:hover{background:#315b90}
