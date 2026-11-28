@@ -110,7 +110,7 @@ function mapApiToProduct(l: Record<string, unknown>): typeof ALL_PRODUCTS[0] & A
     dispatchTime = typeof parsed?.dispatch_time === "string" ? parsed.dispatch_time : undefined;
     deliveryEstimate = typeof parsed?.delivery_estimate === "string" ? parsed.delivery_estimate : undefined;
     parsedSpecs = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.details) ? parsed.details : [];
-    gallery = Array.isArray(parsed?.admin_gallery_images) ? parsed.admin_gallery_images.filter((p: unknown) => typeof p === "string").slice(0, 12) : Array.isArray(parsed?.photos) ? parsed.photos.filter((p: unknown) => typeof p === "string").slice(0, 10) : [];
+    gallery = Array.isArray(parsed?.admin_gallery_images) ? parsed.admin_gallery_images.filter((p: unknown) => typeof p === "string").slice(0, 30) : Array.isArray(parsed?.photos) ? parsed.photos.filter((p: unknown) => typeof p === "string").slice(0, 10) : [];
   } catch { parsedSpecs = []; }
   const tagsRaw = typeof l.tags === "string" && l.tags.trim() ? l.tags.split(",").map((t) => t.trim()).filter(Boolean) : undefined;
   return {
