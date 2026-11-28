@@ -1812,6 +1812,36 @@ router.get("/admin/search-aliexpress", async (req, res) => {
   res.status(503).json({ error: "Bazunk AliExpress Scraper Engine is not configured. RapidAPI has been retired." });
 });
 
+// Media-only refresh: never update prices, inventory or seller details.
+router.post("/admin/aliexpress-sync-media", async (req, res) => {
+  const ids = req.body?.listingIds;
+  if (!Array.isArray(ids) || !ids.length || ids.length > 20 || !ids.every(id => Number.isSafeInteger(id) && id > 0)) {
+    res.status(400).json({error:"Provide 1–20 listing IDs"}); return;
+  }
+  const results = [];
+  for (const id of [...new Set<number>(ids)]) {
+    try {
+      const found = await db.execute(sql`SELECT id,image,specifications FROM listings WHERE id=${id}`);
+      const row = found.rows[0];
+      if (!row) throw new Error("Listing not found");
+      const specs = typeof row.specifications === "string" ? JSON.parse(row.specifications) : row.specifications;
+      if (String(specs?.source).toLowerCase() !== "aliexpress") throw new Error("Not an AliExpress listing");
+      const sourceId = aliExpressProductId(String(specs.aliexpress_id ?? specs.aliexpress_url ?? ""));
+      if (!sourceId) throw new Error("Missing supplier product ID");
+      const p = await getDropshipProduct(sourceId, specs.marketplace_region === "us" ? "US" : "GB");
+      const incoming = p.images.map(image => image.url).filter(url => /^https:\/\//i.test(url));
+      if (!incoming.length) throw new Error("Supplier returned no images");
+      const previous = Array.isArray(specs.admin_gallery_images) ? specs.admin_gallery_images : [];
+      const images = [...new Set([row.image, ...previous, ...incoming].filter((v): v is string => typeof v === "string" && !!v))].slice(0,30);
+      const next = JSON.stringify({...specs,admin_gallery_images:images,media_synced_at:new Date().toISOString()});
+      const updated = await db.execute(sql`UPDATE listings SET specifications=${next},updated_at=NOW() WHERE id=${id} AND specifications IS NOT DISTINCT FROM ${row.specifications as string} RETURNING id`);
+      if (!updated.rows.length) throw new Error("Listing changed during sync; retry");
+      results.push({id,status:"ok",images:images.length});
+    } catch(error) { results.push({id,status:"failed",error:error instanceof Error ? error.message : "Media sync failed"}); }
+  }
+  res.json({results});
+});
+
 // GET /api/admin/aliexpress-product-preview — fetch verified supplier details for the import modal.
 router.get("/admin/aliexpress-product-preview", async (req, res) => {
   if(await dropshipConfigured()){
