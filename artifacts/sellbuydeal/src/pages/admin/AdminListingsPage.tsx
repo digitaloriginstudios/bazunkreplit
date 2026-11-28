@@ -143,8 +143,35 @@ export function AdminListingsPage() {
   const [selectedIds,setSelectedIds]=useState<string[]>([]);
   const [mediaBusy,setMediaBusy]=useState(false);
   const [mediaMessage,setMediaMessage]=useState("");
+  const [catalogueMediaBusy,setCatalogueMediaBusy]=useState(false);
+  async function syncCatalogueMedia() {
+    if(mediaBusy || catalogueMediaBusy || !window.confirm("Refresh media for the entire AliExpress catalogue? This may take some time.")) return;
+    setCatalogueMediaBusy(true);
+    setMediaMessage("Finding AliExpress listings…");
+    let after=0,ok=0,failed=0;
+    try {
+      while(true){
+        const page=await authFetch("/api/admin/aliexpress-media-listings?after="+after);
+        const data=await page.json();
+        if(!page.ok) throw new Error(data.error || "Catalogue lookup failed");
+        const ids:number[]=data.ids ?? [];
+        for(let i=0;i<ids.length;i+=20){
+          const r=await authFetch("/api/admin/aliexpress-sync-media",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({listingIds:ids.slice(i,i+20)})});
+          const result=await r.json();
+          if(!r.ok) throw new Error(result.error || "Media refresh failed");
+          for(const item of result.results ?? []) {if(item.status==="ok") ok++; else failed++;}
+          setMediaMessage("Catalogue media: "+ok+" updated, "+failed+" failed.");
+        }
+        if(data.next===null || !ids.length) break;
+        if(!Number.isSafeInteger(data.next)||data.next<=after) throw new Error("Invalid catalogue cursor");
+        after=data.next;
+      }
+      setMediaMessage("Catalogue media complete: "+ok+" updated, "+failed+" failed.");
+    } catch(e){setMediaMessage("Stopped: "+ok+" updated, "+failed+" failed. "+(e instanceof Error?e.message:"Unknown error"));}
+    finally{setCatalogueMediaBusy(false);}
+  }
   async function syncMedia(ids:number[]) {
-    if(mediaBusy || !ids.length) return;
+    if(mediaBusy || catalogueMediaBusy || !ids.length) return;
     setMediaBusy(true); setMediaMessage("Refreshing supplier media…");
     let ok=0, failed=0; const errors:string[]=[];
     try {
@@ -415,7 +442,8 @@ export function AdminListingsPage() {
         {value:"draft",label:"Drafts"},{value:"suspended",label:"Suspended"},{value:"inactive",label:"Inactive"},{value:"sold",label:"Sold"}
       ]}/>
       <div className="mb-4 flex flex-wrap gap-2">
-        <button type="button" disabled={mediaBusy || !listings.length} onClick={()=>void syncMedia(listings.filter(l=>(!selectedIds.length || selectedIds.includes(String(l.id))) && String(parseSpecs(l.specifications)?.source).toLowerCase()==="aliexpress").map(l=>l.id))} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{mediaBusy?"Syncing media…":"Sync AliExpress media (selected / page)"}</button>
+        <button type="button" disabled={mediaBusy || catalogueMediaBusy || !listings.length} onClick={()=>void syncMedia(listings.filter(l=>(!selectedIds.length || selectedIds.includes(String(l.id))) && String(parseSpecs(l.specifications)?.source).toLowerCase()==="aliexpress").map(l=>l.id))} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{mediaBusy?"Syncing media…":"Sync AliExpress media (selected / page)"}</button>
+        <button type="button" disabled={mediaBusy || catalogueMediaBusy} onClick={()=>void syncCatalogueMedia()} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{catalogueMediaBusy?"Refreshing catalogue…":"Sync entire AliExpress catalogue"}</button>
         {mediaMessage && <p role="status" className="text-sm text-slate-100">{mediaMessage}</p>}
         <button type="button" onClick={()=>void checkCategories()} disabled={loading || !listings.length || reviewLoading} className="rounded-lg border-2 border-cyan-300 !bg-blue-700 px-4 py-2 text-xs font-black !text-white hover:!bg-blue-600">Suggest categories ({selectedIds.length||listings.length})</button>
         <button type="button" onClick={()=>setLocation("/admin/listings/categories")} className="rounded-lg border-2 border-blue-400 !bg-blue-700 px-4 py-2 text-xs font-black !text-white hover:!bg-blue-600">Manage categories & subcategories →</button>
@@ -587,7 +615,7 @@ export function AdminListingsPage() {
                       </div>
                       <div className="mt-3 flex flex-wrap items-center gap-2" aria-label={`Actions for ${l.title}`}>
                         <a href={`/listing/${l.public_url_token||l.public_id||l.id}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center rounded-lg border-2 border-white bg-[#334155] px-3 py-2 text-xs font-black !text-white hover:bg-[#475569]">View on Bazunk</a>
-                        {aliExpressUrl && <button type="button" disabled={mediaBusy} onClick={()=>void syncMedia([l.id])} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">Sync Media</button>}
+                        {aliExpressUrl && <button type="button" disabled={mediaBusy || catalogueMediaBusy} onClick={()=>void syncMedia([l.id])} className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">Sync Media</button>}
                         {aliExpressUrl && <a href={aliExpressUrl} target="_blank" rel="noopener noreferrer"
                           className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border-2 border-white bg-[#334155] px-3 py-2 text-xs font-black !text-white hover:bg-[#475569]">
                           <ExternalLink className="h-3 w-3" /> View on AliExpress
