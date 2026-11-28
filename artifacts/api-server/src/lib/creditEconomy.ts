@@ -32,10 +32,10 @@ export function ensureCreditEconomyTable() {
 export async function recordCreditEconomy(input: {
   email: string; kind: CreditKind; credits: number; cashAmount?: number | null; currency?: string | null;
   reason?: string | null; referenceType?: string | null; referenceId?: string | null; metadata?: Record<string, unknown>;
-}) {
-  await ensureCreditEconomyTable();
+}, connection: Pick<typeof db, "execute"> = db) {
+  if (connection === db) await ensureCreditEconomyTable();
   const id = randomUUID();
-  await db.execute(sql`
+  await connection.execute(sql`
     INSERT INTO credit_economy_ledger(id,email,kind,credits,cash_amount,currency,reason,reference_type,reference_id,metadata)
     VALUES (${id},${input.email.toLowerCase()},${input.kind},${input.credits},${input.cashAmount ?? null},${input.currency ?? null},${input.reason ?? null},${input.referenceType ?? null},${input.referenceId ?? null},${JSON.stringify(input.metadata ?? {})}::jsonb)
     ON CONFLICT DO NOTHING

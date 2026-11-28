@@ -105,6 +105,8 @@ const ImporterWorkspacePage = React.lazy(() => import("@/pages/ImporterWorkspace
 import {DiscoveryPage,discoveryPages} from "@/pages/DiscoveryPage";
 import { BrowsePage } from "@/pages/BrowsePage";
 const CreatorsPage = React.lazy(() => import("@/pages/CreatorsPage").then(module => ({ default: module.CreatorsPage })));
+const SocialDiscoveryPage = React.lazy(() => import("@/pages/SocialDiscoveryPage").then(module => ({default:module.SocialDiscoveryPage})));
+const AdminSocialDiscoveryPage = React.lazy(() => import("@/pages/admin/AdminSocialDiscoveryPage").then(module => ({default:module.AdminSocialDiscoveryPage})));
 const ShortsPage = React.lazy(() => import("@/pages/ShortsPage").then(module => ({ default: module.ShortsPage })));
 const AdminShortsPage = React.lazy(() => import("@/pages/admin/AdminShortsPage").then(module => ({ default: module.AdminShortsPage })));
 const ProductPollsPage = React.lazy(() => import("@/pages/ProductPollsPage").then(module => ({ default: module.ProductPollsPage })));
@@ -461,6 +463,7 @@ function Router() {
       <Route path="/creators/studio">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_creators" name="Creator storefronts"><CreatorsPage studio /></FeatureGate></FeatureGate>}</Route>
       <Route path="/creators/:slug">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_creators" name="Creator storefronts"><CreatorsPage /></FeatureGate></FeatureGate>}</Route>
       <Route path="/creators">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_creators" name="Creator storefronts"><CreatorsPage /></FeatureGate></FeatureGate>}</Route>
+      <Route path="/social/discover">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_discovery" name="Social discovery"><SocialDiscoveryPage /></FeatureGate></FeatureGate>}</Route>
       <Route path="/social/shorts">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_shorts" name="Bazunk Shorts"><ShortsPage /></FeatureGate></FeatureGate>}</Route>
       <Route path="/social/polls/:id">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_polls" name="Product polls"><ProductPollsPage /></FeatureGate></FeatureGate>}</Route>
       <Route path="/social/polls">{() => <FeatureGate feature="social" name="Bazunk Social"><FeatureGate feature="social_polls" name="Product polls"><ProductPollsPage /></FeatureGate></FeatureGate>}</Route>
@@ -511,6 +514,7 @@ function Router() {
       <Route path="/admin/live-commerce" component={AdminLiveCommercePage} />
       <Route path="/admin/demo-creator" component={AdminDemoCreatorPage} />
       <Route path="/admin/dashboard" component={AdminWordPressDashboard} />
+      <Route path="/admin/social-discovery" component={AdminSocialDiscoveryPage} />
       <Route path="/admin/social-shorts" component={AdminShortsPage} />
       <Route path="/admin/affiliates" component={AdminAffiliatesPage} />
       <Route path="/affiliates/apply" component={AffiliatesPage} />

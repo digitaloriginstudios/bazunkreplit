@@ -54,3 +54,14 @@ export function socialProduct(visibility: SQL) {
       'available', coalesce(listings.quantity, 1) > 0)
     ELSE NULL END`;
 }
+
+export function socialSponsor(
+  enabled: boolean,
+  kind: "short" | "story",
+  id: SQL,
+) {
+  return enabled
+    ? sql`(SELECT label FROM social_placements WHERE kind=${kind} AND content_id=${id}::text
+    AND mode='sponsor' AND starts_at<=now() AND expires_at>now() AND removed_at IS NULL LIMIT 1)`
+    : sql`NULL::text`;
+}

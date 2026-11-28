@@ -6,7 +6,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { Navbar } from "@/components/Navbar";
 import { ShortPlayer, type ShortPlayback } from "@/components/ShortPlayer";
 import {
@@ -21,6 +21,7 @@ import {
 
 type Kind = "short" | "unboxing";
 type Short = {
+  sponsor?: string | null;
   id: string;
   caption: string;
   kind: Kind;
@@ -472,6 +473,9 @@ function ShortCard({ video, active }: { video: Short; active: boolean }) {
         {video.displayName}{" "}
         <span className="text-sm font-normal">@{video.username}</span>
       </p>
+      {video.sponsor && (
+        <p className="text-sm font-semibold">Sponsored by {video.sponsor}</p>
+      )}
       {video.kind === "unboxing" && (
         <p className="text-sm font-semibold text-[#4A5CE8]">
           Verified-purchase unboxing
@@ -574,7 +578,7 @@ function ShortCard({ video, active }: { video: Short; active: boolean }) {
   );
 }
 
-function ShortFeed({ kind }: { kind?: Kind }) {
+function ShortFeed({ kind, focus }: { kind?: Kind; focus?: string }) {
   const request = useSocialActivity();
   const [videos, setVideos] = useState<Short[]>([]);
   const [active, setActive] = useState<string>();
@@ -590,7 +594,10 @@ function ShortFeed({ kind }: { kind?: Kind }) {
         const data = await request<{
           videos: Short[];
           nextPage: number | null;
-        }>(`shorts?page=${page}${kind ? `&kind=${kind}` : ""}`, { signal });
+        }>(
+          `shorts?page=${page}${kind ? `&kind=${kind}` : ""}${focus ? `&focus=${encodeURIComponent(focus)}` : ""}`,
+          { signal },
+        );
         if (signal?.aborted) return;
         setVideos((previous) =>
           page
@@ -610,7 +617,7 @@ function ShortFeed({ kind }: { kind?: Kind }) {
         if (!signal?.aborted) setBusy(false);
       }
     },
-    [request, kind],
+    [request, kind, focus],
   );
 
   useEffect(() => {
@@ -714,6 +721,9 @@ function ShortFeed({ kind }: { kind?: Kind }) {
 }
 
 function ShortsContent() {
+  const [, navigate] = useLocation();
+  const search = useSearch();
+  const focus = new URLSearchParams(search).get("video") ?? undefined;
   const [tab, setTab] = useState<"shorts" | "unboxings" | "mine">("shorts");
   const [upload, setUpload] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -750,7 +760,10 @@ function ShortsContent() {
             key={value}
             className={activityButton}
             aria-pressed={tab === value}
-            onClick={() => setTab(value)}
+            onClick={() => {
+              if (focus) navigate("/social/shorts");
+              setTab(value);
+            }}
           >
             {label}
           </button>
@@ -761,7 +774,8 @@ function ShortsContent() {
       ) : (
         <ShortFeed
           key={tab}
-          kind={tab === "unboxings" ? "unboxing" : "short"}
+          focus={focus}
+          kind={focus ? undefined : tab === "unboxings" ? "unboxing" : "short"}
         />
       )}
     </>

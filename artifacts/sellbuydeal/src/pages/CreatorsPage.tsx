@@ -1,3 +1,5 @@
+import { useFeature } from "@/components/FeatureGate";
+import { useSeoMetadata } from "@/hooks/useSeoMetadata";
 import { useAuth } from "@clerk/react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useParams } from "wouter";
@@ -270,6 +272,12 @@ function CreatorComposer({ onSave }: { onSave: () => void }) {
 function CreatorStudio() {
   const request = useCreatorRequest();
   const [, navigate] = useLocation();
+  const discovery = useFeature("social_discovery");
+  const creatorRewards = useFeature("social_creator_rewards");
+  const credits = useFeature("credits");
+  const [rewards, setRewards] = useState<
+    { id: string; credits: number; reason: string }[]
+  >([]);
   const [account, setAccount] = useState<Account | null>(null);
   const [balance, setBalance] = useState<Balance | null>(null);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -310,6 +318,26 @@ function CreatorStudio() {
       });
     return () => controller.abort();
   }, [refresh]);
+
+  useEffect(() => {
+    if (
+      !discovery ||
+      !creatorRewards ||
+      !credits ||
+      account?.status !== "approved"
+    )
+      return;
+    const controller = new AbortController();
+    void request<{ awards: { id: string; credits: number; reason: string }[] }>(
+      "social/discover/rewards",
+      { signal: controller.signal },
+    )
+      .then((data) => {
+        if (!controller.signal.aborted) setRewards(data.awards);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [account?.status, creatorRewards, credits, discovery, request]);
 
   return (
     <section className="space-y-4">
@@ -389,6 +417,18 @@ function CreatorStudio() {
             navigate(pathFor(account.slug!));
           }}
         />
+      )}
+      {discovery && creatorRewards && credits && rewards.length > 0 && (
+        <section className="space-y-2 rounded-2xl border bg-card p-4">
+          <h2 className="text-xl font-bold">Creator credit rewards</h2>
+          <ul className="divide-y">
+            {rewards.map((award) => (
+              <li key={award.id} className="py-2 text-sm">
+                {award.credits} credits · {award.reason}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
       {balance && (
         <section className="space-y-3 rounded-2xl border bg-card p-4">
@@ -490,6 +530,26 @@ function CreatorFeed({ slug }: { slug?: string }) {
     void load(0, controller.signal);
     return () => controller.abort();
   }, [load]);
+
+  useSeoMetadata(
+    data?.creator
+      ? {
+          title: `${data.creator.displayName} | Bazunk Creators`,
+          description:
+            data.creator.bio ||
+            `Shop recommendations from ${data.creator.displayName} on Bazunk.`,
+          url: `https://www.bazunk.com${pathFor(data.creator.slug)}`,
+          image: data.posts[0]?.imageUrl,
+        }
+      : slug
+        ? {
+            title: "Bazunk Creators",
+            description: "Explore creator storefronts on Bazunk.",
+            url: `https://www.bazunk.com${pathFor(slug)}`,
+            robots: "noindex, follow",
+          }
+        : null,
+  );
 
   return (
     <section className="space-y-4">
