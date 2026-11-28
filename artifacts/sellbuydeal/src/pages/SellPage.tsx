@@ -162,27 +162,23 @@ function FeeCalculator() {
 }
 
 const SELL_HUB_OPTIONS = [
- {id:"swap",title:"Bazunk Swap",desc:"List an item and describe what you want in return.",href:"/swap/create",icon:ArrowLeftRight,colors:"from-blue-500 to-blue-700",border:"border-blue-600",label:"Create swap"},
- {id:"direct",title:"Direct Sale",desc:"Create a detailed listing with pricing, shipping and offers.",href:"/sell/direct",icon:ShoppingCart,colors:"from-amber-500 to-orange-700",border:"border-[#ff9500]",label:"List item"},
- {id:"quick",title:"Quick Sale",desc:"Get your item listed quickly with the essentials.",href:"/sell/quick",icon:Zap,colors:"from-sky-400 to-blue-700",border:"border-[#087cff]",label:"List now"},
- {id:"auction",title:"List an Auction",desc:"Set a starting bid and let buyers compete.",href:"/auctions/create",icon:Gavel,colors:"from-teal-400 to-teal-700",border:"border-teal-500",label:"Create auction"},
- {id:"flash",title:"Run a Flash Sale",desc:"Create a limited-time offer for your products.",href:"/flash-sales/create",icon:Percent,colors:"from-pink-500 to-rose-700",border:"border-rose-400",label:"Create deal"},
- {id:"classified",title:"List a Classified",desc:"Post a local listing, service or wanted ad.",href:"/classifieds/post",icon:Newspaper,colors:"from-lime-500 to-emerald-700",border:"border-[#00bf69]",label:"Post ad"},
- {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/live",icon:Video,colors:"from-[#14c7f4] to-[#006dce]",border:"border-[#04aeed]",label:"Start live"}
+ {id:"swap",title:"Bazunk Swap",desc:"List an item and describe what you want in return.",href:"/swap/create",icon:ArrowLeftRight,colors:"from-blue-500 to-blue-700",label:"Create swap"},
+ {id:"direct",title:"Direct Sale",desc:"Create a detailed listing with pricing, shipping and offers.",href:"/sell/direct",icon:ShoppingCart,colors:"from-amber-500 to-orange-700",label:"List item"},
+ {id:"quick",title:"Quick Sale",desc:"Get your item listed quickly with the essentials.",href:"/sell/quick",icon:Zap,colors:"from-sky-400 to-blue-700",label:"List now"},
+ {id:"auction",title:"List an Auction",desc:"Set a starting bid and let buyers compete.",href:"/auctions/create",icon:Gavel,colors:"from-teal-400 to-teal-700",label:"Create auction"},
+ {id:"flash",title:"Run a Flash Sale",desc:"Create a limited-time offer for your products.",href:"/flash-sales/create",icon:Percent,colors:"from-pink-500 to-rose-700",label:"Create deal"},
+ {id:"classified",title:"List a Classified",desc:"Post a local listing, service or wanted ad.",href:"/classifieds/post",icon:Newspaper,colors:"from-lime-500 to-emerald-700",label:"Post ad"},
+ {id:"live",title:"Go Live",desc:"Set up live shopping and reach buyers in real time.",href:"/live",icon:Video,colors:"from-[#14c7f4] to-[#006dce]",label:"Start live"}
 ] as const;
-const SELL_PALETTE: Record<string,{color:string;light:string;emoji:string}> = {
- swap:{color:"#2563eb",light:"#dbeafe",emoji:"🔄"},
- direct:{color:"#c2410c",light:"#ffedd5",emoji:"🛍️"},
- quick:{color:"#0369a1",light:"#e0f2fe",emoji:"⚡"},
- auction:{color:"#087f75",light:"#ccfbf1",emoji:"🔨"},
- flash:{color:"#be185d",light:"#fce7f3",emoji:"🏷️"},
- classified:{color:"#15803d",light:"#dcfce7",emoji:"📋"},
- live:{color:"#b91c1c",light:"#fee2e2",emoji:"🎥"}
+const SELL_PALETTE = {
+ swap:{color:"#2563eb",light:"#dbeafe"},
+ direct:{color:"#c2410c",light:"#ffedd5"},
+ quick:{color:"#0369a1",light:"#e0f2fe"},
+ auction:{color:"#087f75",light:"#ccfbf1"},
+ flash:{color:"#be185d",light:"#fce7f3"},
+ classified:{color:"#15803d",light:"#dcfce7"},
+ live:{color:"#b91c1c",light:"#fee2e2"}
 };
-function SellHubArtwork({kind}:{kind:string}) {
- const palette=SELL_PALETTE[kind];
- return <div aria-hidden="true" className="bz-sell-art-circle" style={{background:palette.color}}><span className="bz-sell-art-emoji">{palette.emoji}</span></div>;
-}
 const NativeSwapSeller = lazy(() => import("@/pages/SwapPage").then(m => ({default:m.SwapListingForm})));
 const NativeDirectSeller = lazy(() => import("@/pages/DirectSalePage").then(m => ({default:m.DirectSalePage})));
 const NativeAuctionSeller = lazy(() => import("@/pages/CreateAuctionPage").then(m => ({default:m.CreateAuctionPage})));
@@ -235,7 +231,7 @@ export function SellPage() {
 
   return (
     <div className="sell-page min-h-screen bg-[linear-gradient(130deg,#dceeff_0%,#fff5ed_45%,#e3f3ff_100%)] font-sans text-[#10213e] flex flex-col">
-      <style>{` .sell-page button.bz-sell-playful-card{background-image:none!important;border-radius:32px!important;padding:24px!important;display:flex!important;flex-direction:column!important;align-items:center!important;gap:10px!important;min-height:290px!important;} .sell-page .bz-sell-art-circle{display:flex!important;align-items:center!important;justify-content:center!important;width:132px!important;height:132px!important;flex:none!important;border-radius:50%!important;border:6px solid white!important;box-shadow:0 8px 18px #0002!important;margin:0 auto 8px!important;} .sell-page .bz-sell-art-emoji{display:block!important;font-size:64px!important;line-height:1!important;font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif!important;filter:none!important;} .sell-page .bz-sell-playful-action{display:flex!important;align-items:center!important;justify-content:center!important;min-height:52px!important;border-radius:999px!important;color:white!important;background-image:none!important;font-weight:800!important;} .sell-page .bz-sell-playful-action svg{stroke:white!important;color:white!important;} .sell-page .bz-sell-playful-card h3{font-size:22px!important;font-weight:800!important;color:#14233b!important;} .sell-page .bz-sell-playful-card p{color:#334155!important;} `}</style><Navbar />
+      <Navbar />
       <main className="flex-1">
 
 
@@ -251,14 +247,28 @@ export function SellPage() {
               </div>
 
             </div>
-            <div className="relative flex flex-wrap justify-center gap-4 sm:gap-6">
-              {availableOptions.map(option => {const Icon=option.icon;return <button type="button" key={option.id} onClick={()=>navigate(`/sell?create=${option.id}`, { replace: true })} data-testid={`sell-hub-${option.id}`} style={{background:SELL_PALETTE[option.id].light,borderColor:SELL_PALETTE[option.id].color}} className={`bz-sell-playful-card group relative flex min-w-0 flex-[1_1_210px] max-w-[340px] flex-col items-center overflow-hidden rounded-[32px] border-2 ${option.border} bg-white p-5 text-center shadow-[0_7px_18px_rgba(12,58,116,.14)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_14px_26px_rgba(12,58,116,.2)] focus-visible:outline focus-visible:outline-4 focus-visible:outline-orange-500 sm:p-6`}>
-                
-                <SellHubArtwork kind={option.id}/>
-                <h3 className="relative text-xl font-black tracking-tight text-[#092b68] sm:text-[25px]">{option.title}</h3>
-                <p className="relative mt-2 min-h-14 text-sm font-medium leading-relaxed text-[#173c71]">{option.desc}</p>
-                <span style={{background:SELL_PALETTE[option.id].color}} className={`bz-sell-playful-action relative mt-auto inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r ${option.colors} px-5 py-3 text-base font-black text-white shadow-md`}>{option.label}<ArrowRight className="h-4 w-4"/></span>
-              </button>})}
+            <div className="relative grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+              {availableOptions.map(({ id, icon: Icon, title, desc, label }) => {
+                const { color, light } = SELL_PALETTE[id];
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => navigate(`/sell?create=${id}`, { replace: true })}
+                    data-testid={`sell-hub-${id}`}
+                    className="flex min-w-0 flex-col items-center rounded-2xl border border-slate-200 bg-white p-3.5 text-center text-slate-900 shadow-sm transition-shadow hover:border-slate-400 hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500"
+                  >
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: light, color }}>
+                      <Icon aria-hidden="true" className="h-6 w-6" strokeWidth={1.8} />
+                    </span>
+                    <span className="mt-3 text-[15px] font-bold leading-tight">{title}</span>
+                    <span className="mb-3 mt-1.5 text-[13px] leading-snug text-slate-600 dark:text-slate-300">{desc}</span>
+                    <span className="mt-auto inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-lg px-1.5 py-1.5 text-xs font-bold text-white" style={{ backgroundColor: color }}>
+                      {label}<ArrowRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0" />
+                    </span>
+                  </button>
+                );
+              })}
             </div>
             <div className="relative mt-7 grid grid-cols-2 gap-3 rounded-2xl border border-[#c3d8ff] bg-white p-4 shadow-[0_6px_18px_rgba(10,61,133,.12)] md:grid-cols-4">
               <div className="flex items-center gap-2 text-xs font-bold text-[#123c66] sm:text-sm"><ShieldCheck className="h-6 w-6 shrink-0 text-blue-600"/> Secure payments</div>
