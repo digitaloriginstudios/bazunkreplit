@@ -1823,7 +1823,7 @@ router.get("/admin/aliexpress-product-preview", async (req, res) => {
       const { product: p, ...details } = await previewDropshipProduct(id, destination, sku);
       res.setHeader("Cache-Control", "no-store");
       res.json({ ...details, id, title: p.title, description: tidyAliExpressDescription(p.description),
-        imageUrl: p.images[0]?.url ?? "", images: [...new Set(p.images.map(image => image.url))].slice(0, 12),
+        imageUrl: p.images[0]?.url ?? "", images: [...new Set(p.images.map(image => image.url))].slice(0, 30),
         supplierPrice: p.price.amount || null, currency: p.price.currency, sourceUrl: p.sourceUrl });
     }
     catch(error){logger.warn({error},"AliExpress Dropshipping preview failed");res.status(502).json({error:error instanceof Error?error.message:"AliExpress product lookup failed"});}return;
@@ -1910,7 +1910,7 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
   }
   const deliveryEstimate = shipZone ? String(body.deliveryEstimate ?? "").trim().slice(0, 120) : "";
   const gallery = Array.isArray(body.images) ? body.images.filter((value: unknown): value is string =>
-    typeof value === "string" && value.length <= 4000 && /^https:\/\//i.test(value)).slice(0, 12) : [];
+    typeof value === "string" && value.length <= 4000 && /^https:\/\//i.test(value)).slice(0, 30) : [];
   const details = Array.isArray(body.attributes) ? body.attributes
     .filter((row: any) => typeof row?.key === "string" && typeof row?.value === "string")
     .slice(0, 24).map((row: {key: string; value: string}) => ({ key: row.key.slice(0, 80), value: row.value.slice(0, 240) })) : [];
@@ -1958,7 +1958,7 @@ router.post("/admin/import-aliexpress-product", async (req, res) => {
     res.status(409).json({ error: "The listing price changed. Review the updated prices before importing.", usdToGbp: rate });
     return;
   }
-  const images = [...new Set([imageUrl, ...gallery].filter(Boolean))].slice(0, 12);
+  const images = [...new Set([imageUrl, ...gallery].filter(Boolean))].slice(0, 30);
   try {
     const imported = await db.transaction(async tx => {
       await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${sellerEmail}), hashtext(${id}))`);
@@ -2132,7 +2132,7 @@ router.post("/admin/import-selected-aliexpress", async (req, res) => {
       const bazPrice = options.length ? Math.min(...options.map(option => option.price)) : Math.round((price * listingRate * (1 + markup / 100) + shipping) * 100) / 100;
       const priceGbp = fxRates[listingCurrency] ? Math.round(bazPrice * fxRates[listingCurrency] * 100) / 100 : null;
       const sourceId = useDropship ? p.externalId : id;
-      const specs = JSON.stringify({ details:attributes, delivery_estimate:deliveryEstimate, admin_gallery_images:p.images?.map((image:{url:string})=>image.url).slice(0,12), aliexpress_options:options.length ? options : undefined, marketplace_region:market, source:"AliExpress", aliexpress_id:sourceId, aliexpress_url:p.sourceUrl,
+      const specs = JSON.stringify({ details:attributes, delivery_estimate:deliveryEstimate, admin_gallery_images:p.images?.map((image:{url:string})=>image.url).slice(0,30), aliexpress_options:options.length ? options : undefined, marketplace_region:market, source:"AliExpress", aliexpress_id:sourceId, aliexpress_url:p.sourceUrl,
         source_price:price, source_currency:currency, exchange_rate_to_gbp:gbpRate, markup_pct:markup, shipping_gbp:market === "uk" ? shipping : undefined, shipping_usd:market === "us" ? shipping : undefined,
         source_sync:!options.length, last_synced_at:new Date().toISOString(), source_availability:p.availability });
       const publicId = "BZK-ALI-" + sourceId;
