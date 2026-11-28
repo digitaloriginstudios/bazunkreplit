@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { useRawSettings } from "@/context/SiteSettingsContext";
 import { featureForHref, isFeatureEnabled } from "@/components/FeatureGate";
-import { motion } from "framer-motion";
 import { Link, useLocation, useSearch } from "wouter";
 import {
   ArrowLeftRight, Camera,
@@ -18,84 +17,26 @@ import {
   Tag,
   CreditCard,
   TrendingUp,
-  CheckCircle2,
   Calculator,
-  ExternalLink,
   Banknote,
   Percent,
-  Info,
-  Zap, Video, X, Maximize2, Minimize2, Package, Users, Truck, Star, Sparkles, Timer, BadgePercent, ClipboardList, Play, Gift, ShoppingBag,
+  Zap, Video, X, Maximize2, Minimize2, Package, Users, Truck, Star, Sparkles, ClipboardList, Gift, ShoppingBag,
 } from "lucide-react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { useCurrency } from "@/context/CurrencyContext";
 
-const SELL_OPTIONS = [
-  { id:"bulk-import",title:"Bulk Import",description:"Upload a CSV to create multiple product listings with a preview before publishing.",icon:Layers,gradient:"from-indigo-500 to-purple-600",cta:"Import CSV",ctaColor:"text-indigo-600",href:"/sell/import",badge:"NEW" },
-  {
-    id:"snap-sell",title:"Snap & Sell",
-    description:"Take a photo or scan a barcode to start an editable listing with AI-assisted details.",
-    icon:Camera,gradient:"from-orange-500 to-fuchsia-600",cta:"Snap an item",ctaColor:"text-orange-600",href:"/sell/snap",badge:"NEW",
-  },
-  {
-    id: "direct-sale",
-    title: "Direct Sale",
-    description:
-      "List your item for immediate sale with Buy It Now or Make an Offer options",
-    icon: ShoppingCart,
-    gradient: "from-[#5B4FD9] to-[#7C3AED]",
-    cta: "Get started",
-    ctaColor: "text-[#4A5CE8]",
-    href: "/sell/direct",
-    badge: null,
-  },
-  {
-    id: "auction",
-    title: "Auctions",
-    description: "Let buyers compete with timed bidding and discover the best selling price.",
-    icon: Gavel,
-    gradient: "from-orange-500 to-amber-500",
-    cta: "Create auction",
-    ctaColor: "text-orange-600",
-    href: "/auctions/create",
-    badge: null,
-  },
-  {
-    id: "create-bundle",
-    title: "Create Bundle",
-    description:
-      "Group multiple items together for bundle deals and increased sales",
-    icon: Layers,
-    gradient: "from-[#1a9e6f] to-[#0d7a57]",
-    cta: "Create bundle",
-    ctaColor: "text-[#1a9e6f]",
-    href: "/bundle",
-    badge: null,
-  },
-  {
-    id: "classified-ads",
-    title: "Classified Ads",
-    description:
-      "Post classified ads for services, rentals, and local items",
-    icon: Newspaper,
-    gradient: "from-[#E8622A] to-[#C0392B]",
-    cta: "Post an ad",
-    ctaColor: "text-[#E8622A]",
-    href: "/classifieds",
-    badge: null,
-  },
-  {
-    id: "open-store",
-    title: "Open a Store",
-    description:
-      "Create your own branded storefront with a banner, profile pic, and all your listings",
-    icon: Store,
-    gradient: "from-[#2563EB] to-[#1E3A8A]",
-    cta: "Create store",
-    ctaColor: "text-[#2563EB]",
-    href: "/dashboard",
-    badge: "FREE",
-  },
+const SELLER_TOOLS = [
+  { title: "Create a Store", description: "Set up your own branded Bazunk shop.", href: "/dashboard?section=my-store", icon: Store },
+  { title: "Manage Listings", description: "Review your listings and drafts.", href: "/dashboard?section=my-listings", icon: ClipboardList },
+  { title: "Import Listings", description: "Bring products over from other marketplaces.", href: "/importers", icon: Package },
+  { title: "Bulk Import", description: "Upload a CSV and preview your listings before publishing.", href: "/sell/import", icon: Layers },
+  { title: "Snap & Sell", description: "Use a photo or barcode to start an editable listing.", href: "/sell/snap", icon: Camera },
+  { title: "Create a Bundle", description: "Group multiple items together as a bundle deal.", href: "/bundle", icon: ShoppingBag },
+  { title: "Promote Items", description: "Boost listing visibility and reach more buyers.", href: "/promotions", icon: TrendingUp },
+  { title: "Earn Credits", description: "Earn rewards and use credits for boosts and features.", href: "/rewards", icon: Gift },
+  { title: "Become a Verified Seller", description: "Verify your identity and build buyer confidence.", href: "/dashboard?section=verification", icon: ShieldCheck, feature: "verification" },
+  { title: "Seller Support", description: "Find seller guides or contact support.", href: "/support", icon: Headphones },
 ];
 
 const WHY_FEATURES = [
@@ -282,10 +223,9 @@ export function SellPage() {
   const search = useSearch();
   const { formatPrice, currency } = useCurrency();
   const rawSettings = useRawSettings();
-  const availableOptions = SELL_HUB_OPTIONS.filter(option => {
-    const feature = featureForHref(option.href);
-    return !feature || isFeatureEnabled(rawSettings, feature);
-  });
+  const isAvailable = ({ href, feature = featureForHref(href) }: { href: string; feature?: string }) =>
+    !feature || isFeatureEnabled(rawSettings, feature);
+  const availableOptions = SELL_HUB_OPTIONS.filter(isAvailable);
   const createMode = new URLSearchParams(search).get("create");
   const selectedSellOption = availableOptions.find(option => option.id === createMode);
   const closeListing = useCallback(() => navigate("/sell", { replace: true }), [navigate]);
@@ -325,6 +265,22 @@ export function SellPage() {
               <div className="flex items-center gap-2 text-xs font-bold text-[#123c66] sm:text-sm"><Truck className="h-6 w-6 shrink-0 text-blue-600"/> Flexible selling</div>
               <div className="flex items-center gap-2 text-xs font-bold text-[#123c66] sm:text-sm"><Users className="h-6 w-6 shrink-0 text-blue-600"/> Reach more buyers</div>
               <div className="flex items-center gap-2 text-xs font-bold text-[#123c66] sm:text-sm"><Star className="h-6 w-6 shrink-0 text-orange-500"/> Free listing options</div>
+            </div>
+          </section>
+
+          <section aria-labelledby="seller-tools-heading" className="rounded-2xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 sm:p-6">
+            <h2 id="seller-tools-heading" className="text-2xl font-black">Seller tools</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {SELLER_TOOLS.filter(isAvailable).map(({ title, description, href, icon: Icon }) => (
+                <Link key={href} href={href} className="flex min-w-0 items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 hover:border-blue-400 hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-blue-400 dark:hover:bg-slate-700">
+                  <span className="rounded-lg bg-blue-100 p-2 text-blue-800"><Icon aria-hidden="true" className="h-5 w-5" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-bold">{title}</span>
+                    <span className="mt-1 block text-sm text-slate-600 dark:text-slate-300">{description}</span>
+                  </span>
+                  <ArrowRight aria-hidden="true" className="mt-1 h-4 w-4 shrink-0 text-blue-700 dark:text-blue-300" />
+                </Link>
+              ))}
             </div>
           </section>
 
