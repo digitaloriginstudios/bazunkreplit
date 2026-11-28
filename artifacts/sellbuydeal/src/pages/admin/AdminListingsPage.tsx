@@ -264,6 +264,38 @@ export function AdminListingsPage() {
     return data.categories;
   }
   const [enableThirdIds,setEnableThirdIds]=useState<number[]>([]);
+  const [auditJob,setAuditJob]=useState(()=>localStorage.getItem("bazunk-category-audit")||"");
+  const [auditStatus,setAuditStatus]=useState("");
+  useEffect(()=>{
+    if(!auditJob||!isAdmin)return;
+    let active=true;
+    async function poll(){
+      try{
+        const response=await authFetch(`/api/admin/listings/category-audits/${auditJob}`);
+        if(!response.ok)throw Error("Could not load saved scan");
+        const job=await response.json();
+        if(!active)return;
+        setAuditStatus(job.status);
+        setAuditProgress(`${job.status}: ${job.processed} / ${job.total}`);
+        if(job.status==="completed"){
+          setReviews(job.results||[]);
+          setTaxonomy(await loadThirdLevelCategories());
+        }
+        if(job.error)setReviewError(job.error);
+      }catch(e){if(active)setReviewError(e instanceof Error?e.message:String(e));}
+    }
+    void poll();
+    const timer=setInterval(()=>{if(!["completed","cancelled","failed","paused"].includes(auditStatus))void poll();},3000);
+    return ()=>{active=false;clearInterval(timer);};
+  },[auditJob,auditStatus,isAdmin]);
+  async function auditAction(action:string){
+    try{
+      const response=await authFetch(`/api/admin/listings/category-audits/${auditJob}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({action})});
+      const data=await response.json();
+      if(!response.ok)throw Error(data.error||"Could not update scan");
+      setAuditStatus(data.status);
+    }catch(e){setReviewError(e instanceof Error?e.message:String(e));}
+  }
   const [auditSelected,setAuditSelected]=useState<number[]>([]);
   const [auditProgress,setAuditProgress]=useState("");
   const [auditApplying,setAuditApplying]=useState(false);
@@ -272,7 +304,7 @@ export function AdminListingsPage() {
   async function checkCategories(all=false){
     let ids=selectedIds.length?selectedIds.map(Number):listings.map(x=>x.id);
     if(!all&&!ids.length)return;
-    setAuditSelected([]);setAuditProgress("");setAuditFilter("changes");
+    setAuditJob("");setAuditStatus("");setAuditSelected([]);setAuditProgress("");setAuditFilter("changes");
     setReviewOpen(true);setReviewLoading(true);setReviewError("");setReviews([]);setEnableThirdIds([]);
     try{
       if(all){
@@ -293,35 +325,14 @@ export function AdminListingsPage() {
         }
         ids=[...collected];
       }
-      const entries=await loadThirdLevelCategories();
-      const d:{results:Review[]}={results:[]};
-      for(let i=0;i<ids.length;i+=50){
-        const response=await authFetch("/api/admin/listings/category-review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:ids.slice(i,i+50)})});
-        const batch=await response.json();
-        if(!response.ok)throw Error(batch.error||"Category check failed");
-        d.results.push(...(batch.results||[]));
-        setAuditProgress(`Scanned ${Math.min(i+50,ids.length)} / ${ids.length}`);
-      }
-      const validEntries = entries.filter(row => categoryOptions.some(
-        parent => parent.slug === row.category && parent.subcategories.some(child => child.slug === row.subcategory),
-      ));
-      setTaxonomy(validEntries);
-      const suggestion=(title:string, options:typeof entries)=>{
-        const normalized=(v:string)=>v.toLowerCase().replace(/[^a-z0-9]+/g," ");
-        const words=new Set(normalized(title).split(" ").filter(Boolean));
-        const ranked=options.map((o:{slug:string;name:string})=>{
-          const tokens=normalized(o.name).split(" ").filter(k=>k.length>3&&!["parts","other","products"].includes(k));
-          if(tokens.includes("accessories")&&!/\b(accessories|accessory|replacement|spare|attachment)\b/i.test(title))return {o,matched:0,score:0};
-          const matched=tokens.filter(k=>words.has(k)||[...words].some(w=>w.startsWith(k)||k.startsWith(w))).length;
-          return {o,matched,score:tokens.length?matched/tokens.length:0};
-        }).filter((o:{matched:number})=>o.matched>0).sort((a:{score:number;matched:number},b:{score:number;matched:number})=>b.score-a.score||b.matched-a.matched);
-        return ranked[0]?.o?.slug||"";
-      };
-      setReviews((d.results||[]).map((x:Review)=>{
-        const choices=validEntries.filter((v:{category:string;subcategory:string})=>v.category===x.suggestedCategory&&v.subcategory===x.suggestedSubcategory);
-        const suggestedThird=x.approved?x.currentThird:choices.some((v:{slug:string})=>v.slug===x.suggestedThird)?x.suggestedThird:suggestion(x.title,choices);
-        return {...x,suggestedThird};
-      }));
+      setTaxonomy(await loadThirdLevelCategories());
+      if(!ids.length){setAuditProgress("No matching listings");return;}
+      const response=await authFetch("/api/admin/listings/category-audits",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids})});
+      const job=await response.json();
+      if(!response.ok)throw Error(job.error||"Could not create scan");
+      setAuditJob(job.id);localStorage.setItem("bazunk-category-audit",job.id);
+      setAuditProgress("Scan queued on server");
+      return;
     }catch(e){setReviewError(e instanceof Error?e.message:String(e));}
     finally{setReviewLoading(false)}
   }
@@ -488,13 +499,13 @@ export function AdminListingsPage() {
         <button type="button" disabled={mediaBusy || catalogueMediaBusy || !listings.length} onClick={()=>void syncMedia(listings.filter(l=>(!selectedIds.length || selectedIds.includes(String(l.id))) && String(parseSpecs(l.specifications)?.source).toLowerCase()==="aliexpress").map(l=>l.id))} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{mediaBusy?"Syncing media…":"Sync AliExpress media (selected / page)"}</button>
         <button type="button" disabled={mediaBusy || catalogueMediaBusy} onClick={()=>void syncCatalogueMedia()} className="rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white">{catalogueMediaBusy?"Refreshing catalogue…":"Sync entire AliExpress catalogue"}</button>
         {mediaMessage && <p role="status" className="text-sm text-slate-100">{mediaMessage}</p>}
-        <button type="button" onClick={()=>void checkCategories()} disabled={loading || !listings.length || reviewLoading} className="rounded-lg border-2 border-cyan-300 !bg-blue-700 px-4 py-2 text-xs font-black !text-white hover:!bg-blue-600">Suggest categories ({selectedIds.length||listings.length})</button><button type="button" disabled={reviewLoading||auditApplying} onClick={()=>void checkCategories(true)} className="rounded-lg bg-orange-600 px-4 py-2 text-xs font-bold text-white">Bulk Category Auditor — scan all matching listings</button>
+        <button type="button" onClick={()=>void checkCategories()} disabled={loading || !listings.length || reviewLoading} className="rounded-lg border-2 border-cyan-300 !bg-blue-700 px-4 py-2 text-xs font-black !text-white hover:!bg-blue-600">Suggest categories ({selectedIds.length||listings.length})</button><button type="button" disabled={reviewLoading||auditApplying} onClick={()=>void checkCategories(true)} className="rounded-lg bg-orange-600 px-4 py-2 text-xs font-bold text-white">Bulk Category Auditor — scan all matching listings</button>{auditJob&&<button type="button" onClick={()=>setReviewOpen(true)} className="rounded-lg border px-4 py-2 text-xs font-bold">Open saved audit</button>}
         <button type="button" onClick={()=>setLocation("/admin/listings/categories")} className="rounded-lg border-2 border-blue-400 !bg-blue-700 px-4 py-2 text-xs font-black !text-white hover:!bg-blue-600">Manage categories & subcategories →</button>
         {([{id:"listings",label:"All Listings"},{id:"import-export",label:"Import / Export"}] as const).map(item=><button aria-pressed={view===item.id} key={item.id} type="button" onClick={()=>setView(item.id)} className={`rounded-lg border px-3 py-2 text-xs font-bold ${view===item.id?"bg-blue-600 text-white border-blue-600":"border-slate-400 bg-white text-slate-950 dark:bg-slate-800 dark:text-white"}`}>{item.label}</button>)}
       </div>
       {reviewOpen&&<div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-3"><section id="bazunk-listing-category-review" role="dialog" aria-modal="true" aria-label="Review listing categories" className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border-2 border-slate-500 !bg-[#14243c] !text-white shadow-2xl">
         <header className="flex items-center justify-between gap-3 border-b border-slate-500 p-4"><div><h2 className="text-xl font-black text-white">Review suggested categories</h2><p className="text-xs text-slate-200">Already-approved listings are marked Checked. You can still change their categories and approve again.</p></div><button className="rounded-lg border-2 border-slate-400 !bg-[#273b56] px-4 py-2 font-black !text-white" disabled={reviewLoading||auditApplying} onClick={()=>setReviewOpen(false)}>Close</button></header>
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-500 p-3"><span role="status">{auditProgress}</span><span>{reviews.length} reviewed · {reviews.filter(x=>!x.approved&&changed(x)).length} changes</span><select aria-label="Review filter" value={auditFilter} onChange={e=>setAuditFilter(e.target.value)} className="rounded bg-white p-2 text-slate-950"><option value="changes">Suggested changes</option><option value="all">All results</option><option value="low">Low confidence</option></select><button disabled={reviewLoading||auditApplying} onClick={()=>setAuditSelected(reviews.filter(x=>!x.approved&&changed(x)&&x.confidence==="high"&&(!x.suggestedThird||taxonomy.some(t=>t.category===x.suggestedCategory&&t.subcategory===x.suggestedSubcategory&&t.slug===x.suggestedThird&&t.visible))).map(x=>x.id))} className="rounded bg-blue-700 p-2 text-white">Select high confidence</button><button disabled={auditApplying} onClick={()=>setAuditSelected([])} className="rounded border p-2">Clear</button><button disabled={reviewLoading||auditApplying||!auditSelected.length} onClick={()=>void applyAudit()} className="rounded bg-orange-600 p-2 font-bold text-white">Apply selected ({auditSelected.length})</button></div>
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-500 p-3"><span role="status">{auditProgress}</span>{["queued","running"].includes(auditStatus)&&<button onClick={()=>void auditAction("pause")} className="rounded border p-2">Pause</button>}{["paused","failed"].includes(auditStatus)&&<button onClick={()=>void auditAction("resume")} className="rounded border p-2">Resume</button>}{["queued","running","paused"].includes(auditStatus)&&<button onClick={()=>void auditAction("cancel")} className="rounded border p-2">Cancel scan</button>}<span>{reviews.length} reviewed · {reviews.filter(x=>!x.approved&&changed(x)).length} changes</span><select aria-label="Review filter" value={auditFilter} onChange={e=>setAuditFilter(e.target.value)} className="rounded bg-white p-2 text-slate-950"><option value="changes">Suggested changes</option><option value="all">All results</option><option value="low">Low confidence</option></select><button disabled={reviewLoading||auditApplying} onClick={()=>setAuditSelected(reviews.filter(x=>!x.approved&&changed(x)&&x.confidence==="high"&&(!x.suggestedThird||taxonomy.some(t=>t.category===x.suggestedCategory&&t.subcategory===x.suggestedSubcategory&&t.slug===x.suggestedThird&&t.visible))).map(x=>x.id))} className="rounded bg-blue-700 p-2 text-white">Select high confidence</button><button disabled={auditApplying} onClick={()=>setAuditSelected([])} className="rounded border p-2">Clear</button><button disabled={reviewLoading||auditApplying||!auditSelected.length} onClick={()=>void applyAudit()} className="rounded bg-orange-600 p-2 font-bold text-white">Apply selected ({auditSelected.length})</button></div>
         {reviewError&&<p role="alert" className="m-3 rounded-lg border border-red-400 !bg-red-900 p-3 font-bold text-white">{reviewError}</p>}
         <div className="flex-1 space-y-3 overflow-y-auto p-4">{reviewLoading?<p className="text-white">Checking categories…</p>:reviews.filter(x=>auditFilter==="all"||(auditFilter==="low"?x.confidence==="low":!x.approved&&changed(x))).map(x=>{const choices=categoryOptions.find(c=>c.slug===x.suggestedCategory)?.subcategories||[];const thirdOptions=taxonomy.filter(t=>t.category===x.suggestedCategory&&t.subcategory===x.suggestedSubcategory);const chosen=thirdOptions.find(t=>t.slug===x.suggestedThird);return <div key={x.id} className="rounded-xl border border-slate-500 !bg-[#213651] p-4 text-white"><label className="mb-2 flex items-center gap-2"><input type="checkbox" disabled={auditApplying||x.approved||!changed(x)} checked={auditSelected.includes(x.id)} onChange={e=>setAuditSelected(prev=>e.target.checked?[...prev,x.id]:prev.filter(id=>id!==x.id))}/> Select correction · {x.confidence} confidence</label>
           <div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div className="max-w-2xl"><strong className="text-sm text-white">{x.title}</strong><p className="mt-1 text-xs text-slate-200">Current: {categoryOptions.find(c=>c.slug===x.category)?.name||x.category} / {categoryOptions.find(c=>c.slug===x.category)?.subcategories.find(sc=>sc.slug===x.subcategory)?.name||x.subcategory||"none"} / {x.currentThird||"none"}</p></div><span className="rounded border border-sky-300 !bg-[#194b83] px-2 py-1 text-xs font-black !text-white">{x.approved?"✓ Checked · Already approved":"Suggestion confidence: "+x.confidence}</span></div>
