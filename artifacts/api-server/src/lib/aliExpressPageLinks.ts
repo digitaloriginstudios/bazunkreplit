@@ -1,5 +1,7 @@
 const permittedHosts = new Set(["www.aliexpress.com", "aliexpress.com", "store.aliexpress.com", "m.aliexpress.com"]);
-const allowedPage = /^\/(?:w\/|wholesale(?:[\/.-]|$)|category(?:\/|$)|store(?:\/|$)|p\/|item\/)/i;
+const allowedPage = /^\/(?:w\/|wholesale(?:[\/.-]|$)|category(?:[\/.-]|$)|store(?:[\/.-]|$)|shop\/|p\/|(?:item|i)\/)/i;
+const itemPath = /^\/(?:item|i)\/(\d{10,20})(?:\.html)?\/?$/i;
+const productUrl = (id: string) => `https://www.aliexpress.com/item/${id}.html`;
 const maximumBytes = 3 * 1024 * 1024;
 const maximumProducts = 500;
 
@@ -18,18 +20,34 @@ export function parseAliExpressPageUrl(input: string, base?: URL): URL | null {
 
 export function extractAliExpressPageLinks(html: string, base: URL): string[] {
   const ids = new Set<string>();
-  const decoded = html.replace(/\\u002f/gi, "/").replace(/\\\//g, "/");
-  const matches = decoded.matchAll(/(?:href\s*=\s*["']|["'])((?:https?:\/\/[^"'\s]+|\/\/[^"'\s]+|\/item\/[^"'\s]+))["']/gi);
-  for (const match of matches) {
-    const url = parseAliExpressPageUrl(match[1], base);
-    const id = url?.pathname.match(/^\/item\/(\d{10,20})(?:\.html)?\/?$/i)?.[1];
+  const addLink = (value: string) => {
+    const url = parseAliExpressPageUrl(value.replace(/&(?:amp|#38);/gi, "&"), base);
+    const id = url?.pathname.match(itemPath)?.[1];
     if (id) ids.add(id);
+  };
+
+  // Prioritise item cards on the page over links buried in scripts and recommendations.
+  const markup = html.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>|<!--[\s\S]*?-->/gi, "");
+  const anchors = markup.matchAll(/<a\b[^>]*?\shref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi);
+  for (const match of anchors) {
+    addLink(match[1] ?? match[2] ?? match[3]);
     if (ids.size >= maximumProducts) break;
   }
-  return [...ids].map(id => "https://www.aliexpress.com/item/" + id + ".html");
+  if (!ids.size) {
+    // Some storefronts deliver item URLs only in hydration data.
+    const decoded = html.replace(/\\u002f/gi, "/").replace(/\\\//g, "/");
+    const links = decoded.matchAll(/["']((?:https?:\/\/|\/\/|\/(?:item|i)\/)[^"'\s]+)["']/gi);
+    for (const match of links) {
+      addLink(match[1]);
+      if (ids.size >= maximumProducts) break;
+    }
+  }
+  return [...ids].map(productUrl);
 }
 
 export async function fetchAliExpressPageLinks(initial: URL) {
+  const id = initial.pathname.match(itemPath)?.[1];
+  if (id) return [productUrl(id)];
   let page = initial;
   const signal = AbortSignal.timeout(12_000);
   for (let redirects = 0; redirects < 4; redirects++) {

@@ -54,6 +54,12 @@ function normalize(p: any): Product {
   };
 }
 
+class AliExpressApiRejection extends AliExpressConnectionError {
+  constructor(readonly codes: string[]) {
+    super("AliExpress rejected the API request" + (codes.length ? " (" + codes.join(", ") + ")" : "") + ".");
+  }
+}
+
 async function call(method: string, extra: Record<string, string>, requireManaged = false, timeout = 20_000): Promise<any> {
   const credentials = aliExpressCredentials();
   if (!credentials) throw new AliExpressConnectionError("AliExpress app credentials are missing.");
@@ -102,8 +108,7 @@ async function call(method: string, extra: Record<string, string>, requireManage
     const codes = [...new Set([json.error_response?.sub_code, code, responseCode]
       .map(value => String(value ?? ""))
       .filter(value => /^[a-z0-9_.-]{1,48}$/i.test(value) && !["00", "0", "200"].includes(value)))];
-    const reference = codes.length ? " (" + codes.join(", ") + ")" : "";
-    throw new AliExpressConnectionError("AliExpress rejected the API request" + reference + ".");
+    throw new AliExpressApiRejection(codes);
   }
   if (!result) throw new AliExpressConnectionError("AliExpress returned an unexpected API response.");
   return result;
@@ -163,12 +168,22 @@ export function aliExpressAlternateProductId(id: string): string | null {
 
 async function fetchDropshipProduct(id: string, destination: "GB" | "US") {
   if (!/^\d{10,20}$/.test(id)) throw new AliExpressConnectionError("Invalid AliExpress product ID.");
-  const globalId = id.startsWith("3256") ? aliExpressAlternateProductId(id) ?? id : id;
-  const result = await call("aliexpress.ds.product.get", {
-    product_id: globalId, ship_to_country: destination, target_currency: "USD", target_language: "en", remove_personal_benefit: "true",
+  const alternateId = aliExpressAlternateProductId(id);
+  let productId = id.startsWith("3256") ? alternateId ?? id : id;
+  const fetchById = (productId: string) => call("aliexpress.ds.product.get", {
+    product_id: productId, ship_to_country: destination, target_currency: "USD", target_language: "en", remove_personal_benefit: "true",
   });
+  let result;
+  try {
+    result = await fetchById(productId);
+  } catch (error) {
+    if (!(error instanceof AliExpressApiRejection) || !error.codes.some(code => code === "604" || code === "482") || !alternateId) throw error;
+    // A storefront link can have both a global ID and a storefront ID. Try the remaining form once.
+    productId = productId === id ? alternateId : id;
+    result = await fetchById(productId);
+  }
   const raw = result.result ?? result.data ?? result;
-  const product = normalize({ ...raw, product_id: globalId });
+  const product = normalize({ ...raw, product_id: productId });
   if (!product.title) throw new AliExpressConnectionError("AliExpress returned no product title. Check product availability.");
   return { raw, product };
 }

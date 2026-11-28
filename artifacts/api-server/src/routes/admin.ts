@@ -1826,7 +1826,7 @@ router.get("/admin/aliexpress-product-preview", async (req, res) => {
         imageUrl: p.images[0]?.url ?? "", images: [...new Set(p.images.map(image => image.url))].slice(0, 12),
         supplierPrice: p.price.amount || null, currency: p.price.currency, sourceUrl: p.sourceUrl });
     }
-    catch(error){logger.warn({error},"AliExpress Dropshipping preview failed");res.status(502).json({error:error instanceof Error?error.message:"AliExpress product lookup failed"});}return;
+    catch(error){logger.warn({err:error,id},"AliExpress Dropshipping preview failed");res.status(502).json({error:error instanceof Error?error.message:"AliExpress product lookup failed"});}return;
   }
   const raw = String(req.query.url ?? "");
   let parsed: URL;
